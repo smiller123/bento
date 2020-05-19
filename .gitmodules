@@ -1,0 +1,6 @@
+[submodule "datablock-rs"]
+	path = datablock-rs
+	url = https://github.com/Kaiyuan-Zhang/datablock-rs.git
+[submodule "bentofs"]
+	path = bentofs
+	url = https://gitlab.cs.washington.edu/sm237/bentofs.git

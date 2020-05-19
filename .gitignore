@@ -1,0 +1,16 @@
+*.o
+*.so
+*.exe
+*.iso
+*.zip
+*.img
+*.gz
+*.o.ur-safe
+*.mk
+*.o.cmd
+*.ko.cmd
+*.ko
+modules.order
+dummy.c
+dummy.mod.c
+Module.symvers

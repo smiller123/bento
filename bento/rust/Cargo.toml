@@ -1,0 +1,16 @@
+[package]
+name = "bento"
+version = "0.1.0"
+authors = ["Danyang Zhuo <danyangz@cs.washington.edu>",
+           "Kaiyuan Zhang <kaiyuanz@cs.washington.edu>",
+           "Samantha Miller <sm237@cs.washington.edu>"]
+
+
+[build-dependencies]
+bindgen = "*"
+cc = "1.0"
+shlex = "0.1"
+
+[dependencies]
+rlibc = "1.0"
+datablock = { path = "../../datablock-rs/datablock" }
