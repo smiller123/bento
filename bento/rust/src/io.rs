@@ -1,6 +1,5 @@
 use core;
 
-use crate::kernel;
 use core::cmp;
 
 #[allow(unused_unsafe)]
