@@ -16,3 +16,4 @@ To update, run `git submodule update --recursive --remote`.
 
 Instructions for compiling each module are included in the READMEs in each subdirectory.
 
+More information about the system design can be found in our [report on ArXiv](https://arxiv.org/abs/2005.09723).
