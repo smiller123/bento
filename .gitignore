@@ -10,6 +10,8 @@
 *.o.cmd
 *.ko.cmd
 *.ko
+*.mod
+*.mod.c
 modules.order
 dummy.c
 dummy.mod.c
