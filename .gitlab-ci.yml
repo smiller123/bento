@@ -1,0 +1,7 @@
+image: "rustlang/rust:nightly"
+
+build:
+  script:
+    - (cd bentofs && make)
+    - (cd hello_ll/rust && make)
+    - (cd xv6fs/rust && make)
