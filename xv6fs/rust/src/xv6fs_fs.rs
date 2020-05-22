@@ -67,14 +67,12 @@ pub fn balloc(sb: &RsSuperBlock) -> Result<u32, Error> {
     let mut allocated_block = None;
 
     // Bitmap operations on bitmap blocks
-    //let most_recent = LAST_BLOCK.load(Ordering::SeqCst);
+    let most_recent = LAST_BLOCK.load(Ordering::SeqCst);
     let mut first = true;
     // last_segment is the bitmap block ID and block_offset is the offset for 'most_recent'
-    //let last_segment = most_recent - most_recent % BPB;
+    let last_segment = most_recent - most_recent % BPB;
+    let mut block_offset = most_recent % BPB;
 
-    // new code below:
-    let last_segment = 0; // start of disk
-    let mut block_offset = 0;
     let mut b = last_segment;
 
     while first || b < last_segment {
