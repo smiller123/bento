@@ -1,5 +1,6 @@
 use core::cmp::min;
 use core::mem;
+use core::str;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 use arr_macro::arr;
@@ -710,7 +711,10 @@ pub fn dirlookup<'a>(
             if de.inum == 0 {
                 continue;
             }
-            let name_str = str_from_utf8(&de.name);
+            let name_str = match str::from_utf8(&de.name) {
+                Ok(x) => x,
+                Err(_) => break,
+            };
             if namecmp(name, name_str) == 0 {
                 *poff = (block_idx * BSIZE + de_idx * de_size) as u64;
                 return iget(sb, de.inum as u64);

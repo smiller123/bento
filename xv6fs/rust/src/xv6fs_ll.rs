@@ -1,4 +1,5 @@
 use core::mem;
+use core::str;
 
 use bento::kernel;
 use kernel::errno;
@@ -7,7 +8,6 @@ use kernel::fuse::*;
 use kernel::kobj::*;
 use kernel::mem as kmem;
 use kernel::raw;
-use kernel::string::*;
 //use kernel::time::*;
 
 use bento::bentofs::*;
@@ -413,7 +413,11 @@ pub fn xv6fs_ll_readdir_rs(
 
         let buf_slice = buf.to_slice_mut();
         let curr_buf_slice = &mut buf_slice[buf_off..];
-        let name_str = str_from_utf8(&de.name);
+        let name_str = match str::from_utf8(&de.name) {
+            Ok(x) => x,
+            Err(_) => return -(EIO as i32),
+        };
+        //let name_str = str_from_utf8(&de.name);
         let ent_len = match bento_add_direntry(
             curr_buf_slice,
             name_str,
