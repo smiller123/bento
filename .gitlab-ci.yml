@@ -2,6 +2,7 @@ image: "rustlang/rust:nightly"
 
 build:
   script:
+    - git submodule update --init --recursive
     - (cd bentofs && make)
     - (cd hello_ll/rust && make)
     - (cd xv6fs/rust && make)
