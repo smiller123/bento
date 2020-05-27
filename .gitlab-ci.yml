@@ -1,8 +1,26 @@
 image: "rustlang/rust:nightly"
 
+stages:
+  - build
+  - test
+
 build:
+  stage: build
   script:
     - git submodule update --init --recursive
     - (cd bentofs && make)
     - (cd hello_ll/rust && make)
     - (cd xv6fs/rust && make)
+
+test:
+  stage: test
+  script:
+    - sudo su
+    - insmod bentofs/bentofs.ko
+    - insmod xv6fs/rust/xv6fs.ko
+    - mount -t bentoblk -o fd=10,rootmode=40000,user_id=0,group_id=0,blksize=4096,name=xv6fs_ll -o loop /home/test/fs.img /mnt/xv6fsll
+    - echo 0 > /proc/sys/kernel/randomize_va_space
+    - filebench -f /home/test/fileserver.f
+    - umount /mnt/xv6fsll
+    - rmmod xv6fs
+    - rmmod bentofs
