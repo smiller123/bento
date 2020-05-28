@@ -30,7 +30,7 @@ test_hello:
 test_xv6fs:
   stage: test
   script:
-    - scp samantha@172.28.3.69:~/fs.img fs.img
+    - sshpass -p "test" scp -o StrictHostKeyChecking=no test@172.28.3.69:~/fs.img fs.img
     - wget https://github.com/filebench/filebench/archive/1.4.9.1.tar.gz
     - tar -xf 1.4.9.1.tar.gz
     - (cd filebench-1.4.9.1 && autoreconf -i && ./configure && make && sudo make install)
