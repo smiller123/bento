@@ -12,7 +12,7 @@ build:
     - (cd hello_ll/rust && make)
     - (cd xv6fs/rust && make)
 
-test:
+test_hello:
   stage: test
   script:
     - git submodule update --init --recursive
@@ -25,4 +25,27 @@ test:
     - sudo cat /mnt/hello/hello
     - sudo umount /mnt/hello
     - sudo rmmod hello_ll
+    - sudo rmmod bentofs
+
+test_xv6fs:
+  stage: test
+  script:
+    - git clone git@gitlab.cs.washington.edu:sm237/xv6fs_img.git
+    - wget https://github.com/filebench/filebench/archive/1.4.9.1.tar.gz
+    - tar -xf 1.4.9.1.tar.gz
+    - (cd filebench-1.4.9.1 && autoreconf -i && ./configure && make && sudo make install)
+    - git submodule update --init --recursive
+    - (cd bentofs && make)
+    - (cd xv6fs/rust && make)
+    - sudo insmod bentofs/bentofs.ko
+    - sudo insmod xv6fs/rust/xv6fs.ko
+    - sudo mkdir /mnt/xv6fs
+    - sudo mount -t bentoblk -o fd=10,rootmode=40000,user_id=0,group_id=0,blksize=4096,name=xv6fs_ll -o loop xv6fs_img/fs.img /mnt/xv6fs
+    - echo 0 | sudo tee /proc/sys/kernel/randomize_va_space
+    - sudo filebench
+    - load fileserver
+    - set $dir=/mnt/xv6fs
+    - run 60
+    - sudo umount /mnt/xv6fs
+    - sudo rmmod xv6fs
     - sudo rmmod bentofs
