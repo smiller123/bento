@@ -38,10 +38,7 @@ test_xv6fs:
     - sudo mkdir /mnt/xv6fs
     - sudo mount -t bentoblk -o fd=10,rootmode=40000,user_id=0,group_id=0,blksize=4096,name=xv6fs_ll -o loop /home/test/fs.img /mnt/xv6fs
     - echo 0 | sudo tee /proc/sys/kernel/randomize_va_space
-    - sudo filebench
-    - load fileserver
-    - set $dir=/mnt/xv6fs
-    - run 60
+    - sudo filebench -f /home/test/fileserver.f
     - sudo umount /mnt/xv6fs
     - sudo rmmod xv6fs
     - sudo rmmod bentofs
