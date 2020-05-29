@@ -30,9 +30,13 @@ test_hello:
 test_xv6fs:
   stage: test
   script:
+    - sudo apt-get install sshpass
     - sshpass -p "test" scp -o StrictHostKeyChecking=no test@172.28.3.69:~/fs.img fs.img
     - wget https://github.com/filebench/filebench/archive/1.4.9.1.tar.gz
     - tar -xf 1.4.9.1.tar.gz
+    - sudo apt-get install bison
+    - sudo apt-get install flex
+    - sudo apt-get install autoconf
     - (cd filebench-1.4.9.1 && autoreconf -i && ./configure && make && sudo make install)
     - git submodule update --init --recursive
     - (cd bentofs && make)
