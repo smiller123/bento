@@ -219,7 +219,7 @@ pub fn ialloc<'a>(sb: &'a RsSuperBlock, i_type: u16) -> Result<CachedInode<'a>, 
                     dinode.nlink = 1;
                     dinode.dump_into(inode_slice).map_err(|_| Error::EIO)?;
                     bh.mark_buffer_dirty();
-                    log_write(iblock(inum, &SB.read()) as u32);
+                    log_write(iblock(block_inum, &SB.read()) as u32);
                     allocated = true;
                 }
             }
@@ -751,6 +751,10 @@ pub fn dirlink(
         readi(sb, de_arr_slice, BSIZE * block_idx, BSIZE, internals)?;
 
         for de_idx in 0..BSIZE / de_size {
+            if (block_idx * BSIZE + de_idx * de_size) >= internals.size as usize {
+                break;
+            }
+
             let mut de = Xv6fsDirent::new();
             let de_slice = &mut de_arr_slice[de_idx * de_size..(de_idx + 1) * de_size];
             de.extract_from(de_slice).map_err(|_| Error::EIO)?;

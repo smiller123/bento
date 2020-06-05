@@ -88,6 +88,7 @@ const INCLUDED_VARS: &[&str] = &[
     "ESPIPE",
     "EFAULT",
     "ENOSYS",
+    "ENOTEMPTY",
     "ENAMETOOLONG",
     "EOVERFLOW",
     "__this_module",
