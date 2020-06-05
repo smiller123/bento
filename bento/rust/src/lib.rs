@@ -7,6 +7,8 @@
 #![feature(panic_info_message)]
 #![no_std]
 
+extern crate alloc;
+
 pub mod bindings;
 #[macro_use]
 pub mod io;

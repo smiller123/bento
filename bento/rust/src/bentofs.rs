@@ -1,3 +1,5 @@
+use core::str;
+
 use crate::bindings::*;
 use kernel::errno;
 use kernel::ffi::*;
@@ -199,6 +201,31 @@ impl<'a> ReplyAttrInternal<'a> {
     }
 }
 
+pub type ReplyData<'a, 'b> = &'a mut ReplyDataInternal<'b>;
+
+#[derive(Debug)]
+pub struct ReplyDataInternal<'a> {
+    reply: Result<&'a mut MemContainer<raw::c_uchar>, i32>,
+}
+
+impl<'a> ReplyDataInternal<'a> {
+    pub fn data(&mut self, data: &[u8]) {
+        if let Ok(rep) = &mut self.reply {
+            rep.truncate(data.len());
+            let rep_slice = rep.to_slice_mut();
+            rep_slice.copy_from_slice(data);
+        }
+    }
+
+    pub fn error(&mut self, err: i32) {
+        self.reply = Err(err);
+    }
+
+    pub fn reply(&self) -> &Result<&'a mut MemContainer<raw::c_uchar>, i32> {
+        return &self.reply;
+    }
+}
+
 /// Register a file system with the BentoFS kernel module.
 ///
 /// Should be called in the init function of a Bento file system module, before
@@ -290,12 +317,10 @@ pub fn bento_add_direntry(
 
 pub const fn get_fs_ops<T: FileSystem>(_fs: &T) -> fs_ops<T> {
     fs_ops {
-        readlink: T::readlink,
         mknod: T::mknod,
         mkdir: T::mkdir,
         unlink: T::unlink,
         rmdir: T::rmdir,
-        symlink: T::symlink,
         rename: T::rename,
         open: T::open,
         read: T::read,
@@ -378,9 +403,8 @@ pub trait FileSystem {
         reply.error(-(ENOSYS as i32));
     }
 
-    fn readlink(&self, _sb: RsSuperBlock, _nodeid: u64, _buf: &mut MemContainer<raw::c_uchar>) -> i32
-    {
-        return -(ENOSYS as i32);
+    fn readlink(&self, _sb: RsSuperBlock, _req: &Request, _ino: u64, reply: ReplyData) {
+        return reply.error(-(ENOSYS as i32));
     }
 
     fn mknod(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_mknod_in, _name: CStr, _out_arg: &mut fuse_entry_out) -> i32
@@ -403,9 +427,18 @@ pub trait FileSystem {
         return -(ENOSYS as i32);
     }
 
-    fn symlink(&self, _sb: RsSuperBlock, _nodeid: u64, _name1: CStr, _name2: CStr, _out_arg: &mut fuse_entry_out) -> i32
-    {
-        return -(ENOSYS as i32);
+    fn symlink(
+        &mut self,
+        _sb: RsSuperBlock,
+        _req: &Request,
+        _parent: u64,
+        _name: CStr,
+        //_name: &OsStr,
+        _link: CStr,
+        //_link: &Path,
+        reply: ReplyEntry
+    ) {
+        return reply.error(-(ENOSYS as i32));
     }
 
     fn rename(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_rename2_in, _name1: CStr, _name2: CStr) -> i32
@@ -698,6 +731,46 @@ pub trait FileSystem {
                     },
                 }
             },
+            fuse_opcode_FUSE_READLINK => {
+                if outarg.numargs != 1 {
+                    return -1;
+                }
+
+                let req = Request { h: &inarg.h };
+                let data_out = unsafe { &mut *(outarg.args[0].value as *mut MemContainer<raw::c_uchar>) };
+                let mut reply = ReplyDataInternal { reply: Ok(data_out) };
+                self.readlink(sb, &req, inarg.h.nodeid, &mut reply);
+                match reply.reply() {
+                    Ok(buf) => {
+                        let buf_slice = buf.to_slice();
+                        let buf_str = str::from_utf8(buf_slice).unwrap_or("");
+                        buf_str.len() as i32
+                    },
+                    Err(x) => {
+                        *x as i32
+                    },
+                }            
+            },
+            fuse_opcode_FUSE_SYMLINK => {
+                if inarg.numargs != 2 || outarg.numargs != 1 {
+                    return -1;
+                }
+
+                let req = Request { h: &inarg.h };
+                let name = unsafe { CStr::from_raw(inarg.args[0].value as *const raw::c_char) };
+                let link = unsafe { CStr::from_raw(inarg.args[1].value as *const raw::c_char) };
+                let entry_out = unsafe { &mut *(outarg.args[0].value as *mut fuse_entry_out) };
+                let mut reply = ReplyEntryInternal { reply: Ok(entry_out) };
+                self.symlink(sb, &req, inarg.h.nodeid, name, link, &mut reply);
+                match reply.reply() {
+                    Ok(_) => {
+                        0
+                    },
+                    Err(x) => {
+                        *x as i32
+                    },
+                }            
+            },
             _ => {
                 println!("got a different opcode");
                 0
@@ -802,7 +875,6 @@ pub struct fs_ops<T: FileSystem> {
     /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `nodeid: u64` - Filesystem-provided id of the inode.
     /// * `buf: &mut MemContainer<kernel::raw::c_uchar>` - Bento-provided buffer for the link name.
-    pub readlink: fn(&T, RsSuperBlock, u64, &mut MemContainer<raw::c_uchar>) -> i32,
 
     /// Create file node
     ///
@@ -861,7 +933,6 @@ pub struct fs_ops<T: FileSystem> {
     /// * `linkname: CStr` - The contents of the symbolic link.
     /// * `out_arg: &mut fuse_entry_out` - Data structure to be filled with data about the newly
     /// created link.
-    pub symlink: fn(&T, RsSuperBlock, u64, CStr, CStr, &mut fuse_entry_out) -> i32,
 
     /// Rename a file
     ///

@@ -307,7 +307,7 @@ pub fn ilock<'a>(
 ) -> Result<SemaphoreReadGuard<Inode>, Error> {
     let inode_outer_lock = icache.get(inode_idx).ok_or(Error::EIO)?;
     let inode_outer = inode_outer_lock.read();
-    {
+    { 
         let mut internals = inode_outer.internals.write();
 
         if internals.valid == 0 {

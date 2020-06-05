@@ -1,3 +1,5 @@
+use alloc::vec::Vec;
+
 use core::mem;
 use core::str;
 
@@ -534,18 +536,13 @@ impl FileSystem for Xv6FileSystem {
             if de.extract_from(de_slice).is_err() {
                 return -(EIO as i32);
             }
-    
-            if de.inum == 0 {
-                //continue;
-            }
-    
+
             let buf_slice = buf.to_slice_mut();
             let curr_buf_slice = &mut buf_slice[buf_off..];
             let name_str = match str::from_utf8(&de.name) {
                 Ok(x) => x,
                 Err(_) => "",
             };
-            //let name_str = str_from_utf8(&de.name);
             let ent_len = match bento_add_direntry(
                 curr_buf_slice,
                 name_str,
@@ -666,29 +663,36 @@ impl FileSystem for Xv6FileSystem {
         return blkdev_issue_flush_rust(&sb.s_bdev(), GFP_KERNEL as usize, &mut error_sector) as i32;
     }
 
-    fn symlink(&self, 
+    fn symlink(&mut self, 
         sb: RsSuperBlock,
+        _req: &Request,
         nodeid: u64,
         name: CStr,
         linkname: CStr,
-        outarg: &mut fuse_entry_out,
-    ) -> i32 {
+        reply: ReplyEntry,
+    ) {
         let _guard = begin_op(&sb);
         // Create new file
         let child = match create_internal(&sb, nodeid, T_LNK, &name) {
             Ok(x) => x,
-            Err(x) => return x as i32,
+            Err(x) => {
+                reply.error(x as i32);
+                return;
+            },
         };
     
         let icache = ILOCK_CACHE.read();
         let inode_guard = match ilock(&sb, child.idx, &icache, child.inum) {
             Ok(x) => x,
-            Err(x) => return x as i32,
+            Err(x) => {
+                reply.error(x as i32);
+                return;
+            },
         };
         let mut internals = inode_guard.internals.write();
     
         let mut len_slice = [0; mem::size_of::<u32>()];
-        let str_length = linkname.len() + 1;
+        let str_length: u32 = linkname.len() as u32 + 1;
         let strlen_slice = str_length.to_ne_bytes();
         len_slice.copy_from_slice(&strlen_slice);
         if let Err(x) = writei(
@@ -699,13 +703,17 @@ impl FileSystem for Xv6FileSystem {
             &mut internals,
             child.inum,
         ) {
-            return x as i32;
+            reply.error(x as i32);
+            return;
         };
     
         // Write linkname to file
         let mut name_buf = match kmem::MemContainer::<raw::c_uchar>::alloc(linkname.len()) {
             Some(x) => x,
-            None => return -1,
+            None => {
+                reply.error(-(EIO as i32));
+                return;
+            },
         };
         let name_slice = name_buf.to_slice_mut();
         name_slice.copy_from_slice(linkname.to_bytes_with_nul());
@@ -717,40 +725,51 @@ impl FileSystem for Xv6FileSystem {
             &mut internals,
             child.inum,
         ) {
-            return x as i32;
+            reply.error(x as i32);
+            return;
         };
-        outarg.nodeid = child.inum as u64;
-        outarg.generation = 0;
-        outarg.attr_valid = 1;
-        outarg.entry_valid = 1;
-        outarg.attr_valid_nsec = 999999999;
-        outarg.entry_valid_nsec = 999999999;
-        match stati(outarg.nodeid, &mut outarg.attr, &internals) {
-            Ok(()) => return 0,
-            Err(x) => return x as i32,
+        let out_nodeid = child.inum as u64;
+        let generation = 0;
+        let attr_valid = Timespec::new(1, 999999999);
+        let mut attr = fuse_attr::new();
+        match stati(out_nodeid, &mut attr, &internals) {
+            Ok(()) => {
+                reply.entry(&attr_valid, &attr, generation)
+            },
+            Err(x) => {
+                reply.error(x as i32);
+            },
         }
     }
     
     fn readlink(&self, 
         sb: RsSuperBlock,
+        _req: &Request,
         nodeid: u64,
-        buf: &mut kmem::MemContainer<u8>,
-    ) -> i32 {
+        reply: ReplyData,
+    ) {
         let inode = match iget(&sb, nodeid) {
             Ok(x) => x,
-            Err(x) => return x as i32,
+            Err(x) => {
+                reply.error(x as i32);
+                return;
+            },
         };
     
         let icache = ILOCK_CACHE.read();
         let inode_guard = match ilock(&sb, inode.idx, &icache, inode.inum) {
             Ok(x) => x,
-            Err(x) => return x as i32,
+            Err(x) => {
+                reply.error(x as i32);
+                return;
+            },
         };
         let mut internals = inode_guard.internals.write();
     
         // Check if inode is a file
         if internals.inode_type != T_LNK {
-            return -1;
+            reply.error(-1);
+            return;
         }
     
         let mut len_slice = [0; 4];
@@ -762,30 +781,36 @@ impl FileSystem for Xv6FileSystem {
             mem::size_of::<u32>(),
             &mut internals,
         ) {
-            Ok(x) if x != mem::size_of::<usize>() => return -1,
-            Err(_) => return -1,
+            Ok(x) if x != mem::size_of::<u32>() => {
+                reply.error(-(EIO as i32));
+                return;
+            },
+            Err(x) => {
+                reply.error(x as i32);
+                return;
+            },
             _ => {}
         }
         let mut str_len_bytes = [0; 4];
         str_len_bytes.copy_from_slice(&len_slice);
         let str_len = u32::from_ne_bytes(str_len_bytes);
     
-        if buf.len() < str_len as usize {
-            return -1;
-        }
+        let mut buf_vec: Vec<u8> = vec![0; str_len as usize];
+        let buf_slice = buf_vec.as_mut_slice();
     
-        let buf_slice = buf.to_slice_mut();
-    
-        let r = match readi(
+        match readi(
             &sb,
             buf_slice,
-            mem::size_of::<usize>(),
+            mem::size_of::<u32>(),
             str_len as usize,
             &mut internals,
         ) {
             Ok(x) => x,
-            Err(_) => return -1,
+            Err(x) => {
+                reply.error(x as i32);
+                return;
+            },
         };
-        return r as i32;
+        reply.data(buf_slice);
     }
 }

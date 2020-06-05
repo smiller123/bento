@@ -7,6 +7,8 @@
 #![feature(panic_info_message)]
 #![no_std]
 
+#[macro_use]
+extern crate alloc;
 extern crate bento;
 
 use bento::bentofs::*;
