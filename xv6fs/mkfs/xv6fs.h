@@ -1,6 +1,14 @@
 #ifndef __XV6FS_H__
 #define __XV6FS_H__
 
+#define T_DIR  1   // Directory
+#define T_FILE 2   // File
+#define T_DEV  3   // Device
+
+#define MAXOPBLOCKS 	32
+#define LOGSIZE 	(MAXOPBLOCKS*3)
+#define FSSIZE       	5000000
+
 /*
  *  Disk layout:
  *  +-----------------------------------------------+
@@ -17,7 +25,6 @@ struct xv6fs_super_block {
   uint logstart;   // Block number of first log block
   uint inodestart; // Block number of first inode block
   uint bmapstart;  // Block number of first free map block
-  uint xv6_magic;  // a magic number
 };
 
 #define ROOTINO 1  // root i-number
@@ -25,21 +32,18 @@ struct xv6fs_super_block {
 
 #define SB_BLK_NO 1
 
-#define NDIRECT 8
+#define NDIRECT 10
 #define NINDIRECT (BSIZE / sizeof(uint))
 #define NDINDIRECT (NINDIRECT * NINDIRECT)
 #define MAXFILE (NDIRECT + NINDIRECT + NDINDIRECT)
 
 // On-disk inode
-struct disk_inode {
+struct dinode {
   short type;  // File type
   short major; // Major device number (T_DEV only)
   short minor; // Minor device number (T_DEV only)
   short nlink; // Number of links to inode in file system
-  size_t size; // Size of file (bytes)
-  int ctime;
-  int atime;
-  int mtime;
+  unsigned long long size; // Size of file (bytes)
 
   uint addrs[NDIRECT + 2]; // Data block addresses
 };
@@ -54,23 +58,19 @@ struct disk_inode {
 #define I_VALID 0x2
 
 // Inodes per block.
-#define IPB (BSIZE / sizeof(struct disk_inode))
+#define IPB (BSIZE / sizeof(struct dinode))
 
 // Block containing inode i
-#define IBLOCK(i) ((i) / IPB + 2)
+#define IBLOCK(i, sb) ((i) / IPB + sb.inodestart)
 
 // Bitmap bits per block
 #define BPB (BSIZE * 8)
 
-// Block containing bit for block b
-#define BBLOCK(b, ninodes) (b / BPB + (ninodes) / IPB + 3)
-
 // Directory is a file containing a sequence of dirent structures.
-#define DIRSIZ 58
+#define DIRSIZ 60
 struct dirent {
+  uint inum;
   char name[DIRSIZ];
-  short type;
-  uint ino;
 } __attribute__((packed));
 
 #endif
