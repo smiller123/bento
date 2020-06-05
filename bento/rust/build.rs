@@ -16,6 +16,7 @@ const INCLUDED_TYPES: &[&str] = &[
     "fuse_dirent",
     "fuse_init_in",
     "fuse_init_out",
+    "fuse_forget_in",
     "fuse_ioctl_in",
     "fuse_ioctl_out",
     "fuse_attr",
@@ -51,6 +52,10 @@ const INCLUDED_TYPES: &[&str] = &[
     "fuse_setxattr_in",
     "fuse_rename2_in",
     "fuse_release_in",
+    "fuse_opcode",
+    "fuse_in_header",
+    "fuse_out_header",
+    "timespec",
 ];
 const INCLUDED_FUNCTIONS: &[&str] = &[
     "cdev_add",
@@ -90,6 +95,7 @@ const INCLUDED_VARS: &[&str] = &[
     "ENOSYS",
     "ENAMETOOLONG",
     "EOVERFLOW",
+    "ENOTEMPTY",
     "__this_module",
     "FS_REQUIRES_DEV",
     "FS_BINARY_MOUNTDATA",
@@ -142,6 +148,17 @@ const INCLUDED_VARS: &[&str] = &[
     "__GFP_RECLAIM",
     "__GFP_IO",
     "__GFP_FS",
+    "FATTR_MODE",
+    "FATTR_UID",
+    "FATTR_GID",
+    "FATTR_SIZE",
+    "FATTR_ATIME",
+    "FATTR_MTIME",
+    "FATTR_FH",
+    "FATTR_ATIME_NOW",
+    "FATTR_MTIME_NOW",
+    "FATTR_LOCKOWNER",
+    "FATTR_CTIME",
 ];
 const OPAQUE_TYPES: &[&str] = &[
     // These need to be opaque because they're both packed and aligned, which rustc

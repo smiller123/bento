@@ -10,6 +10,7 @@
 pub mod bindings;
 #[macro_use]
 pub mod io;
+#[allow(non_upper_case_globals)]
 pub mod bentofs;
 pub mod kernel;
 

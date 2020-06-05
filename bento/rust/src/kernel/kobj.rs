@@ -82,6 +82,12 @@ impl CStr {
         self.inner
     }
 
+    pub unsafe fn from_raw(inner: *const c_char) -> Self {
+        Self {
+            inner: inner
+        }
+    }
+
     /// Calculate the length of the CStr.
     pub fn len(&self) -> usize {
         let mut i = 0;

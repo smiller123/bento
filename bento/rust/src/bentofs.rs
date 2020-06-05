@@ -6,9 +6,198 @@ use kernel::kobj::*;
 use kernel::mem::*;
 use kernel::raw;
 use kernel::stat;
+use kernel::time::Timespec;
 
 pub const BENTO_KERNEL_VERSION: u32 = 1;
 pub const BENTO_KERNEL_MINOR_VERSION: u32 = 0;
+
+#[repr(C)]
+pub struct bento_in_arg {
+    size: u32,
+    value: *const raw::c_void,
+}
+
+#[repr(C)]
+pub struct bento_in {
+    h: fuse_in_header,
+    argpages: u8,
+    numargs: u32,
+    args: [bento_in_arg; 3],
+}
+
+#[repr(C)]
+pub struct bento_arg {
+    size: u32,
+    value: *const raw::c_void,
+}
+
+#[repr(C)]
+pub struct bento_out {
+    h: fuse_out_header,
+    argvar: u8,
+    argpages: u8,
+    page_zeroing: u8,
+    page_replace: u8,
+    numargs: u32,
+    args: [bento_arg; 2],
+}
+
+#[derive(Default)]
+#[allow(dead_code)]
+pub struct FuseConnInfo {
+    pub proto_major: u32,
+    pub proto_minor: u32,
+    pub max_write: u32,
+    pub max_read: u32,
+    pub max_readahead: u32,
+    pub capable: u32,
+    pub want: u32,
+    pub max_background: u32,
+    pub congestion_threshold: u32,
+    pub time_gran: u32,
+    reserved: [u32;22],
+}
+
+impl FuseConnInfo {
+    fn from_init_in(inarg: &fuse_init_in) -> Self {
+        let mut me: Self = Default::default();
+        me.proto_major = inarg.major;
+        me.proto_minor = inarg.minor;
+        me.max_readahead = inarg.max_readahead;
+        // Not sure if this is right
+        me.capable = inarg.flags;
+        me
+    }
+
+    fn to_init_out(&self, outarg: &mut fuse_init_out) {
+        outarg.major = self.proto_major;
+        outarg.minor = self.proto_minor;
+        outarg.max_readahead = self.max_readahead;
+        outarg.flags = self.want & self.capable;
+        outarg.max_background = self.max_background as u16;
+        outarg.congestion_threshold = self.congestion_threshold as u16;
+        outarg.max_write = self.max_write;
+        outarg.time_gran = self.time_gran;
+    }
+}
+
+
+pub struct Request<'a> {
+    h: &'a fuse_in_header
+}
+
+impl<'a> Request<'a> {
+    #[inline]
+    #[allow(dead_code)]
+    pub fn unique(&self) -> u64 {
+        self.h.unique
+    }
+
+    #[inline]
+    #[allow(dead_code)]
+    pub fn uid(&self) -> u32 {
+        self.h.uid
+    }
+
+    /// Returns the gid of this request
+    #[inline]
+    #[allow(dead_code)]
+    pub fn gid(&self) -> u32 {
+        self.h.gid
+    }
+
+    /// Returns the pid of this request
+    #[inline]
+    #[allow(dead_code)]
+    pub fn pid(&self) -> u32 {
+        self.h.pid
+    }
+}
+
+pub type ReplyEntry<'a, 'b> = &'a mut ReplyEntryInternal<'b>;
+
+#[derive(Debug)]
+pub struct ReplyEntryInternal<'a> {
+    reply: Result<&'a mut fuse_entry_out, i32>,
+}
+
+impl<'a> ReplyEntryInternal<'a> {
+    pub fn entry(&mut self, ttl: &Timespec, attr: &fuse_attr, generation: u64) {
+        if let Ok(rep) = &mut self.reply {
+            rep.nodeid = attr.ino;
+            rep.generation = generation;
+            rep.entry_valid = ttl.sec as u64;
+            rep.attr_valid = ttl.sec as u64;
+            rep.entry_valid_nsec = ttl.nsec as u32;
+            rep.attr_valid_nsec = ttl.nsec as u32;
+            rep.attr.ino = attr.ino;
+    	    rep.attr.size = attr.size;
+	        rep.attr.blocks = attr.blocks;
+	        rep.attr.atime = attr.atime;
+	        rep.attr.mtime = attr.mtime;
+    	    rep.attr.ctime = attr.ctime;
+	        rep.attr.atimensec = attr.atimensec;
+	        rep.attr.mtimensec = attr.mtimensec;
+	        rep.attr.ctimensec = attr.ctimensec;
+    	    rep.attr.mode = attr.mode;
+	        rep.attr.nlink = attr.nlink;
+	        rep.attr.uid = attr.uid;
+	        rep.attr.gid = attr.gid;
+    	    rep.attr.rdev = attr.rdev;
+	        rep.attr.blksize = attr.blksize;
+	        rep.attr.padding = attr.padding;
+        }
+    }
+
+    pub fn error(&mut self, err: i32) {
+        self.reply = Err(err);
+    }
+
+    pub fn reply(&self) -> &Result<&'a mut fuse_entry_out, i32> {
+        return &self.reply;
+    }
+}
+
+pub type ReplyAttr<'a, 'b> = &'a mut ReplyAttrInternal<'b>;
+
+#[derive(Debug)]
+pub struct ReplyAttrInternal<'a> {
+    reply: Result<&'a mut fuse_attr_out, i32>,
+}
+
+impl<'a> ReplyAttrInternal<'a> {
+    pub fn attr(&mut self, ttl: &Timespec, attr: &fuse_attr) {
+        if let Ok(rep) = &mut self.reply {
+            rep.attr_valid = ttl.sec as u64;
+            rep.attr_valid_nsec = ttl.nsec as u32;
+            rep.dummy = 0;
+            rep.attr.ino = attr.ino;
+    	    rep.attr.size = attr.size;
+	        rep.attr.blocks = attr.blocks;
+	        rep.attr.atime = attr.atime;
+	        rep.attr.mtime = attr.mtime;
+    	    rep.attr.ctime = attr.ctime;
+	        rep.attr.atimensec = attr.atimensec;
+	        rep.attr.mtimensec = attr.mtimensec;
+	        rep.attr.ctimensec = attr.ctimensec;
+    	    rep.attr.mode = attr.mode;
+	        rep.attr.nlink = attr.nlink;
+	        rep.attr.uid = attr.uid;
+	        rep.attr.gid = attr.gid;
+    	    rep.attr.rdev = attr.rdev;
+	        rep.attr.blksize = attr.blksize;
+	        rep.attr.padding = attr.padding;
+        }
+    }
+
+    pub fn error(&mut self, err: i32) {
+        self.reply = Err(err);
+    }
+
+    pub fn reply(&self) -> &Result<&'a mut fuse_attr_out, i32> {
+        return &self.reply;
+    }
+}
 
 /// Register a file system with the BentoFS kernel module.
 ///
@@ -17,11 +206,13 @@ pub const BENTO_KERNEL_MINOR_VERSION: u32 = 0;
 ///
 /// The name passed into fs_name is used to identify the file system on mount. It
 /// must be a null-terminated string.
-pub fn register_bento_fs_rs(fs_name: &'static str, ops: &'static fs_ops) -> i32 {
+pub fn register_bento_fs_rs<T: FileSystem>(fs_name: &'static str, ops: &'static fs_ops<T>, _fs: T) -> i32 {
     return unsafe {
         register_bento_fs(
+            0 as *const raw::c_void,
             fs_name.as_bytes().as_ptr() as *const raw::c_void,
-            ops as *const fs_ops as *const raw::c_void,
+            ops as *const fs_ops<T> as *const raw::c_void,
+            T::dispatch as *const raw::c_void,
         )
     };
 }
@@ -62,9 +253,6 @@ pub fn bento_add_direntry(
         return Err(errno::Error::EOVERFLOW);
     }
 
-    //if entlen_padded <= inarg_offset {
-    //    return Ok(entlen_padded);
-    //}
     let write_region = &mut buf_slice[FUSE_NAME_OFFSET..FUSE_NAME_OFFSET + name.len()];
 
     write_region.copy_from_slice(name.as_bytes());
@@ -100,6 +288,425 @@ pub fn bento_add_direntry(
     return Ok(entlen_padded);
 }
 
+pub const fn get_fs_ops<T: FileSystem>(_fs: &T) -> fs_ops<T> {
+    fs_ops {
+        readlink: T::readlink,
+        mknod: T::mknod,
+        mkdir: T::mkdir,
+        unlink: T::unlink,
+        rmdir: T::rmdir,
+        symlink: T::symlink,
+        rename: T::rename,
+        open: T::open,
+        read: T::read,
+        write: T::write,
+        flush: T::flush,
+        release: T::release,
+        fsync: T::fsync,
+        opendir: T::opendir,
+        readdir: T::readdir,
+        releasedir: T::releasedir,
+        fsyncdir: T::fsyncdir,
+        statfs: T::statfs,
+        setxattr: T::setxattr,
+        getxattr: T::getxattr,
+        listxattr: T::listxattr,
+        removexattr: T::removexattr,
+        access: T::access,
+        create: T::create,
+        getlk: T::getlk,
+        setlk: T::setlk,
+        bmap: T::bmap,
+        ioctl: T::ioctl,
+        poll: T::poll,
+        fallocate: T::fallocate,
+        lseek: T::lseek,
+    }
+}
+
+pub trait FileSystem {
+    fn get_name(&self) -> &str;
+
+    fn register(&self, ops: &'static fs_ops<Self>) -> i32 
+        where Self: core::marker::Sized {
+        return unsafe {
+            register_bento_fs(
+                self as *const Self as *const raw::c_void,
+                self.get_name().as_bytes().as_ptr() as *const raw::c_void,
+                ops as *const fs_ops<Self> as *const raw::c_void,
+                Self::dispatch as *const raw::c_void,
+            )
+        };
+    }
+
+    fn init(&mut self, _sb: RsSuperBlock, _req: &Request, _fc_info: &mut FuseConnInfo) -> Result<(), i32>
+    {
+        return Err(-(ENOSYS as i32));
+    }
+    fn destroy(&mut self, _sb: RsSuperBlock, _req: &Request) -> Result<(), i32>
+    {
+        return Ok(());
+    }
+    fn lookup(&mut self, _sb: RsSuperBlock, _req: &Request, _parent: u64, _name: CStr, reply: ReplyEntry)
+    {
+        reply.error(-(ENOSYS as i32));
+    }
+    fn forget(&mut self, _sb: RsSuperBlock, _req: &Request,  _ino: u64, _nlookup: u64) {}
+    fn getattr(&mut self, _sb: RsSuperBlock, _req: &Request, _ino: u64, reply: ReplyAttr)
+    {
+        reply.error(-(ENOSYS as i32));
+    }
+    fn setattr(
+        &mut self,
+        _sb: RsSuperBlock,
+        _req: &Request,
+        _ino: u64,
+        _mode: Option<u32>,
+        _uid: Option<u32>,
+        _gid: Option<u32>,
+        _size: Option<u64>,
+        _atime: Option<Timespec>,
+        _mtime: Option<Timespec>,
+        _fh: Option<u64>,
+        _crtime: Option<Timespec>,
+        _chgtime: Option<Timespec>,
+        _bkuptime: Option<Timespec>,
+        _flags: Option<u32>,
+        reply: ReplyAttr
+    )
+    {
+        reply.error(-(ENOSYS as i32));
+    }
+
+    fn readlink(&self, _sb: RsSuperBlock, _nodeid: u64, _buf: &mut MemContainer<raw::c_uchar>) -> i32
+    {
+        return -(ENOSYS as i32);
+    }
+
+    fn mknod(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_mknod_in, _name: CStr, _out_arg: &mut fuse_entry_out) -> i32
+    {
+        return -(ENOSYS as i32);
+    }
+
+    fn mkdir(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_mkdir_in, _name: CStr, _out_arg: &mut fuse_entry_out) -> i32
+    {
+        return -(ENOSYS as i32);
+    }
+
+    fn unlink(&self, _sb: RsSuperBlock, _nodeid: u64, _name: CStr) -> i32
+    {
+        return -(ENOSYS as i32);
+    }
+
+    fn rmdir(&self, _sb: RsSuperBlock, _nodeid: u64, _name: CStr) -> i32
+    {
+        return -(ENOSYS as i32);
+    }
+
+    fn symlink(&self, _sb: RsSuperBlock, _nodeid: u64, _name1: CStr, _name2: CStr, _out_arg: &mut fuse_entry_out) -> i32
+    {
+        return -(ENOSYS as i32);
+    }
+
+    fn rename(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_rename2_in, _name1: CStr, _name2: CStr) -> i32
+    {
+        return -(ENOSYS as i32);
+    }
+
+    fn open(&self, _sb: RsSuperBlock, _name: u64, _in_arg: &fuse_open_in, _out_arg: &mut fuse_open_out) -> i32
+    {
+        return -(ENOSYS as i32);
+    }
+
+    fn read(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_read_in, _buf: &mut MemContainer<raw::c_uchar>) -> i32
+    {
+        return -(ENOSYS as i32);
+    }
+
+    fn write(&self,
+        _sb: RsSuperBlock,
+        _nodeid: u64,
+        _in_arg: &fuse_write_in,
+        _buf: &MemContainer<raw::c_uchar>,
+        _out_arg: &mut fuse_write_out,
+    ) -> i32
+    {
+        return -(ENOSYS as i32);
+    }
+
+    fn flush(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_flush_in) -> i32
+    {
+        return -(ENOSYS as i32);
+    }
+
+    fn release(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_release_in) -> i32
+    {
+        return -(ENOSYS as i32);
+    }
+
+    fn fsync(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_fsync_in) -> i32
+    {
+        return -(ENOSYS as i32);
+    }
+
+    fn opendir(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_open_in, _out_arg: &mut fuse_open_out) -> i32
+    {
+        return -(ENOSYS as i32);
+    }
+
+    fn readdir(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_read_in, _buf: &mut MemContainer<raw::c_uchar>, _offset: &mut usize) -> i32
+    {
+        return -(ENOSYS as i32);
+    }
+
+    fn releasedir(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_release_in) -> i32
+    {
+        return -(ENOSYS as i32);
+    }
+
+    fn fsyncdir(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_fsync_in) -> i32
+    {
+        return -(ENOSYS as i32);
+    }
+
+    fn statfs(&self, _sb: RsSuperBlock, _nodeid: u64, _out_arg: &mut fuse_statfs_out) -> i32
+    {
+        return -(ENOSYS as i32);
+    }
+
+    fn setxattr(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_setxattr_in, _name: CStr, _buf: &MemContainer<raw::c_uchar>) -> i32
+    {
+        return -(ENOSYS as i32);
+    }
+
+    fn getxattr(&self,
+        _sb: RsSuperBlock,
+        _nodeid: u64,
+        _in_arg: &fuse_getxattr_in,
+        _name: CStr,
+        _numargs: raw::c_size_t,
+        _out_arg: &mut fuse_getxattr_out,
+        _buf: &mut MemContainer<raw::c_uchar>,
+    ) -> i32
+    {
+        return -(ENOSYS as i32);
+    }
+
+    fn listxattr(&self,
+        _sb: RsSuperBlock,
+        _nodeid: u64,
+        _in_arg: &fuse_getxattr_in,
+        _numargs: raw::c_size_t,
+        _out_arg: &mut fuse_getxattr_out,
+        _buf: &mut MemContainer<raw::c_uchar>,
+    ) -> i32
+    {
+        return -(ENOSYS as i32);
+    }
+
+    fn removexattr(&self, _sb: RsSuperBlock, _nodeid: u64, _name: CStr) -> i32
+    {
+        return -(ENOSYS as i32);
+    }
+
+    fn access(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_access_in) -> i32
+    {
+        return -(ENOSYS as i32);
+    }
+
+    fn create(&self,
+        _sb: RsSuperBlock,
+        _nodeid: u64,
+        _in_arg: &fuse_create_in,
+        _name: CStr,
+        _out_entry: &mut fuse_entry_out,
+        _out_open: &mut fuse_open_out,
+    ) -> i32
+    {
+        return -(ENOSYS as i32);
+    }
+
+    fn getlk(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_lk_in, _out_arg: &mut fuse_lk_out) -> i32
+    {
+        return -(ENOSYS as i32);
+    }
+
+    fn setlk(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_lk_in, _sleep: bool) -> i32
+    {
+        return -(ENOSYS as i32);
+    }
+
+    fn bmap(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_bmap_in, _out_arg: &mut fuse_bmap_out) -> i32
+    {
+        return -(ENOSYS as i32);
+    }
+
+    fn ioctl(&self,
+        _sb: RsSuperBlock,
+        _nodeid: u64,
+        _in_arg: &fuse_ioctl_in,
+        _out_arg: &mut fuse_ioctl_out,
+        _buf: &mut MemContainer<raw::c_uchar>,
+    ) -> i32
+    {
+        return -(ENOSYS as i32);
+    }
+
+    fn poll(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_poll_in, _out_arg: &mut fuse_poll_out) -> i32
+    {
+        return -(ENOSYS as i32);
+    }
+
+    fn fallocate(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_fallocate_in) -> i32
+    {
+        return -(ENOSYS as i32);
+    }
+
+    fn lseek(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_lseek_in, _out_arg: &mut fuse_lseek_out) -> i32
+    {
+        return -(ENOSYS as i32);
+    }
+
+    fn dispatch(&mut self, opcode: fuse_opcode, sb: RsSuperBlock, inarg: &bento_in, outarg: &mut bento_out) -> i32 {
+        println!("dispatching");
+        match opcode {
+            fuse_opcode_FUSE_INIT => {
+                if inarg.numargs != 1 || outarg.numargs != 1 {
+                    return -1;
+                }
+
+                let req = Request { h: &inarg.h };
+
+                let init_in = unsafe { &*(inarg.args[0].value as *const fuse_init_in) };
+                let init_out = unsafe { &mut *(outarg.args[0].value as *mut fuse_init_out) };
+                let mut fc_info = FuseConnInfo::from_init_in(&init_in);
+                match self.init(sb, &req, &mut fc_info) {
+                    Ok(()) => {
+                        fc_info.to_init_out(init_out);
+                        0
+                    },
+                    Err(x) => x as i32,
+                }
+            },
+            fuse_opcode_FUSE_DESTROY => {
+                let req = Request { h: &inarg.h };
+                match self.destroy(sb, &req) {
+                    Ok(()) => 0,
+                    Err(x) => x as i32,
+                }
+            },
+            fuse_opcode_FUSE_LOOKUP => {
+                if inarg.numargs != 1 || outarg.numargs != 1 {
+                    return -1;
+                }
+                let req = Request { h: &inarg.h };
+                let name = unsafe { CStr::from_raw(inarg.args[0].value as *const raw::c_char) };
+                let entry_out = unsafe { &mut *(outarg.args[0].value as *mut fuse_entry_out) };
+                let mut reply = ReplyEntryInternal { reply: Ok(entry_out) };
+                self.lookup(sb, &req, inarg.h.nodeid, name, &mut reply);
+                match reply.reply() {
+                    Ok(_) => {
+                        0
+                    },
+                    Err(x) => {
+                        *x as i32
+                    },
+                }
+            },
+            fuse_opcode_FUSE_FORGET => {
+                if inarg.numargs != 1 || outarg.numargs != 0 {
+                    return -1;
+                }
+                let req = Request { h: &inarg.h };
+                let forget_in = unsafe { &*(inarg.args[0].value as *const fuse_forget_in) };
+
+                self.forget(sb, &req, inarg.h.nodeid, forget_in.nlookup);
+                0
+            },
+            fuse_opcode_FUSE_GETATTR => {
+                if inarg.numargs != 1 || outarg.numargs != 1 {
+                    return -1;
+                }
+
+                let req = Request { h: &inarg.h };
+
+                let _getattr_in = unsafe { &*(inarg.args[0].value as *const fuse_getattr_in) };
+                let getattr_out = unsafe { &mut *(outarg.args[0].value as *mut fuse_attr_out) };
+                let mut reply = ReplyAttrInternal { reply: Ok(getattr_out) };
+                self.getattr(sb, &req, inarg.h.nodeid, &mut reply);
+                match reply.reply() {
+                    Ok(_) => {
+                        0
+                    },
+                    Err(x) => {
+                        *x as i32
+                    },
+                }
+            },
+            fuse_opcode_FUSE_SETATTR => {
+                if inarg.numargs != 1 || outarg.numargs != 1 {
+                    return -1;
+                }
+
+                let req = Request { h: &inarg.h };
+
+                let setattr_in = unsafe { &*(inarg.args[0].value as *const fuse_setattr_in) };
+                let setattr_out = unsafe { &mut *(outarg.args[0].value as *mut fuse_attr_out) };
+                let mut reply = ReplyAttrInternal { reply: Ok(setattr_out) };
+                let mode = match setattr_in.valid & FATTR_MODE {
+                    0 => None,
+                    _ => Some(setattr_in.mode),
+                };
+                let uid = match setattr_in.valid & FATTR_UID {
+                    0 => None,
+                    _ => Some(setattr_in.uid),
+                };
+                let gid = match setattr_in.valid & FATTR_GID {
+                    0 => None,
+                    _ => Some(setattr_in.gid),
+                };
+                let size = match setattr_in.valid & FATTR_SIZE {
+                    0 => None,
+                    _ => Some(setattr_in.size),
+                };
+                let atime = match setattr_in.valid & FATTR_ATIME {
+                    0 => None,
+                    _ => Some(Timespec {
+                        sec: setattr_in.atime as i64,
+                        nsec: setattr_in.atimensec as i32,
+                    }),
+                };
+                let mtime = match setattr_in.valid & FATTR_MTIME {
+                    0 => None,
+                    _ => Some(Timespec {
+                        sec: setattr_in.mtime as i64,
+                        nsec: setattr_in.mtimensec as i32,
+                    }),
+                };
+                let fh = match setattr_in.valid & FATTR_FH {
+                    0 => None,
+                    _ => Some(setattr_in.fh),
+                };
+                self.setattr(sb, &req, inarg.h.nodeid, mode, uid, gid, size, atime,
+                             mtime, fh, None, None, None, None, &mut reply);
+                match reply.reply() {
+                    Ok(_) => {
+                        0
+                    },
+                    Err(x) => {
+                        *x as i32
+                    },
+                }
+            },
+            _ => {
+                println!("got a different opcode");
+                0
+            },
+        }
+    }
+}
+
+
 /// Filesystem operations.
 ///
 /// These functions are implemented by the file system and provided to Bento
@@ -113,7 +720,7 @@ pub fn bento_add_direntry(
 /// The `fuse_*_in` and `fuse_*_out` and defined in the Linux kernel in
 /// /include/uapi/linux/fuse.h.
 #[repr(C)]
-pub struct fs_ops {
+pub struct fs_ops<T: FileSystem> {
     /// Initialize the file system and fill in initialization flags.
     ///
     /// Possible initialization flags are defined /include/uapi/linux/fuse.h.
@@ -123,13 +730,11 @@ pub struct fs_ops {
     /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `in_arg: &fuse_init_in` - Data structure containing init args from Bento.
     /// * `out_arg: &mut fuse_init_out` - Data structure to be filled.
-    pub init: fn(RsSuperBlock, &fuse_init_in, &mut fuse_init_out) -> i32,
 
     /// Perform any necessary cleanup on the file system.
     ///
     /// Arguments:
     /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
-    pub destroy: fn(RsSuperBlock) -> i32,
 
     /// Look up a directory entry by name and get its attributes.
     ///
@@ -140,7 +745,6 @@ pub struct fs_ops {
     /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `nodeid: u64` - The file system-provided inode number of the parent directory
     /// * `name: CStr` - The name of the file to lookup.
-    pub lookup: fn(RsSuperBlock, u64, CStr, &mut fuse_entry_out) -> i32,
 
     /// Forget about an inode
     ///
@@ -163,7 +767,6 @@ pub struct fs_ops {
     /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `nodeid: u64` - Filesystem-provided inode number of the inode to forget.
     /// * `nlookup: u64` - The number of lookups to forget.
-    pub forget: fn(RsSuperBlock, u64, u64) -> i32,
 
     /// Get file attributes.
     ///
@@ -178,7 +781,6 @@ pub struct fs_ops {
     /// * `nodeid: u64` - Filesystem-provided id of the inode.
     /// * `in_arg: &fuse_getattr_in` - Data structure containing getattr input arguments.
     /// * `out_arg: &mut fuse_attr_out` - Data structure to be filled with attribute information.
-    pub getattr: fn(RsSuperBlock, u64, &fuse_getattr_in, &mut fuse_attr_out) -> i32,
 
     /// Set file attributes
     ///
@@ -193,7 +795,6 @@ pub struct fs_ops {
     /// * `nodeid: u64` - Filesystem-provided id of the inode.
     /// * `in_arg: &fuse_setattr_in` - Data structure containing setattr input arguments.
     /// * `out_arg: &mut fuse_attr_out` - Data structure to be filled with attribute information.
-    pub setattr: fn(RsSuperBlock, u64, &fuse_setattr_in, &mut fuse_attr_out) -> i32,
 
     /// Read symbolic link.
     ///
@@ -201,7 +802,7 @@ pub struct fs_ops {
     /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `nodeid: u64` - Filesystem-provided id of the inode.
     /// * `buf: &mut MemContainer<kernel::raw::c_uchar>` - Bento-provided buffer for the link name.
-    pub readlink: fn(RsSuperBlock, u64, &mut MemContainer<raw::c_uchar>) -> i32,
+    pub readlink: fn(&T, RsSuperBlock, u64, &mut MemContainer<raw::c_uchar>) -> i32,
 
     /// Create file node
     ///
@@ -214,7 +815,7 @@ pub struct fs_ops {
     /// * `name: CStr` - Name of the file to be created.
     /// * `out_arg: &mut fuse_entry_out` - Data structure to be filled with data about the newly
     /// created file.
-    pub mknod: fn(RsSuperBlock, u64, &fuse_mknod_in, CStr, &mut fuse_entry_out) -> i32,
+    pub mknod: fn(&T, RsSuperBlock, u64, &fuse_mknod_in, CStr, &mut fuse_entry_out) -> i32,
 
     /// Create directory.
     ///
@@ -225,7 +826,7 @@ pub struct fs_ops {
     /// * `name: CStr` - Name of the directory to be created.
     /// * `out_arg: &mut fuse_entry_out` - Data structure to be filled with data about the newly
     /// created directory.
-    pub mkdir: fn(RsSuperBlock, u64, &fuse_mkdir_in, CStr, &mut fuse_entry_out) -> i32,
+    pub mkdir: fn(&T, RsSuperBlock, u64, &fuse_mkdir_in, CStr, &mut fuse_entry_out) -> i32,
 
     /// Remove a file.
     ///
@@ -237,7 +838,7 @@ pub struct fs_ops {
     /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `nodeid: u64` - Filesystem-provided inode number of the parent directory.
     /// * `name: CStr` - Name of the file to be removed.
-    pub unlink: fn(RsSuperBlock, u64, CStr) -> i32,
+    pub unlink: fn(&T, RsSuperBlock, u64, CStr) -> i32,
 
     /// Remove a directory.
     ///
@@ -249,7 +850,7 @@ pub struct fs_ops {
     /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `nodeid: u64` - Filesystem-provided inode number of the parent directory.
     /// * `name: CStr` - Name of the directory to be removed.
-    pub rmdir: fn(RsSuperBlock, u64, CStr) -> i32,
+    pub rmdir: fn(&T, RsSuperBlock, u64, CStr) -> i32,
 
     /// Create a symbolic link.
     ///
@@ -260,7 +861,7 @@ pub struct fs_ops {
     /// * `linkname: CStr` - The contents of the symbolic link.
     /// * `out_arg: &mut fuse_entry_out` - Data structure to be filled with data about the newly
     /// created link.
-    pub symlink: fn(RsSuperBlock, u64, CStr, CStr, &mut fuse_entry_out) -> i32,
+    pub symlink: fn(&T, RsSuperBlock, u64, CStr, CStr, &mut fuse_entry_out) -> i32,
 
     /// Rename a file
     ///
@@ -283,7 +884,7 @@ pub struct fs_ops {
     /// * `in_arg: &fuse_rename2_in` - Data structure containing rename input arguments.
     /// * `oldname: CStr` - Old name of the file.
     /// * `newname: CStr` - New name of the file.
-    pub rename: fn(RsSuperBlock, u64, &fuse_rename2_in, CStr, CStr) -> i32,
+    pub rename: fn(&T, RsSuperBlock, u64, &fuse_rename2_in, CStr, CStr) -> i32,
 
     /// Open a file.
     ///
@@ -319,7 +920,7 @@ pub struct fs_ops {
     /// * `nodeid: u64` - Filesystem-provided inode number.
     /// * `in_arg: &fuse_open_in` - Data structure containing open input arguments.
     /// * `out_arg: &mut fuse_open_out` - Data structure to be filled with open output.
-    pub open: fn(RsSuperBlock, u64, &fuse_open_in, &mut fuse_open_out) -> i32,
+    pub open: fn(&T, RsSuperBlock, u64, &fuse_open_in, &mut fuse_open_out) -> i32,
 
     /// Read data
     ///
@@ -334,7 +935,7 @@ pub struct fs_ops {
     /// * `nodeid: u64` - Filesystem-provided inode number.
     /// * `in_arg: &fuse_read_in` - Data structure containing read input arguments.
     /// * `buf: &mut MemContainer<kernel::raw::c_uchar` - Buffer to be filled with the read data.
-    pub read: fn(RsSuperBlock, u64, &fuse_read_in, &mut MemContainer<raw::c_uchar>) -> i32,
+    pub read: fn(&T, RsSuperBlock, u64, &fuse_read_in, &mut MemContainer<raw::c_uchar>) -> i32,
 
     /// Write data
     ///
@@ -352,7 +953,7 @@ pub struct fs_ops {
     /// * `in_arg: &fuse_write_in` - Data structure containing write input arguments.
     /// * `buf: &MemContainer<kernel::raw::c_uchar` - Buffer containing the data to write.
     /// * `out_arg: &mut fuse_write_out` - Data structure to be filled with write output arguments.
-    pub write: fn(
+    pub write: fn(&T, 
         RsSuperBlock,
         u64,
         &fuse_write_in,
@@ -388,7 +989,7 @@ pub struct fs_ops {
     /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `nodeid: u64` - Filesystem-provided inode number.
     /// * `in_arg: &fuse_flush_in` - Data structure containing flush input arguments.
-    pub flush: fn(RsSuperBlock, u64, &fuse_flush_in) -> i32,
+    pub flush: fn(&T, RsSuperBlock, u64, &fuse_flush_in) -> i32,
 
     /// Release an open file
     ///
@@ -408,7 +1009,7 @@ pub struct fs_ops {
     /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `nodeid: u64` - Filesystem-provided inode number.
     /// * `in_arg: &fuse_release_in` - Data structure containing release input arguments.
-    pub release: fn(RsSuperBlock, u64, &fuse_release_in) -> i32,
+    pub release: fn(&T, RsSuperBlock, u64, &fuse_release_in) -> i32,
 
     /// Synchronize file contents
     ///
@@ -422,7 +1023,7 @@ pub struct fs_ops {
     /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `nodeid: u64` - Filesystem-provided inode number.
     /// * `in_arg: &fuse_fsync_in` - Data structure containing fsync input arguments.
-    pub fsync: fn(RsSuperBlock, u64, &fuse_fsync_in) -> i32,
+    pub fsync: fn(&T, RsSuperBlock, u64, &fuse_fsync_in) -> i32,
 
     /// Open a directory.
     ///
@@ -440,7 +1041,7 @@ pub struct fs_ops {
     /// * `nodeid: u64` - Filesystem-provided inode number.
     /// * `in_arg: &fuse_open_in` - Data structure containing open input arguments.
     /// * `out_arg: &fuse_open_out` - Data structure to be filled with open information.
-    pub opendir: fn(RsSuperBlock, u64, &fuse_open_in, &mut fuse_open_out) -> i32,
+    pub opendir: fn(&T, RsSuperBlock, u64, &fuse_open_in, &mut fuse_open_out) -> i32,
 
     /// Read directory
     ///
@@ -473,7 +1074,7 @@ pub struct fs_ops {
     /// * `in_arg: &fuse_read_in` - Data structure containing read input arguments.
     /// * `buf: &mut MemContainer<kernel::raw::c_uchar` - Buffer to be filled with the direntry data.
     pub readdir:
-        fn(RsSuperBlock, u64, &fuse_read_in, &mut MemContainer<raw::c_uchar>, &mut usize) -> i32,
+        fn(&T, RsSuperBlock, u64, &fuse_read_in, &mut MemContainer<raw::c_uchar>, &mut usize) -> i32,
 
     /// Release an open directory
     ///
@@ -486,7 +1087,7 @@ pub struct fs_ops {
     /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `nodeid: u64` - Filesystem-provided inode number of the directory.
     /// * `in_arg: &fuse_release_in` - Data structure containing release input arguments.
-    pub releasedir: fn(RsSuperBlock, u64, &fuse_release_in) -> i32,
+    pub releasedir: fn(&T, RsSuperBlock, u64, &fuse_release_in) -> i32,
 
     /// Synchronize directory contents
     ///
@@ -503,7 +1104,7 @@ pub struct fs_ops {
     /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `nodeid: u64` - Filesystem-provided inode number of the directory.
     /// * `in_arg: &fuse_fsync_in` - Data structure containing fsync input arguments.
-    pub fsyncdir: fn(RsSuperBlock, u64, &fuse_fsync_in) -> i32,
+    pub fsyncdir: fn(&T, RsSuperBlock, u64, &fuse_fsync_in) -> i32,
 
     /// Get filesystem statistics.
     ///
@@ -511,7 +1112,7 @@ pub struct fs_ops {
     /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `nodeid: u64` - Filesystem-provided inode number, zero means "undefined".
     /// * `out_arg: &fuse_statfs_out` - Data structure to be filled with statfs information.
-    pub statfs: fn(RsSuperBlock, u64, &mut fuse_statfs_out) -> i32,
+    pub statfs: fn(&T, RsSuperBlock, u64, &mut fuse_statfs_out) -> i32,
 
     /// Set an extended attribute
     ///
@@ -527,7 +1128,7 @@ pub struct fs_ops {
     /// * `buf: &MemContainer<kernel::raw::c_uchar>` - Buffer containing the data to be set in the
     /// attribute.
     pub setxattr:
-        fn(RsSuperBlock, u64, &fuse_setxattr_in, CStr, &MemContainer<raw::c_uchar>) -> i32,
+        fn(&T, RsSuperBlock, u64, &fuse_setxattr_in, CStr, &MemContainer<raw::c_uchar>) -> i32,
 
     /// Get an extended attribute
     ///
@@ -550,7 +1151,7 @@ pub struct fs_ops {
     /// * `out_arg: &mut fuse_getxattr_out` - Data structure to be filled with getxattr output
     /// information.
     /// * `buf: &mut MemContainer<kernel::raw::c_uchar>` - Buffer to be filled with the attribute data.
-    pub getxattr: fn(
+    pub getxattr: fn(&T, 
         RsSuperBlock,
         u64,
         &fuse_getxattr_in,
@@ -582,7 +1183,7 @@ pub struct fs_ops {
     /// * `out_arg: &mut fuse_getxattr_out` - Data structure to be filled with getxattr output
     /// information.
     /// * `buf: &mut MemContainer<kernel::raw::c_uchar>` - Buffer to be filled with the attribute data.
-    pub listxattr: fn(
+    pub listxattr: fn(&T, 
         RsSuperBlock,
         u64,
         &fuse_getxattr_in,
@@ -601,7 +1202,7 @@ pub struct fs_ops {
     /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `nodeid: u64` - Filesystem-provided inode number.
     /// * `name: CStr` - The name of the attribute to remove.
-    pub removexattr: fn(RsSuperBlock, u64, CStr) -> i32,
+    pub removexattr: fn(&T, RsSuperBlock, u64, CStr) -> i32,
 
     /// Check file access permissions
     ///
@@ -616,7 +1217,7 @@ pub struct fs_ops {
     /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `nodeid: u64` - Filesystem-provided inode number.
     /// * `in_arg: &fuse_access_in` - Data structure containing access input arguments.
-    pub access: fn(RsSuperBlock, u64, &fuse_access_in) -> i32,
+    pub access: fn(&T, RsSuperBlock, u64, &fuse_access_in) -> i32,
 
     /// Create and open a file
     ///
@@ -639,7 +1240,7 @@ pub struct fs_ops {
     /// newly created entry.
     /// * `out_open: &mut fuse_open_out` - Data structure to be filled with information about the
     /// newly opened file.
-    pub create: fn(
+    pub create: fn(&T, 
         RsSuperBlock,
         u64,
         &fuse_create_in,
@@ -655,7 +1256,7 @@ pub struct fs_ops {
     /// * `nodeid: u64` - Filesystem-provided inode number.
     /// * `in_arg: &fuse_lk_in` - Data structure containing getlk input arguments.
     /// * `out_arg: &mut fuse_lk_out` - Data structure to be filled with getlk output information.
-    pub getlk: fn(RsSuperBlock, u64, &fuse_lk_in, &mut fuse_lk_out) -> i32,
+    pub getlk: fn(&T, RsSuperBlock, u64, &fuse_lk_in, &mut fuse_lk_out) -> i32,
 
     /// Acquire, modify or release a POSIX file lock
     ///
@@ -671,7 +1272,7 @@ pub struct fs_ops {
     /// * `nodeid: u64` - Filesystem-provided inode number.
     /// * `in_arg: &fuse_lk_in` - Data structure containing setlk input arguments.
     /// * `sleep: bool` - Should the filesystem sleep.
-    pub setlk: fn(RsSuperBlock, u64, &fuse_lk_in, bool) -> i32,
+    pub setlk: fn(&T, RsSuperBlock, u64, &fuse_lk_in, bool) -> i32,
 
     /// Map block index within file to block index within device
     ///
@@ -687,7 +1288,7 @@ pub struct fs_ops {
     /// * `nodeid: u64` - Filesystem-provided inode number.
     /// * `in_arg: &fuse_bmap_in` - Data structure containing bmap input arguments.
     /// * `out_arg: &mut fuse_bmap_out` - Data structure to be filled with bmap output information.
-    pub bmap: fn(RsSuperBlock, u64, &fuse_bmap_in, &mut fuse_bmap_out) -> i32,
+    pub bmap: fn(&T, RsSuperBlock, u64, &fuse_bmap_in, &mut fuse_bmap_out) -> i32,
 
     /// Ioctl
     ///
@@ -702,7 +1303,7 @@ pub struct fs_ops {
     /// * `out_arg: &mut fuse_ioctl_out` - Data structure to be filled with ioctl output information.
     /// * `buf: &mut MemContainer<kernel::raw::c_uchar>` - Buffer to be filled with ioctl output
     /// information.
-    pub ioctl: fn(
+    pub ioctl: fn(&T, 
         RsSuperBlock,
         u64,
         &fuse_ioctl_in,
@@ -721,7 +1322,7 @@ pub struct fs_ops {
     /// * `nodeid: u64` - Filesystem-provided inode number.
     /// * `in_arg: &fuse_poll_in` - Data structure containing poll input arguments.
     /// * `out_arg: &mut fuse_poll_out` - Data structure to be filled with poll output information.
-    pub poll: fn(RsSuperBlock, u64, &fuse_poll_in, &mut fuse_poll_out) -> i32,
+    pub poll: fn(&T, RsSuperBlock, u64, &fuse_poll_in, &mut fuse_poll_out) -> i32,
 
     /// Allocate requested space. If this function returns success then subsequent writes to the
     /// specified range shall not fail due to the lack of free space on the file system storage
@@ -735,7 +1336,7 @@ pub struct fs_ops {
     /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `nodeid: u64` - Filesystem-provided inode number.
     /// * `in_arg: &fuse_fallocate_in` - Data structure containing fallocate input arguments.
-    pub fallocate: fn(RsSuperBlock, u64, &fuse_fallocate_in) -> i32,
+    pub fallocate: fn(&T, RsSuperBlock, u64, &fuse_fallocate_in) -> i32,
 
     /// Find next data or hole after the specified offset
     ///
@@ -748,5 +1349,5 @@ pub struct fs_ops {
     /// * `nodeid: u64` - Filesystem-provided inode number.
     /// * `in_arg: &fuse_lseek_in` - Data structure containing lseek input arguments.
     /// * `out_arg: &mut fuse_lseek_out` - Data structure to be filled with lseek output information.
-    pub lseek: fn(RsSuperBlock, u64, &fuse_lseek_in, &mut fuse_lseek_out) -> i32,
+    pub lseek: fn(&T, RsSuperBlock, u64, &fuse_lseek_in, &mut fuse_lseek_out) -> i32,
 }
