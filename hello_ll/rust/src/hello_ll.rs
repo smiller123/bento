@@ -11,6 +11,7 @@ use kernel::mem as kmem;
 use kernel::raw;
 use kernel::stat;
 use kernel::string::*;
+use kernel::time::Timespec;
 
 //use bento::println;
 
@@ -61,7 +62,7 @@ impl FileSystem for HelloFS {
         Self::NAME
     }
 
-    fn init(&self, _sb: RsSuperBlock, _req: &Request, outarg: &mut FuseConnInfo) -> Result<(), i32> {
+    fn init(&mut self, _sb: RsSuperBlock, _req: &Request, outarg: &mut FuseConnInfo) -> Result<(), i32> {
         outarg.proto_major = BENTO_KERNEL_VERSION;
         outarg.proto_minor = BENTO_KERNEL_MINOR_VERSION;
     
@@ -132,22 +133,22 @@ impl FileSystem for HelloFS {
         }
     }
 
-    fn getattr(&self, 
+    fn getattr(&mut self,
         _sb: RsSuperBlock,
+        _req: &Request,
         nodeid: u64,
-        _inarg: &fuse_getattr_in,
-        outarg: &mut fuse_attr_out,
-    ) -> i32 {
-        outarg.attr_valid = 1;
-        outarg.attr_valid_nsec = 999999999;
-        if HelloFS::hello_stat(nodeid, &mut outarg.attr) == -1 {
-            return -(ENOENT as i32);
+        reply: ReplyAttr,
+    ) {
+        let attr_valid = Timespec::new(1, 999999999);
+        let mut attr = fuse_attr::new();
+        if HelloFS::hello_stat(nodeid, &mut attr) == -1 {
+            reply.error(-(ENOENT as i32));
         } else {
-            return 0;
+            reply.attr(&attr_valid, &attr);
         }
     }
 
-    fn lookup(&self, 
+    fn lookup(&mut self, 
         _sb: RsSuperBlock,
         _req: &Request,
         nodeid: u64,
@@ -160,13 +161,12 @@ impl FileSystem for HelloFS {
         } else {
             let out_nodeid = 2;
             let generation = 0;
-            let entry_valid = 1;
-            let entry_valid_nsec = 999999999;
+            let entry_valid = Timespec::new(1, 999999999);
             let mut attr = fuse_attr::new();
             if HelloFS::hello_stat(out_nodeid, &mut attr) == -1 {
                 reply.error(-(ENOENT as i32));
             } else {
-                reply.entry(entry_valid, entry_valid_nsec, &attr, generation);
+                reply.entry(&entry_valid, &attr, generation);
             }
         }
     }
