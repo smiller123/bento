@@ -654,12 +654,12 @@ impl FileSystem for Xv6FileSystem {
             Err(x) => return x as i32,
         }
     }
-    
-    fn unlink(&self, sb: RsSuperBlock, nodeid: u64, name: CStr) -> i32 {
+   
+    fn unlink(&mut self, sb: RsSuperBlock, _req: &Request, parent: u64, name: CStr, reply: ReplyEmpty) {
         let _guard = begin_op(&sb);
-        match dounlink(&sb, nodeid, &name) {
-            Ok(x) => return x as i32,
-            Err(x) => return x as i32,
+        match dounlink(&sb, parent, &name) {
+            Ok(_) => reply.ok(),
+            Err(x) => reply.error(x as i32),
         }
     }
     

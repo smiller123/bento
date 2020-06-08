@@ -226,6 +226,27 @@ impl<'a> ReplyDataInternal<'a> {
     }
 }
 
+pub type ReplyEmpty<'a> = &'a mut ReplyEmptyInternal;
+
+#[derive(Debug)]
+pub struct ReplyEmptyInternal {
+    reply: Result<(), i32>,
+}
+
+impl<'a> ReplyEmptyInternal {
+    pub fn ok(&mut self) {
+        self.reply = Ok(());
+    }
+
+    pub fn error(&mut self, err: i32) {
+        self.reply = Err(err);
+    }
+
+    pub fn reply(&self) -> &Result<(), i32> {
+        return &self.reply;
+    }
+}
+
 /// Register a file system with the BentoFS kernel module.
 ///
 /// Should be called in the init function of a Bento file system module, before
@@ -317,7 +338,6 @@ pub fn bento_add_direntry(
 
 pub const fn get_fs_ops<T: FileSystem>(_fs: &T) -> fs_ops<T> {
     fs_ops {
-        unlink: T::unlink,
         rmdir: T::rmdir,
         rename: T::rename,
         open: T::open,
@@ -430,9 +450,15 @@ pub trait FileSystem {
         return reply.error(-(ENOSYS as i32));
     }
 
-    fn unlink(&self, _sb: RsSuperBlock, _nodeid: u64, _name: CStr) -> i32
-    {
-        return -(ENOSYS as i32);
+    fn unlink(
+        &mut self,
+        _sb: RsSuperBlock,
+        _req: &Request,
+        _parent: u64,
+        _name: CStr, //&OsStr
+        reply: ReplyEmpty
+    ) {
+        return reply.error(-(ENOSYS as i32));
     }
 
     fn rmdir(&self, _sb: RsSuperBlock, _nodeid: u64, _name: CStr) -> i32
@@ -802,6 +828,23 @@ pub trait FileSystem {
                     },
                 }            
             },
+            fuse_opcode_FUSE_UNLINK => {
+                if inarg.numargs != 1 {
+                    return -1;
+                }
+                let req = Request { h: &inarg.h };
+                let name = unsafe { CStr::from_raw(inarg.args[0].value as *const raw::c_char) };
+                let mut reply = ReplyEmptyInternal { reply: Err(-(ENOSYS as i32)) };
+                self.unlink(sb, &req, inarg.h.nodeid, name, &mut reply);
+                match reply.reply() {
+                    Ok(_) => {
+                        0
+                    },
+                    Err(x) => {
+                        *x as i32
+                    },
+                }            
+            },
             fuse_opcode_FUSE_SYMLINK => {
                 if inarg.numargs != 2 || outarg.numargs != 1 {
                     return -1;
@@ -959,7 +1002,6 @@ pub struct fs_ops<T: FileSystem> {
     /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `nodeid: u64` - Filesystem-provided inode number of the parent directory.
     /// * `name: CStr` - Name of the file to be removed.
-    pub unlink: fn(&T, RsSuperBlock, u64, CStr) -> i32,
 
     /// Remove a directory.
     ///
