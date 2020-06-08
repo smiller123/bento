@@ -15,7 +15,7 @@ use kernel::time::*;
 use bento::bentofs::*;
 use bento::bindings::*;
 use bento::c_str;
-use bento::println;
+//use bento::println;
 use bento::DataBlock;
 
 use crate::log::*;
@@ -201,41 +201,44 @@ impl FileSystem for Xv6FileSystem {
         outarg.st.namelen = DIRSIZ as u32;
         return 0;
     }
-    
-    fn open(&self, 
-        sb: RsSuperBlock,
-        nodeid: u64,
-        inarg: &fuse_open_in,
-        outarg: &mut fuse_open_out,
-    ) -> i32 {
+   
+    fn open(&mut self, sb: RsSuperBlock, _req: &Request, nodeid: u64, flags: u32, reply: ReplyOpen) {
         let inode = match iget(&sb, nodeid) {
             Ok(x) => x,
-            Err(x) => return x as i32,
+            Err(x) => {
+                reply.error(x as i32);
+                return;
+            },
         };
     
         let icache = ILOCK_CACHE.read();
         let inode_guard = match ilock(&sb, inode.idx, &icache, inode.inum) {
             Ok(x) => x,
-            Err(x) => return x as i32,
+            Err(x) => {
+                reply.error(x as i32);
+                return;
+            },
         };
         let mut internals = inode_guard.internals.write();
     
         // Check if inode is a file
         if internals.inode_type != T_FILE {
-            return -(EISDIR as i32);
+            reply.error(-(EISDIR as i32));
+            return;
         }
     
-        if inarg.flags & O_TRUNC != 0 {
+        if flags & O_TRUNC != 0 {
             let _guard = begin_op(&sb);
             internals.size = 0;
             if let Err(x) = iupdate(&sb, &internals, inode.inum) {
-                return x as i32;
+                reply.error(x as i32);
+                return;
             }
         }
     
-        outarg.fh = 0;
-        outarg.open_flags = FOPEN_KEEP_CACHE;
-        return 0;
+        let fh = 0;
+        let open_flags = FOPEN_KEEP_CACHE;
+        reply.opened(fh, open_flags);
     }
     
     fn opendir(&self, 
@@ -608,12 +611,10 @@ impl FileSystem for Xv6FileSystem {
         _mode: u32,
         reply: ReplyEntry
     ) {
-        println!("calling mkdir\n");
         let _guard = begin_op(&sb);
         let child = match create_internal(&sb, parent, T_DIR, &name) {
             Ok(x) => x,
             Err(x) => {
-                println!("create 1 failed\n");
                 reply.error(x as i32);
                 return;
             },
@@ -623,7 +624,6 @@ impl FileSystem for Xv6FileSystem {
         let inode_guard = match ilock(&sb, child.idx, &icache, child.inum) {
             Ok(x) => x,
             Err(x) => {
-                println!("create 2 failed\n");
                 reply.error(x as i32);
                 return;
             },
@@ -636,11 +636,9 @@ impl FileSystem for Xv6FileSystem {
         let mut attr = fuse_attr::new();
         match stati(out_nodeid, &mut attr, &internals) {
             Ok(()) => {
-                println!("create ok\n");
                 reply.entry(&attr_valid, &attr, generation);
             },
             Err(x) => {
-                println!("create 3 failed\n");
                 reply.error(x as i32);
                 return;
             },

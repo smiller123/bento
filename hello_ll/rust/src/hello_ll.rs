@@ -13,7 +13,7 @@ use kernel::stat;
 use kernel::string::*;
 use kernel::time::Timespec;
 
-//use bento::println;
+use bento::println;
 
 use bento::bindings::*;
 
@@ -103,18 +103,11 @@ impl FileSystem for HelloFS {
         return 0;
     }
 
-    fn open(&self, 
-        _sb: RsSuperBlock,
-        nodeid: u64,
-        _inarg: &fuse_open_in,
-        outarg: &mut fuse_open_out,
-    ) -> i32 {
+    fn open(&mut self, _sb: RsSuperBlock, _req: &Request, nodeid: u64, _flags: u32, reply: ReplyOpen) {
         if nodeid != 2 {
-            return -(EISDIR as i32);
+            reply.error(-(EISDIR as i32));
         } else {
-            outarg.fh = 0;
-            outarg.open_flags = 0;
-            return 0;
+            reply.opened(0, 0);
         }
     }
 
@@ -246,6 +239,7 @@ impl FileSystem for HelloFS {
             return -(ENOTDIR as i32);
         }
         if let Err(x) = kmem::memset_rust(buf, 0, buf.len() as u64) {
+            println!("readdir bad\n");
             return x as i32;
         }
         let mut buf_off = 0;

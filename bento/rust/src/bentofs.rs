@@ -247,6 +247,31 @@ impl<'a> ReplyEmptyInternal {
     }
 }
 
+pub type ReplyOpen<'a, 'b> = &'a mut ReplyOpenInternal<'b>;
+
+#[derive(Debug)]
+pub struct ReplyOpenInternal<'a> {
+    reply: Result<&'a mut fuse_open_out, i32>,
+}
+
+impl<'a> ReplyOpenInternal<'a> {
+    pub fn opened(&mut self, fh: u64, flags: u32) {
+        if let Ok(rep) = &mut self.reply {
+            rep.fh = fh;
+            rep.open_flags = flags;
+            rep.padding = 0;
+        }
+    }
+
+    pub fn error(&mut self, err: i32) {
+        self.reply = Err(err);
+    }
+
+    pub fn reply(&self) -> &Result<&'a mut fuse_open_out, i32> {
+        return &self.reply;
+    }
+}
+
 /// Register a file system with the BentoFS kernel module.
 ///
 /// Should be called in the init function of a Bento file system module, before
@@ -338,7 +363,6 @@ pub fn bento_add_direntry(
 
 pub const fn get_fs_ops<T: FileSystem>(_fs: &T) -> fs_ops<T> {
     fs_ops {
-        open: T::open,
         read: T::read,
         write: T::write,
         flush: T::flush,
@@ -507,9 +531,9 @@ pub trait FileSystem {
         return reply.error(-(ENOSYS as i32));
     }
 
-    fn open(&self, _sb: RsSuperBlock, _name: u64, _in_arg: &fuse_open_in, _out_arg: &mut fuse_open_out) -> i32
+    fn open(&mut self, _sb: RsSuperBlock, _req: &Request, _ino: u64, _flags: u32, reply: ReplyOpen)
     {
-        return -(ENOSYS as i32);
+        return reply.error(-(ENOSYS as i32));
     }
 
     fn read(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_read_in, _buf: &mut MemContainer<raw::c_uchar>) -> i32
@@ -662,7 +686,6 @@ pub trait FileSystem {
     }
 
     fn dispatch(&mut self, opcode: fuse_opcode, sb: RsSuperBlock, inarg: &bento_in, outarg: &mut bento_out) -> i32 {
-        println!("dispatching");
         match opcode {
             fuse_opcode_FUSE_INIT => {
                 if inarg.numargs != 1 || outarg.numargs != 1 {
@@ -943,6 +966,26 @@ pub trait FileSystem {
                     },
                 }            
             },
+            fuse_opcode_FUSE_OPEN => {
+                if inarg.numargs != 1 || outarg.numargs != 1 {
+                    return -1;
+                }
+
+                let req = Request { h: &inarg.h };
+
+                let open_in = unsafe { &*(inarg.args[0].value as *const fuse_open_in) };
+                let open_out = unsafe { &mut *(outarg.args[0].value as *mut fuse_open_out) };
+                let mut reply = ReplyOpenInternal { reply: Ok(open_out) };
+                self.open(sb, &req, inarg.h.nodeid, open_in.flags, &mut reply);
+                match reply.reply() {
+                    Ok(_) => {
+                        0
+                    },
+                    Err(x) => {
+                        *x as i32
+                    },
+                }
+            },
             _ => {
                 println!("got a different opcode");
                 0
@@ -1158,7 +1201,6 @@ pub struct fs_ops<T: FileSystem> {
     /// * `nodeid: u64` - Filesystem-provided inode number.
     /// * `in_arg: &fuse_open_in` - Data structure containing open input arguments.
     /// * `out_arg: &mut fuse_open_out` - Data structure to be filled with open output.
-    pub open: fn(&T, RsSuperBlock, u64, &fuse_open_in, &mut fuse_open_out) -> i32,
 
     /// Read data
     ///
