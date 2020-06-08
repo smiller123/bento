@@ -317,7 +317,7 @@ pub fn bento_add_direntry(
 
 pub const fn get_fs_ops<T: FileSystem>(_fs: &T) -> fs_ops<T> {
     fs_ops {
-        mknod: T::mknod,
+        mknod: T::mknod_unused,
         mkdir: T::mkdir,
         unlink: T::unlink,
         rmdir: T::rmdir,
@@ -407,9 +407,21 @@ pub trait FileSystem {
         return reply.error(-(ENOSYS as i32));
     }
 
-    fn mknod(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_mknod_in, _name: CStr, _out_arg: &mut fuse_entry_out) -> i32
+    fn mknod_unused(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_mknod_in, _name: CStr, _out_arg: &mut fuse_entry_out) -> i32
     {
         return -(ENOSYS as i32);
+    }
+    fn mknod(
+        &mut self,
+        _sb: RsSuperBlock,
+        _req: &Request,
+        _parent: u64,
+        _name: CStr, //&OsStr
+        _mode: u32,
+        _rdev: u32,
+        reply: ReplyEntry
+    ) {
+        return reply.error(-(ENOSYS as i32));
     }
 
     fn mkdir(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_mkdir_in, _name: CStr, _out_arg: &mut fuse_entry_out) -> i32
@@ -745,6 +757,25 @@ pub trait FileSystem {
                         let buf_slice = buf.to_slice();
                         let buf_str = str::from_utf8(buf_slice).unwrap_or("");
                         buf_str.len() as i32
+                    },
+                    Err(x) => {
+                        *x as i32
+                    },
+                }            
+            },
+            fuse_opcode_FUSE_MKNOD => {
+                if inarg.numargs != 2 || outarg.numargs != 1 {
+                    return -1;
+                }
+                let req = Request { h: &inarg.h };
+                let mknod_in = unsafe { &*(inarg.args[0].value as *const fuse_mknod_in) };
+                let name = unsafe { CStr::from_raw(inarg.args[1].value as *const raw::c_char) };
+                let entry_out = unsafe { &mut *(outarg.args[0].value as *mut fuse_entry_out) };
+                let mut reply = ReplyEntryInternal { reply: Ok(entry_out) };
+                self.mknod(sb, &req, inarg.h.nodeid, name, mknod_in.mode, mknod_in.rdev, &mut reply);
+                match reply.reply() {
+                    Ok(_) => {
+                        0
                     },
                     Err(x) => {
                         *x as i32
