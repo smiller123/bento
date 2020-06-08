@@ -338,8 +338,6 @@ pub fn bento_add_direntry(
 
 pub const fn get_fs_ops<T: FileSystem>(_fs: &T) -> fs_ops<T> {
     fs_ops {
-        rmdir: T::rmdir,
-        rename: T::rename,
         open: T::open,
         read: T::read,
         write: T::write,
@@ -461,9 +459,15 @@ pub trait FileSystem {
         return reply.error(-(ENOSYS as i32));
     }
 
-    fn rmdir(&self, _sb: RsSuperBlock, _nodeid: u64, _name: CStr) -> i32
-    {
-        return -(ENOSYS as i32);
+    fn rmdir(
+        &mut self,
+        _sb: RsSuperBlock,
+        _req: &Request,
+        _parent: u64,
+        _name: CStr, //&OsStr
+        reply: ReplyEmpty
+    ) {
+        return reply.error(-(ENOSYS as i32));
     }
 
     fn symlink(
@@ -471,18 +475,24 @@ pub trait FileSystem {
         _sb: RsSuperBlock,
         _req: &Request,
         _parent: u64,
-        _name: CStr,
-        //_name: &OsStr,
-        _link: CStr,
-        //_link: &Path,
+        _name: CStr, // &OsStr
+        _link: CStr, // & Path
         reply: ReplyEntry
     ) {
         return reply.error(-(ENOSYS as i32));
     }
 
-    fn rename(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_rename2_in, _name1: CStr, _name2: CStr) -> i32
-    {
-        return -(ENOSYS as i32);
+    fn rename(
+        &mut self,
+        _sb: RsSuperBlock,
+        _req: &Request,
+        _parent: u64,
+        _name: CStr, //&OsStr
+        _newparent: u64,
+        _newname: CStr, //&OsStr,
+        reply: ReplyEmpty
+    ) {
+        return reply.error(-(ENOSYS as i32));
     }
 
     fn open(&self, _sb: RsSuperBlock, _name: u64, _in_arg: &fuse_open_in, _out_arg: &mut fuse_open_out) -> i32
@@ -845,6 +855,42 @@ pub trait FileSystem {
                     },
                 }            
             },
+            fuse_opcode_FUSE_RMDIR => {
+                if inarg.numargs != 1 {
+                    return -1;
+                }
+                let req = Request { h: &inarg.h };
+                let name = unsafe { CStr::from_raw(inarg.args[0].value as *const raw::c_char) };
+                let mut reply = ReplyEmptyInternal { reply: Err(-(ENOSYS as i32)) };
+                self.rmdir(sb, &req, inarg.h.nodeid, name, &mut reply);
+                match reply.reply() {
+                    Ok(_) => {
+                        0
+                    },
+                    Err(x) => {
+                        *x as i32
+                    },
+                }            
+            },
+            fuse_opcode_FUSE_RENAME | fuse_opcode_FUSE_RENAME2 => {
+                if inarg.numargs != 3 {
+                    return -1;
+                }
+                let req = Request { h: &inarg.h };
+                let rename_in = unsafe { &*(inarg.args[0].value as *const fuse_rename2_in) };
+                let oldname = unsafe { CStr::from_raw(inarg.args[1].value as *const raw::c_char) };
+                let newname = unsafe { CStr::from_raw(inarg.args[2].value as *const raw::c_char) };
+                let mut reply = ReplyEmptyInternal { reply: Err(-(ENOSYS as i32)) };
+                self.rename(sb, &req, inarg.h.nodeid, oldname, rename_in.newdir, newname, &mut reply);
+                match reply.reply() {
+                    Ok(_) => {
+                        0
+                    },
+                    Err(x) => {
+                        *x as i32
+                    },
+                }            
+            },
             fuse_opcode_FUSE_SYMLINK => {
                 if inarg.numargs != 2 || outarg.numargs != 1 {
                     return -1;
@@ -1013,7 +1059,6 @@ pub struct fs_ops<T: FileSystem> {
     /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `nodeid: u64` - Filesystem-provided inode number of the parent directory.
     /// * `name: CStr` - Name of the directory to be removed.
-    pub rmdir: fn(&T, RsSuperBlock, u64, CStr) -> i32,
 
     /// Create a symbolic link.
     ///
@@ -1046,7 +1091,6 @@ pub struct fs_ops<T: FileSystem> {
     /// * `in_arg: &fuse_rename2_in` - Data structure containing rename input arguments.
     /// * `oldname: CStr` - Old name of the file.
     /// * `newname: CStr` - New name of the file.
-    pub rename: fn(&T, RsSuperBlock, u64, &fuse_rename2_in, CStr, CStr) -> i32,
 
     /// Open a file.
     ///
