@@ -15,7 +15,7 @@ use kernel::time::*;
 use bento::bentofs::*;
 use bento::bindings::*;
 use bento::c_str;
-//use bento::println;
+use bento::println;
 use bento::DataBlock;
 
 use crate::log::*;
@@ -600,35 +600,50 @@ impl FileSystem for Xv6FileSystem {
         }
     }
 
-    fn mkdir(&self, 
+    fn mkdir(&mut self, 
         sb: RsSuperBlock,
-        nodeid: u64,
-        _inarg: &fuse_mkdir_in,
+        _req: &Request,
+        parent: u64,
         name: CStr,
-        outarg: &mut fuse_entry_out,
-    ) -> i32 {
+        _mode: u32,
+        reply: ReplyEntry
+    ) {
+        println!("calling mkdir\n");
         let _guard = begin_op(&sb);
-        let child = match create_internal(&sb, nodeid, T_DIR, &name) {
+        let child = match create_internal(&sb, parent, T_DIR, &name) {
             Ok(x) => x,
-            Err(x) => return x as i32,
+            Err(x) => {
+                println!("create 1 failed\n");
+                reply.error(x as i32);
+                return;
+            },
         };
     
         let icache = ILOCK_CACHE.read();
         let inode_guard = match ilock(&sb, child.idx, &icache, child.inum) {
             Ok(x) => x,
-            Err(x) => return x as i32,
+            Err(x) => {
+                println!("create 2 failed\n");
+                reply.error(x as i32);
+                return;
+            },
         };
         let internals = inode_guard.internals.read();
     
-        outarg.nodeid = child.inum as u64;
-        outarg.generation = 0;
-        outarg.attr_valid = 1;
-        outarg.entry_valid = 1;
-        outarg.attr_valid_nsec = 999999999;
-        outarg.entry_valid_nsec = 999999999;
-        match stati(outarg.nodeid, &mut outarg.attr, &internals) {
-            Ok(()) => return 0,
-            Err(x) => return x as i32,
+        let out_nodeid = child.inum as u64;
+        let generation = 0;
+        let attr_valid = Timespec::new(1, 999999999);
+        let mut attr = fuse_attr::new();
+        match stati(out_nodeid, &mut attr, &internals) {
+            Ok(()) => {
+                println!("create ok\n");
+                reply.entry(&attr_valid, &attr, generation);
+            },
+            Err(x) => {
+                println!("create 3 failed\n");
+                reply.error(x as i32);
+                return;
+            },
         }
     }
 

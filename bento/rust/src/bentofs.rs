@@ -317,8 +317,6 @@ pub fn bento_add_direntry(
 
 pub const fn get_fs_ops<T: FileSystem>(_fs: &T) -> fs_ops<T> {
     fs_ops {
-        mknod: T::mknod_unused,
-        mkdir: T::mkdir,
         unlink: T::unlink,
         rmdir: T::rmdir,
         rename: T::rename,
@@ -407,10 +405,6 @@ pub trait FileSystem {
         return reply.error(-(ENOSYS as i32));
     }
 
-    fn mknod_unused(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_mknod_in, _name: CStr, _out_arg: &mut fuse_entry_out) -> i32
-    {
-        return -(ENOSYS as i32);
-    }
     fn mknod(
         &mut self,
         _sb: RsSuperBlock,
@@ -424,9 +418,16 @@ pub trait FileSystem {
         return reply.error(-(ENOSYS as i32));
     }
 
-    fn mkdir(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_mkdir_in, _name: CStr, _out_arg: &mut fuse_entry_out) -> i32
-    {
-        return -(ENOSYS as i32);
+    fn mkdir(
+        &mut self,
+        _sb: RsSuperBlock,
+        _req: &Request,
+        _parent: u64,
+        _name: CStr, //&OsStr
+        _mode: u32,
+        reply: ReplyEntry
+    ) {
+        return reply.error(-(ENOSYS as i32));
     }
 
     fn unlink(&self, _sb: RsSuperBlock, _nodeid: u64, _name: CStr) -> i32
@@ -782,6 +783,25 @@ pub trait FileSystem {
                     },
                 }            
             },
+            fuse_opcode_FUSE_MKDIR => {
+                if inarg.numargs != 2 || outarg.numargs != 1 {
+                    return -1;
+                }
+                let req = Request { h: &inarg.h };
+                let mkdir_in = unsafe { &*(inarg.args[0].value as *const fuse_mkdir_in) };
+                let name = unsafe { CStr::from_raw(inarg.args[1].value as *const raw::c_char) };
+                let entry_out = unsafe { &mut *(outarg.args[0].value as *mut fuse_entry_out) };
+                let mut reply = ReplyEntryInternal { reply: Ok(entry_out) };
+                self.mkdir(sb, &req, inarg.h.nodeid, name, mkdir_in.mode, &mut reply);
+                match reply.reply() {
+                    Ok(_) => {
+                        0
+                    },
+                    Err(x) => {
+                        *x as i32
+                    },
+                }            
+            },
             fuse_opcode_FUSE_SYMLINK => {
                 if inarg.numargs != 2 || outarg.numargs != 1 {
                     return -1;
@@ -918,7 +938,6 @@ pub struct fs_ops<T: FileSystem> {
     /// * `name: CStr` - Name of the file to be created.
     /// * `out_arg: &mut fuse_entry_out` - Data structure to be filled with data about the newly
     /// created file.
-    pub mknod: fn(&T, RsSuperBlock, u64, &fuse_mknod_in, CStr, &mut fuse_entry_out) -> i32,
 
     /// Create directory.
     ///
@@ -929,7 +948,6 @@ pub struct fs_ops<T: FileSystem> {
     /// * `name: CStr` - Name of the directory to be created.
     /// * `out_arg: &mut fuse_entry_out` - Data structure to be filled with data about the newly
     /// created directory.
-    pub mkdir: fn(&T, RsSuperBlock, u64, &fuse_mkdir_in, CStr, &mut fuse_entry_out) -> i32,
 
     /// Remove a file.
     ///
