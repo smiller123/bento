@@ -56,6 +56,7 @@ const INCLUDED_TYPES: &[&str] = &[
     "fuse_in_header",
     "fuse_out_header",
     "timespec",
+    "fuse_link_in",
 ];
 const INCLUDED_FUNCTIONS: &[&str] = &[
     "cdev_add",

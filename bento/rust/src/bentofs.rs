@@ -495,6 +495,18 @@ pub trait FileSystem {
         return reply.error(-(ENOSYS as i32));
     }
 
+    fn link(
+        &mut self,
+        _sb: RsSuperBlock,
+        _req: &Request,
+        _ino: u64,
+        _newparent: u64,
+        _newname: CStr, // &OsStr
+        reply: ReplyEntry
+    ) {
+        return reply.error(-(ENOSYS as i32));
+    }
+
     fn open(&self, _sb: RsSuperBlock, _name: u64, _in_arg: &fuse_open_in, _out_arg: &mut fuse_open_out) -> i32
     {
         return -(ENOSYS as i32);
@@ -872,6 +884,26 @@ pub trait FileSystem {
                     },
                 }            
             },
+            fuse_opcode_FUSE_SYMLINK => {
+                if inarg.numargs != 2 || outarg.numargs != 1 {
+                    return -1;
+                }
+
+                let req = Request { h: &inarg.h };
+                let name = unsafe { CStr::from_raw(inarg.args[0].value as *const raw::c_char) };
+                let link = unsafe { CStr::from_raw(inarg.args[1].value as *const raw::c_char) };
+                let entry_out = unsafe { &mut *(outarg.args[0].value as *mut fuse_entry_out) };
+                let mut reply = ReplyEntryInternal { reply: Ok(entry_out) };
+                self.symlink(sb, &req, inarg.h.nodeid, name, link, &mut reply);
+                match reply.reply() {
+                    Ok(_) => {
+                        0
+                    },
+                    Err(x) => {
+                        *x as i32
+                    },
+                }            
+            },
             fuse_opcode_FUSE_RENAME | fuse_opcode_FUSE_RENAME2 => {
                 if inarg.numargs != 3 {
                     return -1;
@@ -891,17 +923,17 @@ pub trait FileSystem {
                     },
                 }            
             },
-            fuse_opcode_FUSE_SYMLINK => {
+            fuse_opcode_FUSE_LINK => {
                 if inarg.numargs != 2 || outarg.numargs != 1 {
                     return -1;
                 }
 
                 let req = Request { h: &inarg.h };
-                let name = unsafe { CStr::from_raw(inarg.args[0].value as *const raw::c_char) };
-                let link = unsafe { CStr::from_raw(inarg.args[1].value as *const raw::c_char) };
+                let link_in = unsafe { &*(inarg.args[0].value as *const fuse_link_in) };
+                let name = unsafe { CStr::from_raw(inarg.args[1].value as *const raw::c_char) };
                 let entry_out = unsafe { &mut *(outarg.args[0].value as *mut fuse_entry_out) };
                 let mut reply = ReplyEntryInternal { reply: Ok(entry_out) };
-                self.symlink(sb, &req, inarg.h.nodeid, name, link, &mut reply);
+                self.link(sb, &req, link_in.oldnodeid, inarg.h.nodeid, name, &mut reply);
                 match reply.reply() {
                     Ok(_) => {
                         0
