@@ -1,3 +1,4 @@
+use alloc::vec::Vec;
 use core::sync::atomic;
 
 use bento::bentofs::*;
@@ -164,31 +165,43 @@ impl FileSystem for HelloFS {
         }
     }
 
-    fn read(&self, 
+    fn read(
+        &mut self,
         sb: RsSuperBlock,
+        _req: &Request,
         nodeid: u64,
-        inarg: &fuse_read_in,
-        buf: &mut kmem::MemContainer<u8>,
-    ) -> i32 {
+        _fh: u64,
+        offset: i64,
+        _size: u32,
+        reply: ReplyData
+    ) {
         if nodeid != 2 {
-            return -(ENOENT as i32);
+            reply.error(-(ENOENT as i32));
+            return;
         }
-        let copy_len = LEN.load(atomic::Ordering::SeqCst) - inarg.offset as usize;
+        let copy_len = LEN.load(atomic::Ordering::SeqCst) - offset as usize;
     
         let maybe_bh = sb_bread_rust(&sb, 0);
         let bh;
         match maybe_bh {
-            None => return -(EIO as i32),
             Some(x) => bh = x,
+            None => {
+                reply.error(-(EIO as i32));
+                return;
+            },
         }
+
+        let mut buf_vec: Vec<u8> = vec![0; copy_len];
+        let buf_slice = buf_vec.as_mut_slice();
+
         let b_data = bh.get_buffer_data();
         let b_slice = b_data.to_slice();
-        let offset = inarg.offset as usize;
+        let offset = offset as usize;
         let data_region = &b_slice[offset..offset + copy_len];
-        let buf_slice = buf.to_slice_mut();
-        let buf_region = &mut buf_slice[..copy_len];
-        buf_region.copy_from_slice(data_region);
-        return 0;
+        //let buf_slice = buf.to_slice_mut();
+        //let buf_region = &mut buf_slice[..copy_len];
+        buf_slice.copy_from_slice(data_region);
+        reply.data(&buf_slice);
     }
 
     fn write(&self, 

@@ -402,40 +402,56 @@ impl FileSystem for Xv6FileSystem {
             },
         };
     }
-     
-    fn read(&self, 
+
+    fn read(
+        &mut self,
         sb: RsSuperBlock,
+        _req: &Request,
         nodeid: u64,
-        inarg: &fuse_read_in,
-        buf: &mut kmem::MemContainer<u8>,
-    ) -> i32 {
+        _fh: u64,
+        offset: i64,
+        size: u32,
+        reply: ReplyData
+    ) {
         // Get inode number nodeid
         let inode = match iget(&sb, nodeid) {
             Ok(x) => x,
-            Err(x) => return x as i32,
+            Err(x) => {
+                reply.error(x as i32);
+                return;
+            },
         };
     
         let icache = ILOCK_CACHE.read();
         let inode_guard = match ilock(&sb, inode.idx, &icache, inode.inum) {
             Ok(x) => x,
-            Err(x) => return x as i32,
+            Err(x) => {
+                reply.error(x as i32);
+                return;
+            },
         };
         let mut internals = inode_guard.internals.write();
     
         // Check if inode is a file
         if internals.inode_type != T_FILE {
-            return -(EISDIR as i32);
+            reply.error(-(EISDIR as i32));
+            return;
         }
     
-        let off = inarg.offset as usize;
-        let n = buf.len();
+        let off = offset as usize;
+        let n = size as usize;
     
-        let buf_slice = buf.to_slice_mut();
+        let mut buf_vec: Vec<u8> = vec![0; n as usize];
+        let buf_slice = buf_vec.as_mut_slice();
+
         let read_rs = match readi(&sb, buf_slice, off, n, &mut internals) {
             Ok(x) => x as i32,
-            Err(_) => -1,
+            Err(x) => {
+                reply.error(x as i32);
+                return;
+            },
         };
-        return read_rs;
+        reply.data(&buf_slice[0..read_rs as usize]);
     }
     
     fn write(&self, 
