@@ -296,6 +296,46 @@ impl<'a> ReplyWriteInternal<'a> {
     }
 }
 
+pub type ReplyDirectory<'a, 'b> = &'a mut ReplyDirectoryInternal<'b>;
+
+#[derive(Debug)]
+pub struct ReplyDirectoryInternal<'a> {
+    reply: Result<&'a mut MemContainer<raw::c_uchar>, i32>,
+    length: usize,
+}
+
+impl<'a> ReplyDirectoryInternal<'a> {
+    pub fn add(&mut self, ino: u64, offset: i64, kind: u16, /*FileType */ name: &str) -> bool {
+        if let Ok(rep) = &mut self.reply {
+            let buf = rep.to_slice_mut();
+            let buf_slice = &mut buf[self.length..];
+            return match bento_add_direntry(buf_slice, name, ino, kind, offset as u64) {
+                Ok(len) => {
+                    self.length += len;
+                    false
+                },
+                Err(errno::Error::EOVERFLOW) => true,
+                _ => false,
+            }
+        }
+        return false;
+    }
+
+    pub fn ok(&mut self) {
+        if let Ok(rep) = &mut self.reply {
+            rep.truncate(self.length);
+        }
+    }
+
+    pub fn error(&mut self, err: i32) {
+        self.reply = Err(err);
+    }
+
+    pub fn reply(&self) -> &Result<&'a mut MemContainer<raw::c_uchar>, i32> {
+        return &self.reply;
+    }
+}
+
 /// Register a file system with the BentoFS kernel module.
 ///
 /// Should be called in the init function of a Bento file system module, before
@@ -367,7 +407,7 @@ pub fn bento_add_direntry(
         name: __IncompleteArrayField::new(),
     };
     dirent.ino = nodeid;
-    dirent.off = off + entlen_padded as u64;
+    dirent.off = off;
     dirent.namelen = namelen as u32;
     dirent.type_ = (mode & stat::S_IFMT) as u32 >> 12;
     let ino_bytes = dirent.ino.to_ne_bytes();
@@ -387,7 +427,6 @@ pub fn bento_add_direntry(
 
 pub const fn get_fs_ops<T: FileSystem>(_fs: &T) -> fs_ops<T> {
     fs_ops {
-        readdir: T::readdir,
         releasedir: T::releasedir,
         fsyncdir: T::fsyncdir,
         statfs: T::statfs,
@@ -630,9 +669,16 @@ pub trait FileSystem {
         return reply.error(-(ENOSYS as i32));
     }
 
-    fn readdir(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_read_in, _buf: &mut MemContainer<raw::c_uchar>, _offset: &mut usize) -> i32
-    {
-        return -(ENOSYS as i32);
+    fn readdir(
+        &mut self,
+        _sb: RsSuperBlock,
+        _req: &Request,
+        _ino: u64,
+        _fh: u64,
+        _offset: i64,
+        reply: ReplyDirectory
+    ) {
+        return reply.error(-(ENOSYS as i32));
     }
 
     fn releasedir(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_release_in) -> i32
@@ -1165,6 +1211,26 @@ pub trait FileSystem {
                     },
                 }
             },
+            fuse_opcode_FUSE_READDIR => {
+                if inarg.numargs != 1 || outarg.numargs != 1 {
+                    return -1;
+                }
+
+                let req = Request { h: &inarg.h };
+                let read_in = unsafe { &*(inarg.args[0].value as *const fuse_read_in) };
+                let data_out = unsafe { &mut *(outarg.args[0].value as *mut MemContainer<raw::c_uchar>) };
+                let mut reply = ReplyDirectoryInternal { reply: Ok(data_out), length: 0 };
+                self.readdir(sb, &req, inarg.h.nodeid, read_in.fh, read_in.offset as i64, &mut reply);
+                match reply.reply() {
+                    Ok(buf) => {
+                        outarg.args[0].size = buf.len() as u32;
+                        0
+                    },
+                    Err(x) => {
+                        *x as i32
+                    },
+                }
+            },
             _ => {
                 println!("got a different opcode");
                 0
@@ -1520,8 +1586,6 @@ pub struct fs_ops<T: FileSystem> {
     /// * `nodeid: u64` - Filesystem-provided inode number of the directory.
     /// * `in_arg: &fuse_read_in` - Data structure containing read input arguments.
     /// * `buf: &mut MemContainer<kernel::raw::c_uchar` - Buffer to be filled with the direntry data.
-    pub readdir:
-        fn(&T, RsSuperBlock, u64, &fuse_read_in, &mut MemContainer<raw::c_uchar>, &mut usize) -> i32,
 
     /// Release an open directory
     ///

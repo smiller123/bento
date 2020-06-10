@@ -4,17 +4,17 @@ use core::sync::atomic;
 use bento::bentofs::*;
 
 use bento::kernel;
-use kernel::errno;
+//use kernel::errno;
 use kernel::fs::*;
 use kernel::fuse::*;
 use kernel::kobj::*;
-use kernel::mem as kmem;
+//use kernel::mem as kmem;
 use kernel::raw;
 use kernel::stat;
 use kernel::string::*;
 use kernel::time::Timespec;
 
-use bento::println;
+//use bento::println;
 
 use bento::bindings::*;
 
@@ -232,74 +232,111 @@ impl FileSystem for HelloFS {
         reply.written(data.len() as u32);
     }
 
-    fn readdir(&self, 
+    fn readdir(
+        &mut self,
         _sb: RsSuperBlock,
+        _req: &Request,
         nodeid: u64,
-        inarg: &fuse_read_in,
-        buf: &mut kmem::MemContainer<u8>,
-        size: &mut usize,
-    ) -> i32 {
+        _fh: u64,
+        offset: i64,
+        reply: ReplyDirectory
+    ) {
+    //fn readdir(&self, 
+    //    _sb: RsSuperBlock,
+    //    nodeid: u64,
+    //    inarg: &fuse_read_in,
+    //    buf: &mut kmem::MemContainer<u8>,
+    //    size: &mut usize,
+    //) -> i32 {
         if nodeid != 1 {
-            return -(ENOTDIR as i32);
+            reply.error(-(ENOTDIR as i32));
+            return;
         }
-        if let Err(x) = kmem::memset_rust(buf, 0, buf.len() as u64) {
-            println!("readdir bad\n");
-            return x as i32;
+        //if let Err(x) = kmem::memset_rust(buf, 0, buf.len() as u64) {
+        //    reply.error(x as i32);
+        //    return;
+        //}
+        let mut buf_off = 1;
+        let mut inarg_offset = offset;
+        if inarg_offset < 1 {
+            if reply.add(
+                1 as u64,
+                buf_off,
+                0,
+                ".",
+            ) {
+                reply.ok();
+                return;
+            };
         }
-        let mut buf_off = 0;
-        let mut inarg_offset = inarg.offset as usize;
-        let buf_slice = buf.to_slice_mut();
-        let curr_buf_slice = &mut buf_slice[buf_off..];
-        let mut ent_len = match bento_add_direntry(
-            curr_buf_slice,
-            ".",
-            1 as u64,
-            0,
-            buf_off as u64 + inarg.offset,
-        ) {
-            Ok(x) => x,
-            Err(errno::Error::EOVERFLOW) => return 0,
-            Err(x) => return x as i32,
-        };
-        if ent_len <= inarg_offset {
-            inarg_offset -= ent_len;
-        } else {
-            buf_off += ent_len;
+        inarg_offset -= 1;
+        buf_off += 1;
+        //if ent_len <= inarg_offset {
+        //    inarg_offset -= ent_len;
+        //} else {
+        //    buf_off += ent_len;
+        //}
+        //let curr_buf_slice = &mut buf_slice[buf_off..];
+        if inarg_offset < 1 {
+            if reply.add(
+                2 as u64,
+                buf_off,
+                0,
+                HELLO_NAME,
+            ) {
+                reply.ok();
+                return;
+            };
         }
-        let curr_buf_slice = &mut buf_slice[buf_off..];
-        ent_len = match bento_add_direntry(
-            curr_buf_slice,
-            HELLO_NAME,
-            2 as u64,
-            0,
-            buf_off as u64 + inarg.offset,
-        ) {
-            Ok(x) => x,
-            Err(errno::Error::EOVERFLOW) => return 0,
-            Err(x) => return x as i32,
-        };
-        if ent_len <= inarg_offset {
-            inarg_offset -= ent_len;
-        } else {
-            buf_off += ent_len;
+        inarg_offset -= 1;
+        buf_off += 1;
+        //ent_len = match bento_add_direntry(
+        //    curr_buf_slice,
+        //    HELLO_NAME,
+        //    2 as u64,
+        //    0,
+        //    buf_off as u64 + inarg.offset,
+        //) {
+        //    Ok(x) => x,
+        //    Err(errno::Error::EOVERFLOW) => return 0,
+        //    Err(x) => return x as i32,
+        //};
+        //if ent_len <= inarg_offset {
+        //    inarg_offset -= ent_len;
+        //} else {
+        //    buf_off += ent_len;
+        //}
+        //let curr_buf_slice = &mut buf_slice[buf_off..];
+        if inarg_offset < 1 {
+            if reply.add(
+                1 as u64,
+                buf_off,
+                0,
+                "..",
+            ) {
+                reply.ok();
+                return;
+            };
         }
-        let curr_buf_slice = &mut buf_slice[buf_off..];
-        ent_len = match bento_add_direntry(
-            curr_buf_slice,
-            "..",
-            1 as u64,
-            0,
-            buf_off as u64 + inarg.offset,
-        ) {
-            Ok(x) => x,
-            Err(errno::Error::EOVERFLOW) => return 0,
-            Err(x) => return x as i32,
-        };
-        if ent_len > inarg_offset {
-            buf_off += ent_len;
-        }
-        *size = buf_off;
-        return 0;
+        reply.ok();
+        //inarg_offset -= 1;
+        //buf_off += 1;
+        //ent_len = match bento_add_direntry(
+        //    curr_buf_slice,
+        //    "..",
+        //    1 as u64,
+        //    0,
+        //    buf_off as u64 + inarg.offset,
+        //) {
+        //    Ok(x) => x,
+        //    Err(errno::Error::EOVERFLOW) => return 0,
+        //    Err(x) => return x as i32,
+        //};
+        //if ent_len > inarg_offset {
+        //    buf_off += ent_len;
+        //}
+        //*size = buf_off;
+        //return 0;
     }
 
     fn lseek(&self, 

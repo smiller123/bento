@@ -518,80 +518,85 @@ impl FileSystem for Xv6FileSystem {
         reply.written(n as u32);
     }
 
-    fn readdir(&self, 
+    fn readdir(
+        &mut self,
         sb: RsSuperBlock,
+        _req: &Request,
         nodeid: u64,
-        inarg: &fuse_read_in,
-        buf: &mut kmem::MemContainer<u8>,
-        size: &mut usize,
-    ) -> i32 {
+        _fh: u64,
+        offset: i64,
+        reply: ReplyDirectory
+    ) {
         // Get inode number nodeid
         let inode = match iget(&sb, nodeid) {
             Ok(x) => x,
-            Err(x) => return x as i32,
+            Err(x) => {
+                reply.error(x as i32);
+                return;
+            },
         };
     
         let icache = ILOCK_CACHE.read();
         let inode_guard = match ilock(&sb, inode.idx, &icache, inode.inum) {
             Ok(x) => x,
-            Err(x) => return x as i32,
+            Err(x) => {
+                reply.error(x as i32);
+                return;
+            },
         };
         let mut internals = inode_guard.internals.write();
     
         // Check if inode is directory
         if internals.inode_type != T_DIR {
-            return -(ENOTDIR as i32);
-        }
-    
-        if let Err(x) = kmem::memset_rust(buf, 0, buf.len() as u64) {
-            return x as i32;
+            reply.error(-(ENOTDIR as i32));
+            return;
         }
     
         let mut de_cont = match kmem::MemContainer::<u8>::alloc(mem::size_of::<Xv6fsDirent>()) {
             Some(x) => x,
-            None => return -1,
+            None => {
+                reply.error(-1);
+                return;
+            },
         };
-    
-        let mut buf_off = 0;
-        let mut inarg_offset = inarg.offset as usize;
+
+        let mut buf_off = 1;
+        let mut inarg_offset = offset as usize;
         for off in (0..internals.size).step_by(mem::size_of::<Xv6fsDirent>()) {
+            if inarg_offset >= 1 {
+                inarg_offset -= 1;
+                buf_off += 1;
+                continue;
+            }
             let buf_len = de_cont.len();
             let de_slice = de_cont.to_slice_mut();
             match readi(&sb, de_slice, off as usize, buf_len, &mut internals) {
-                Ok(x) if x != buf_len => return -1,
-                Err(x) => return x as i32,
+                Ok(x) if x != buf_len => {
+                    reply.error(-1);
+                    return;
+                },
+                Err(x) => {
+                    reply.error(x as i32);
+                    return;
+                },
                 _ => {}
             };
             let mut de = Xv6fsDirent::new();
             if de.extract_from(de_slice).is_err() {
-                return -(EIO as i32);
+                reply.error(-(EIO as i32));
+                return;
             }
 
-            let buf_slice = buf.to_slice_mut();
-            let curr_buf_slice = &mut buf_slice[buf_off..];
             let name_str = match str::from_utf8(&de.name) {
                 Ok(x) => x,
                 Err(_) => "",
             };
-            let ent_len = match bento_add_direntry(
-                curr_buf_slice,
-                name_str,
-                de.inum as u64,
-                0,
-                buf_off as u64 + inarg.offset,
-            ) {
-                Ok(x) => x,
-                Err(errno::Error::EOVERFLOW) => break,
-                Err(x) => return x as i32,
-            };
-            if ent_len <= inarg_offset {
-                inarg_offset -= ent_len;
-            } else {
-                buf_off += ent_len;
+            if reply.add(de.inum as u64, buf_off, 0, name_str) {
+                break;
             }
+            buf_off += 1;
         }
-        *size = buf_off;
-        return 0;
+        reply.ok();
     }
 
     fn create(&self, 
