@@ -83,8 +83,6 @@ impl FileSystem for HelloFS {
             max_readahead = outarg.max_readahead;
         }
     
-        outarg.want |= FUSE_WRITEBACK_CACHE;
-    
         outarg.max_readahead = max_readahead;
         outarg.max_write = max_write;
         outarg.max_background = 0;
@@ -92,10 +90,6 @@ impl FileSystem for HelloFS {
         outarg.time_gran = 1;
     
         return Ok(());
-    }
-
-    fn flush(&self, _sb: RsSuperBlock, _nodeid: u64, _inarg: &fuse_flush_in) -> i32 {
-        return 0;
     }
 
     fn statfs(&self, _sb: RsSuperBlock, _nodeid: u64, outarg: &mut fuse_statfs_out) -> i32 {
@@ -235,7 +229,7 @@ impl FileSystem for HelloFS {
             let b_slice = b_data.to_slice_mut();
             let copy_size = data.len();
             let write_region = &mut b_slice[offset..offset + copy_size];
-            let data_region = &data[offset..offset + copy_size];
+            let data_region = &data[..copy_size];
             write_region.copy_from_slice(data_region);
             LEN.store(total_len, atomic::Ordering::SeqCst);
         }
