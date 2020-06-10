@@ -198,47 +198,51 @@ impl FileSystem for HelloFS {
         let b_slice = b_data.to_slice();
         let offset = offset as usize;
         let data_region = &b_slice[offset..offset + copy_len];
-        //let buf_slice = buf.to_slice_mut();
-        //let buf_region = &mut buf_slice[..copy_len];
         buf_slice.copy_from_slice(data_region);
         reply.data(&buf_slice);
     }
 
-    fn write(&self, 
+    fn write(
+        &mut self,
         sb: RsSuperBlock,
+        _req: &Request,
         nodeid: u64,
-        inarg: &fuse_write_in,
-        buf: &kmem::MemContainer<u8>,
-        outarg: &mut fuse_write_out,
-    ) -> i32 {
-        let total_len = inarg.size as usize + inarg.offset as usize;
+        _fh: u64,
+        offset: i64,
+        data: &[u8],
+        _flags: u32,
+        reply: ReplyWrite
+    ) {
+        let total_len = data.len() + offset as usize;
     
         if nodeid != 2 {
-            return -(ENOENT as i32);
+            reply.error(-(ENOENT as i32));
+            return;
         }
     
         let maybe_bh = sb_bread_rust(&sb, 0);
         let mut bh;
         match maybe_bh {
-            None => return -(EIO as i32),
             Some(x) => bh = x,
+            None => {
+                reply.error(-(EIO as i32));
+                return;
+            },
         }
         {
             let mut b_data = bh.get_buffer_data();
-            let offset = inarg.offset as usize;
+            let offset = offset as usize;
             let b_slice = b_data.to_slice_mut();
-            let copy_size = inarg.size as usize;
+            let copy_size = data.len();
             let write_region = &mut b_slice[offset..offset + copy_size];
-            let buf_slice = buf.to_slice();
-            let data_region = &buf_slice[offset..offset + copy_size];
+            let data_region = &data[offset..offset + copy_size];
             write_region.copy_from_slice(data_region);
             LEN.store(total_len, atomic::Ordering::SeqCst);
         }
     
         bh.mark_buffer_dirty();
         bh.sync_dirty_buffer();
-        outarg.size = inarg.size;
-        return 0;
+        reply.written(data.len() as u32);
     }
 
     fn readdir(&self, 

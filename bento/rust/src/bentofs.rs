@@ -272,6 +272,30 @@ impl<'a> ReplyOpenInternal<'a> {
     }
 }
 
+pub type ReplyWrite<'a, 'b> = &'a mut ReplyWriteInternal<'b>;
+
+#[derive(Debug)]
+pub struct ReplyWriteInternal<'a> {
+    reply: Result<&'a mut fuse_write_out, i32>,
+}
+
+impl<'a> ReplyWriteInternal<'a> {
+    pub fn written(&mut self, size: u32) {
+        if let Ok(rep) = &mut self.reply {
+            rep.size = size;
+            rep.padding = 0;
+        }
+    }
+
+    pub fn error(&mut self, err: i32) {
+        self.reply = Err(err);
+    }
+
+    pub fn reply(&self) -> &Result<&'a mut fuse_write_out, i32> {
+        return &self.reply;
+    }
+}
+
 /// Register a file system with the BentoFS kernel module.
 ///
 /// Should be called in the init function of a Bento file system module, before
@@ -363,7 +387,6 @@ pub fn bento_add_direntry(
 
 pub const fn get_fs_ops<T: FileSystem>(_fs: &T) -> fs_ops<T> {
     fs_ops {
-        write: T::write,
         flush: T::flush,
         release: T::release,
         fsync: T::fsync,
@@ -548,15 +571,18 @@ pub trait FileSystem {
         return reply.error(-(ENOSYS as i32));
     }
 
-    fn write(&self,
+    fn write(
+        &mut self,
         _sb: RsSuperBlock,
-        _nodeid: u64,
-        _in_arg: &fuse_write_in,
-        _buf: &MemContainer<raw::c_uchar>,
-        _out_arg: &mut fuse_write_out,
-    ) -> i32
-    {
-        return -(ENOSYS as i32);
+        _req: &Request,
+        _ino: u64,
+        _fh: u64,
+        _offset: i64,
+        _data: &[u8],
+        _flags: u32,
+        reply: ReplyWrite
+    ) {
+        return reply.error(-(ENOSYS as i32));
     }
 
     fn flush(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_flush_in) -> i32
@@ -1012,6 +1038,28 @@ pub trait FileSystem {
                     },
                 }
             },
+            fuse_opcode_FUSE_WRITE => {
+                if inarg.numargs != 2 || outarg.numargs != 1 {
+                    return -1;
+                }
+
+                let req = Request { h: &inarg.h };
+                let write_in = unsafe { &*(inarg.args[0].value as *const fuse_write_in) };
+                let data_in = unsafe { &mut *(inarg.args[1].value as *mut MemContainer<raw::c_uchar>) };
+                let data = data_in.to_slice();
+                let write_out = unsafe { &mut *(outarg.args[0].value as *mut fuse_write_out) };
+                let mut reply = ReplyWriteInternal { reply: Ok(write_out) };
+                self.write(sb, &req, inarg.h.nodeid, write_in.fh, write_in.offset as i64, data,
+                           write_in.write_flags, &mut reply);
+                match reply.reply() {
+                    Ok(rep) => {
+                        rep.size as i32
+                    },
+                    Err(x) => {
+                        *x as i32
+                    },
+                }
+            },
             _ => {
                 println!("got a different opcode");
                 0
@@ -1258,13 +1306,6 @@ pub struct fs_ops<T: FileSystem> {
     /// * `in_arg: &fuse_write_in` - Data structure containing write input arguments.
     /// * `buf: &MemContainer<kernel::raw::c_uchar` - Buffer containing the data to write.
     /// * `out_arg: &mut fuse_write_out` - Data structure to be filled with write output arguments.
-    pub write: fn(&T, 
-        RsSuperBlock,
-        u64,
-        &fuse_write_in,
-        &MemContainer<raw::c_uchar>,
-        &mut fuse_write_out,
-    ) -> i32,
 
     /// Flush method
     ///

@@ -453,60 +453,70 @@ impl FileSystem for Xv6FileSystem {
         };
         reply.data(&buf_slice[0..read_rs as usize]);
     }
-    
-    fn write(&self, 
+
+    fn write(
+        &mut self,
         sb: RsSuperBlock,
+        _req: &Request,
         nodeid: u64,
-        inarg: &fuse_write_in,
-        buf: &kmem::MemContainer<u8>,
-        outarg: &mut fuse_write_out,
-    ) -> i32 {
+        _fh: u64,
+        offset: i64,
+        data: &[u8],
+        _flags: u32,
+        reply: ReplyWrite
+    ) {
         // Get the inode at nodeid
         let max = ((MAXOPBLOCKS - 1 - 1 - 2) / 2) * BSIZE;
         let mut i = 0;
-        let n = inarg.size as usize;
-        let mut off = inarg.offset as usize;
+        let n = data.len();
+        let mut off = offset as usize;
         let mut file_off = 0;
         while i < n {
             let _guard = begin_op(&sb);
             let inode = match iget(&sb, nodeid) {
                 Ok(x) => x,
-                Err(x) => return x as i32,
+                Err(x) => {
+                    reply.error(x as i32);
+                    return;
+                },
             };
     
             let icache = ILOCK_CACHE.read();
             let inode_guard = match ilock(&sb, inode.idx, &icache, inode.inum) {
                 Ok(x) => x,
-                Err(x) => return x as i32,
+                Err(x) => {
+                    reply.error(x as i32);
+                    return;
+                },
             };
             let mut internals = inode_guard.internals.write();
     
             // Check if inode is a file
             if internals.inode_type != T_FILE {
-                return -(EISDIR as i32);
+                reply.error(-(EISDIR as i32));
+                return;
             }
     
             let mut n1 = n - i;
             if n1 > max {
                 n1 = max;
             }
-            let data_slice = buf.to_slice();
-            let data_region = &data_slice[file_off..];
+            let data_region = &data[file_off..];
             let r = match writei(&sb, data_region, off, n1, &mut internals, inode.inum) {
                 Ok(x) => x,
                 Err(x) => {
-                    return x as i32;
-                }
+                    reply.error(x as i32);
+                    return;
+                },
             };
     
             off += r;
             file_off += r;
             i += r;
         }
-        outarg.size = inarg.size;
-        return 0;
+        reply.written(n as u32);
     }
-    
+
     fn readdir(&self, 
         sb: RsSuperBlock,
         nodeid: u64,
