@@ -106,18 +106,11 @@ impl FileSystem for HelloFS {
         }
     }
 
-    fn opendir(&self, 
-        _sb: RsSuperBlock,
-        nodeid: u64,
-        _inarg: &fuse_open_in,
-        outarg: &mut fuse_open_out,
-    ) -> i32 {
+    fn opendir(&mut self, _sb: RsSuperBlock, _req: &Request, nodeid: u64, _flags: u32, reply: ReplyOpen) {
         if nodeid != 1 {
-            return -(ENOTDIR as i32);
+            reply.error(-(EISDIR as i32));
         } else {
-            outarg.fh = 0;
-            outarg.open_flags = 0;
-            return 0;
+            reply.opened(0, 0);
         }
     }
 
@@ -319,8 +312,17 @@ impl FileSystem for HelloFS {
         return 0;
     }
 
-    fn fsync(&self, sb: RsSuperBlock, _nodied: u64, _inarg: &fuse_fsync_in) -> i32 {
+    fn fsync(
+        &mut self,
+        sb: RsSuperBlock,
+        _req: &Request,
+        _ino: u64,
+        _fh: u64,
+        _datasync: bool,
+        reply: ReplyEmpty
+    ) {
         let mut error_sector = 0;
-        return blkdev_issue_flush_rust(&sb.s_bdev(), GFP_KERNEL as usize, &mut error_sector) as i32;
+        blkdev_issue_flush_rust(&sb.s_bdev(), GFP_KERNEL as usize, &mut error_sector);
+        reply.ok();
     }
 }

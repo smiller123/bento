@@ -241,30 +241,31 @@ impl FileSystem for Xv6FileSystem {
         reply.opened(fh, open_flags);
     }
     
-    fn opendir(&self, 
-        sb: RsSuperBlock,
-        nodeid: u64,
-        _inarg: &fuse_open_in,
-        outarg: &mut fuse_open_out,
-    ) -> i32 {
+    fn opendir(&mut self, sb: RsSuperBlock, _req: &Request, nodeid: u64, _flags: u32, reply: ReplyOpen) {
         let inode = match iget(&sb, nodeid) {
             Ok(x) => x,
-            Err(x) => return x as i32,
+            Err(x) => {
+                reply.error(x as i32);
+                return;
+            },
         };
     
         let icache = ILOCK_CACHE.read();
         let inode_guard = match ilock(&sb, inode.idx, &icache, inode.inum) {
             Ok(x) => x,
-            Err(x) => return x as i32,
+            Err(x) => {
+                reply.error(x as i32);
+                return;
+            },
         };
         let internals = inode_guard.internals.write();
     
         if internals.inode_type != T_DIR {
-            return -(ENOTDIR as i32);
+            reply.error(-(ENOTDIR as i32));
         } else {
-            outarg.fh = 0;
-            outarg.open_flags = 0;
-            return 0;
+            let fh = 0;
+            let open_flags = 0;
+            reply.opened(fh, open_flags);
         }
     }
 
@@ -696,10 +697,19 @@ impl FileSystem for Xv6FileSystem {
         outarg.offset = inarg.offset;
         return 0;
     }
-    
-    fn fsync(&self, sb: RsSuperBlock, _nodeid: u64, _inarg: &fuse_fsync_in) -> i32 {
+
+    fn fsync(
+        &mut self,
+        sb: RsSuperBlock,
+        _req: &Request,
+        _ino: u64,
+        _fh: u64,
+        _datasync: bool,
+        reply: ReplyEmpty
+    ) {
         let mut error_sector = 0;
-        return blkdev_issue_flush_rust(&sb.s_bdev(), GFP_KERNEL as usize, &mut error_sector) as i32;
+        blkdev_issue_flush_rust(&sb.s_bdev(), GFP_KERNEL as usize, &mut error_sector);
+        reply.ok();
     }
 
     fn symlink(&mut self, 

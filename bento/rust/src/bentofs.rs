@@ -387,8 +387,6 @@ pub fn bento_add_direntry(
 
 pub const fn get_fs_ops<T: FileSystem>(_fs: &T) -> fs_ops<T> {
     fs_ops {
-        fsync: T::fsync,
-        opendir: T::opendir,
         readdir: T::readdir,
         releasedir: T::releasedir,
         fsyncdir: T::fsyncdir,
@@ -609,14 +607,27 @@ pub trait FileSystem {
         return reply.error(-(ENOSYS as i32));
     }
 
-    fn fsync(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_fsync_in) -> i32
-    {
-        return -(ENOSYS as i32);
+    fn fsync(
+        &mut self,
+        _sb: RsSuperBlock,
+        _req: &Request,
+        _ino: u64,
+        _fh: u64,
+        _datasync: bool,
+        reply: ReplyEmpty
+    ) {
+        return reply.error(-(ENOSYS as i32));
     }
 
-    fn opendir(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_open_in, _out_arg: &mut fuse_open_out) -> i32
-    {
-        return -(ENOSYS as i32);
+    fn opendir(
+        &mut self,
+        _sb: RsSuperBlock,
+        _req: &Request,
+        _ino: u64,
+        _flags: u32,
+        reply: ReplyOpen
+    ) {
+        return reply.error(-(ENOSYS as i32));
     }
 
     fn readdir(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_read_in, _buf: &mut MemContainer<raw::c_uchar>, _offset: &mut usize) -> i32
@@ -1111,6 +1122,49 @@ pub trait FileSystem {
                     },
                 }            
             },
+            fuse_opcode_FUSE_FSYNC => {
+                if inarg.numargs != 1 {
+                    return -1;
+                }
+
+                let req = Request { h: &inarg.h };
+                let fsync_in = unsafe { &*(inarg.args[0].value as *const fuse_fsync_in) };
+                let mut reply = ReplyEmptyInternal { reply: Err(-(ENOSYS as i32)) };
+                let datasync = match fsync_in.fsync_flags {
+                    1 => true,
+                    _ => false,
+                };
+                self.fsync(sb, &req, inarg.h.nodeid, fsync_in.fh, datasync,
+                           &mut reply);
+                match reply.reply() {
+                    Ok(_) => {
+                        0
+                    },
+                    Err(x) => {
+                        *x as i32
+                    },
+                }            
+            },
+            fuse_opcode_FUSE_OPENDIR => {
+                if inarg.numargs != 1 || outarg.numargs != 1 {
+                    return -1;
+                }
+
+                let req = Request { h: &inarg.h };
+
+                let open_in = unsafe { &*(inarg.args[0].value as *const fuse_open_in) };
+                let open_out = unsafe { &mut *(outarg.args[0].value as *mut fuse_open_out) };
+                let mut reply = ReplyOpenInternal { reply: Ok(open_out) };
+                self.opendir(sb, &req, inarg.h.nodeid, open_in.flags, &mut reply);
+                match reply.reply() {
+                    Ok(_) => {
+                        0
+                    },
+                    Err(x) => {
+                        *x as i32
+                    },
+                }
+            },
             _ => {
                 println!("got a different opcode");
                 0
@@ -1418,7 +1472,6 @@ pub struct fs_ops<T: FileSystem> {
     /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `nodeid: u64` - Filesystem-provided inode number.
     /// * `in_arg: &fuse_fsync_in` - Data structure containing fsync input arguments.
-    pub fsync: fn(&T, RsSuperBlock, u64, &fuse_fsync_in) -> i32,
 
     /// Open a directory.
     ///
@@ -1436,7 +1489,6 @@ pub struct fs_ops<T: FileSystem> {
     /// * `nodeid: u64` - Filesystem-provided inode number.
     /// * `in_arg: &fuse_open_in` - Data structure containing open input arguments.
     /// * `out_arg: &fuse_open_out` - Data structure to be filled with open information.
-    pub opendir: fn(&T, RsSuperBlock, u64, &fuse_open_in, &mut fuse_open_out) -> i32,
 
     /// Read directory
     ///
