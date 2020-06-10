@@ -387,7 +387,6 @@ pub fn bento_add_direntry(
 
 pub const fn get_fs_ops<T: FileSystem>(_fs: &T) -> fs_ops<T> {
     fs_ops {
-        release: T::release,
         fsync: T::fsync,
         opendir: T::opendir,
         readdir: T::readdir,
@@ -596,9 +595,18 @@ pub trait FileSystem {
         return reply.error(-(ENOSYS as i32));
     }
 
-    fn release(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_release_in) -> i32
-    {
-        return -(ENOSYS as i32);
+    fn release(
+        &mut self,
+        _sb: RsSuperBlock,
+        _req: &Request,
+        _ino: u64,
+        _fh: u64,
+        _flags: u32,
+        _lock_owner: u64,
+        _flush: bool,
+        reply: ReplyEmpty
+    ) {
+        return reply.error(-(ENOSYS as i32));
     }
 
     fn fsync(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_fsync_in) -> i32
@@ -1084,6 +1092,25 @@ pub trait FileSystem {
                     },
                 }            
             },
+            fuse_opcode_FUSE_RELEASE => {
+                if inarg.numargs != 1 {
+                    return -1;
+                }
+
+                let req = Request { h: &inarg.h };
+                let release_in = unsafe { &*(inarg.args[0].value as *const fuse_release_in) };
+                let mut reply = ReplyEmptyInternal { reply: Err(-(ENOSYS as i32)) };
+                self.release(sb, &req, inarg.h.nodeid, release_in.fh, release_in.flags,
+                             release_in.lock_owner, false, &mut reply);
+                match reply.reply() {
+                    Ok(_) => {
+                        0
+                    },
+                    Err(x) => {
+                        *x as i32
+                    },
+                }            
+            },
             _ => {
                 println!("got a different opcode");
                 0
@@ -1378,7 +1405,6 @@ pub struct fs_ops<T: FileSystem> {
     /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `nodeid: u64` - Filesystem-provided inode number.
     /// * `in_arg: &fuse_release_in` - Data structure containing release input arguments.
-    pub release: fn(&T, RsSuperBlock, u64, &fuse_release_in) -> i32,
 
     /// Synchronize file contents
     ///
