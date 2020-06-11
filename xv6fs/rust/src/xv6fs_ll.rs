@@ -712,8 +712,9 @@ impl FileSystem for Xv6FileSystem {
         _datasync: bool,
         reply: ReplyEmpty
     ) {
-        let mut error_sector = 0;
-        blkdev_issue_flush_rust(&sb.s_bdev(), GFP_KERNEL as usize, &mut error_sector);
+        force_commit(&sb);
+        //let mut error_sector = 0;
+        //blkdev_issue_flush_rust(&sb.s_bdev(), GFP_KERNEL as usize, &mut error_sector);
         reply.ok();
     }
 

@@ -218,6 +218,18 @@ fn write_log(sb: &RsSuperBlock, log: &mut Log) -> Result<(), Error> {
     Ok(())
 }
 
+pub fn force_commit(sb: &RsSuperBlock) {
+    let mut guard = LOG_GLOBL.write();
+    let log: &mut Log = &mut *guard;
+    log.committing = 1;
+
+    let _com_out = commit(sb, log);
+    log.committing = 0;
+    BLOCKER.store(true, Ordering::SeqCst);
+    WAIT_Q.wake_up();
+}
+
+
 // Commits in-log transaction, persists data to disk.
 fn commit(sb: &RsSuperBlock, log: &mut Log) -> Result<(), Error> {
     if log.lh.n > 0 {
