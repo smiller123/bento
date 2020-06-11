@@ -358,7 +358,6 @@ impl<'a> ReplyStatfsInternal<'a> {
         }
     }
 
-
     pub fn error(&mut self, err: i32) {
         self.reply = Err(err);
     }
@@ -366,6 +365,44 @@ impl<'a> ReplyStatfsInternal<'a> {
     pub fn reply(&self) -> &Result<&'a mut fuse_statfs_out, i32> {
         return &self.reply;
     }
+}
+
+pub type ReplyXattr<'a, 'b> = &'a mut ReplyXattrInternal<'b>;
+
+#[derive(Debug)]
+pub struct ReplyXattrInternal<'a> {
+    reply_arg: Result<&'a mut fuse_getxattr_out, i32>,
+    reply_buf: Result<&'a mut MemContainer<raw::c_uchar>, i32>,
+}
+
+impl<'a> ReplyXattrInternal<'a> {
+    pub fn size(&mut self, size: u32) {
+        if let Ok(rep) = &mut self.reply_arg {
+            rep.size = size;
+        }
+    }
+
+    pub fn data(&mut self, data: &[u8]) {
+        if let Ok(rep) = &mut self.reply_buf {
+            rep.truncate(data.len());
+            let rep_slice = rep.to_slice_mut();
+            rep_slice.copy_from_slice(data);
+        }
+    }
+
+    pub fn error(&mut self, err: i32) {
+        self.reply_buf = Err(err);
+        self.reply_arg = Err(err);
+    }
+
+    pub fn reply_arg(&self) -> &Result<&'a mut fuse_getxattr_out, i32> {
+        return &self.reply_arg;
+    }
+
+    pub fn reply_buf(&self) -> &Result<&'a mut MemContainer<raw::c_uchar>, i32> {
+        return &self.reply_buf;
+    }
+
 }
 
 /// Register a file system with the BentoFS kernel module.
@@ -459,7 +496,6 @@ pub fn bento_add_direntry(
 
 pub const fn get_fs_ops<T: FileSystem>(_fs: &T) -> fs_ops<T> {
     fs_ops {
-        getxattr: T::getxattr,
         listxattr: T::listxattr,
         removexattr: T::removexattr,
         access: T::access,
@@ -751,17 +787,16 @@ pub trait FileSystem {
         return reply.error(-(ENOSYS as i32));
     }
 
-    fn getxattr(&self,
+    fn getxattr(
+        &mut self,
         _sb: RsSuperBlock,
-        _nodeid: u64,
-        _in_arg: &fuse_getxattr_in,
-        _name: CStr,
-        _numargs: raw::c_size_t,
-        _out_arg: &mut fuse_getxattr_out,
-        _buf: &mut MemContainer<raw::c_uchar>,
-    ) -> i32
-    {
-        return -(ENOSYS as i32);
+        _req: &Request,
+        _ino: u64,
+        _name: CStr, //&OsStr,
+        _size: u32,
+        reply: ReplyXattr
+    ) {
+        return reply.error(-(ENOSYS as i32));
     }
 
     fn listxattr(&self,
@@ -1363,6 +1398,48 @@ pub trait FileSystem {
                     },
                 }
             },
+            fuse_opcode_FUSE_GETXATTR => {
+                if inarg.numargs != 2 || outarg.numargs != 1 {
+                    return -1;
+                }
+
+                let req = Request { h: &inarg.h };
+
+                let getxattr_in = unsafe { &*(inarg.args[0].value as *const fuse_getxattr_in) };
+                let name = unsafe { CStr::from_raw(inarg.args[1].value as *const raw::c_char) };
+                if outarg.argvar == 1 {
+                    let data_out = unsafe { &mut *(outarg.args[0].value as *mut MemContainer<raw::c_uchar>) };
+                    let mut reply = ReplyXattrInternal {
+                        reply_arg: Err(-(ENOSYS as i32)),
+                        reply_buf: Ok(data_out),
+                    };
+                    self.getxattr(sb, &req, inarg.h.nodeid, name, getxattr_in.size, &mut reply); 
+                    match reply.reply_buf() {
+                        Ok(_) => {
+                            0
+                        },
+                        Err(x) => {
+                            *x as i32
+                        },
+                    }
+                } else {
+                    let getxattr_out = unsafe { &mut *(outarg.args[0].value as *mut fuse_getxattr_out) };
+                    let mut reply = ReplyXattrInternal {
+                        reply_arg: Ok(getxattr_out),
+                        reply_buf: Err(-(ENOSYS as i32))
+                    };
+                    self.getxattr(sb, &req, inarg.h.nodeid, name, getxattr_in.size, &mut reply); 
+                    match reply.reply_arg() {
+                        Ok(_) => {
+                            0
+                        },
+                        Err(x) => {
+                            *x as i32
+                        },
+                    }
+                }
+
+            },
             _ => {
                 println!("got a different opcode");
                 0
@@ -1789,15 +1866,6 @@ pub struct fs_ops<T: FileSystem> {
     /// * `out_arg: &mut fuse_getxattr_out` - Data structure to be filled with getxattr output
     /// information.
     /// * `buf: &mut MemContainer<kernel::raw::c_uchar>` - Buffer to be filled with the attribute data.
-    pub getxattr: fn(&T, 
-        RsSuperBlock,
-        u64,
-        &fuse_getxattr_in,
-        CStr,
-        raw::c_size_t,
-        &mut fuse_getxattr_out,
-        &mut MemContainer<raw::c_uchar>,
-    ) -> i32,
 
     /// List extended attribute names
     ///
