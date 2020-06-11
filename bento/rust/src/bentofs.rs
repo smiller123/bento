@@ -459,7 +459,6 @@ pub fn bento_add_direntry(
 
 pub const fn get_fs_ops<T: FileSystem>(_fs: &T) -> fs_ops<T> {
     fs_ops {
-        setxattr: T::setxattr,
         getxattr: T::getxattr,
         listxattr: T::listxattr,
         removexattr: T::removexattr,
@@ -738,9 +737,18 @@ pub trait FileSystem {
         return reply.error(-(ENOSYS as i32));
     }
 
-    fn setxattr(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_setxattr_in, _name: CStr, _buf: &MemContainer<raw::c_uchar>) -> i32
-    {
-        return -(ENOSYS as i32);
+    fn setxattr(
+        &mut self,
+        _sb: RsSuperBlock,
+        _req: &Request,
+        _ino: u64,
+        _name: CStr, //&OsStr,
+        _value: &[u8],
+        _flags: u32,
+        _position: u32,
+        reply: ReplyEmpty
+    ) {
+        return reply.error(-(ENOSYS as i32));
     }
 
     fn getxattr(&self,
@@ -1333,6 +1341,28 @@ pub trait FileSystem {
                     },
                 }            
             },
+            fuse_opcode_FUSE_SETXATTR => {
+                if inarg.numargs != 3 {
+                    return -1;
+                }
+
+                let req = Request { h: &inarg.h };
+
+                let setxattr_in = unsafe { &*(inarg.args[0].value as *const fuse_setxattr_in) };
+                let name = unsafe { CStr::from_raw(inarg.args[1].value as *const raw::c_char) };
+                let value_in = unsafe { &mut *(inarg.args[2].value as *mut MemContainer<raw::c_uchar>) };
+                let value = value_in.to_slice();
+                let mut reply = ReplyEmptyInternal { reply: Err(-(ENOSYS as i32)) };
+                self.setxattr(sb, &req, inarg.h.nodeid, name, value, setxattr_in.flags, setxattr_in.size, &mut reply);
+                match reply.reply() {
+                    Ok(_) => {
+                        0
+                    },
+                    Err(x) => {
+                        *x as i32
+                    },
+                }
+            },
             _ => {
                 println!("got a different opcode");
                 0
@@ -1737,8 +1767,6 @@ pub struct fs_ops<T: FileSystem> {
     /// * `name: CStr` - The name of the attribute.
     /// * `buf: &MemContainer<kernel::raw::c_uchar>` - Buffer containing the data to be set in the
     /// attribute.
-    pub setxattr:
-        fn(&T, RsSuperBlock, u64, &fuse_setxattr_in, CStr, &MemContainer<raw::c_uchar>) -> i32,
 
     /// Get an extended attribute
     ///
