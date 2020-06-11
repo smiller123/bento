@@ -5,7 +5,6 @@ use core::str;
 
 use bento::kernel;
 use kernel::errno;
-use kernel::fs::*;
 use kernel::fuse::*;
 use kernel::kobj::*;
 use kernel::mem as kmem;
@@ -193,13 +192,9 @@ impl FileSystem for Xv6FileSystem {
         return Ok(());
     }
 
-    fn statfs(&self, _sb: RsSuperBlock, _nodeid: u64, outarg: &mut fuse_statfs_out) -> i32 {
-        // Read super_block from disk
+    fn statfs(&mut self, _sb: RsSuperBlock, _req: &Request, _ino: u64, reply: ReplyStatfs) {
         let fs_size = SB.read().size;
-        outarg.st.blocks = fs_size as u64;
-        outarg.st.bsize = BSIZE as u32;
-        outarg.st.namelen = DIRSIZ as u32;
-        return 0;
+        reply.statfs(fs_size as u64, 0, 0, 0, 0, BSIZE as u32, DIRSIZ as u32, 0);
     }
    
     fn open(&mut self, sb: RsSuperBlock, _req: &Request, nodeid: u64, flags: u32, reply: ReplyOpen) {

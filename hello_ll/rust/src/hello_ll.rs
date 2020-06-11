@@ -92,10 +92,8 @@ impl FileSystem for HelloFS {
         return Ok(());
     }
 
-    fn statfs(&self, _sb: RsSuperBlock, _nodeid: u64, outarg: &mut fuse_statfs_out) -> i32 {
-        outarg.st.namelen = 255;
-        outarg.st.bsize = 512;
-        return 0;
+    fn statfs(&mut self, _sb: RsSuperBlock, _req: &Request, _ino: u64, reply: ReplyStatfs) {
+        reply.statfs(0, 0, 0, 0, 0,512, 255, 0);
     }
 
     fn open(&mut self, _sb: RsSuperBlock, _req: &Request, nodeid: u64, _flags: u32, reply: ReplyOpen) {

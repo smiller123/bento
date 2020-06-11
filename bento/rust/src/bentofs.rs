@@ -336,6 +336,38 @@ impl<'a> ReplyDirectoryInternal<'a> {
     }
 }
 
+pub type ReplyStatfs<'a, 'b> = &'a mut ReplyStatfsInternal<'b>;
+
+#[derive(Debug)]
+pub struct ReplyStatfsInternal<'a> {
+    reply: Result<&'a mut fuse_statfs_out, i32>,
+}
+
+impl<'a> ReplyStatfsInternal<'a> {
+    pub fn statfs(&mut self, blocks: u64, bfree: u64, bavail: u64, files: u64,
+                  ffree: u64, bsize: u32, namelen: u32, frsize: u32) {
+        if let Ok(rep) = &mut self.reply {
+            rep.st.blocks = blocks;
+            rep.st.bfree = bfree;
+            rep.st.bavail = bavail;
+            rep.st.files = files;
+            rep.st.ffree = ffree;
+            rep.st.bsize = bsize;
+            rep.st.namelen = namelen;
+            rep.st.frsize = frsize;
+        }
+    }
+
+
+    pub fn error(&mut self, err: i32) {
+        self.reply = Err(err);
+    }
+
+    pub fn reply(&self) -> &Result<&'a mut fuse_statfs_out, i32> {
+        return &self.reply;
+    }
+}
+
 /// Register a file system with the BentoFS kernel module.
 ///
 /// Should be called in the init function of a Bento file system module, before
@@ -427,7 +459,6 @@ pub fn bento_add_direntry(
 
 pub const fn get_fs_ops<T: FileSystem>(_fs: &T) -> fs_ops<T> {
     fs_ops {
-        statfs: T::statfs,
         setxattr: T::setxattr,
         getxattr: T::getxattr,
         listxattr: T::listxattr,
@@ -703,9 +734,8 @@ pub trait FileSystem {
         return reply.error(-(ENOSYS as i32));
     }
 
-    fn statfs(&self, _sb: RsSuperBlock, _nodeid: u64, _out_arg: &mut fuse_statfs_out) -> i32
-    {
-        return -(ENOSYS as i32);
+    fn statfs(&mut self, _sb: RsSuperBlock, _req: &Request, _ino: u64, reply: ReplyStatfs) {
+        return reply.error(-(ENOSYS as i32));
     }
 
     fn setxattr(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_setxattr_in, _name: CStr, _buf: &MemContainer<raw::c_uchar>) -> i32
@@ -1285,6 +1315,24 @@ pub trait FileSystem {
                     },
                 }            
             },
+            fuse_opcode_FUSE_STATFS => {
+                if inarg.numargs != 0 || outarg.numargs != 1 {
+                    return -1;
+                }
+
+                let req = Request { h: &inarg.h };
+                let statfs_out = unsafe { &mut *(outarg.args[0].value as *mut fuse_statfs_out) };
+                let mut reply = ReplyStatfsInternal { reply: Ok(statfs_out) };
+                self.statfs(sb, &req, inarg.h.nodeid, &mut reply);
+                match reply.reply() {
+                    Ok(_) => {
+                        0
+                    },
+                    Err(x) => {
+                        *x as i32
+                    },
+                }            
+            },
             _ => {
                 println!("got a different opcode");
                 0
@@ -1675,7 +1723,6 @@ pub struct fs_ops<T: FileSystem> {
     /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `nodeid: u64` - Filesystem-provided inode number, zero means "undefined".
     /// * `out_arg: &fuse_statfs_out` - Data structure to be filled with statfs information.
-    pub statfs: fn(&T, RsSuperBlock, u64, &mut fuse_statfs_out) -> i32,
 
     /// Set an extended attribute
     ///
