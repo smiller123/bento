@@ -496,7 +496,6 @@ pub fn bento_add_direntry(
 
 pub const fn get_fs_ops<T: FileSystem>(_fs: &T) -> fs_ops<T> {
     fs_ops {
-        removexattr: T::removexattr,
         access: T::access,
         create: T::create,
         getlk: T::getlk,
@@ -809,9 +808,15 @@ pub trait FileSystem {
         return reply.error(-(ENOSYS as i32));
     }
 
-    fn removexattr(&self, _sb: RsSuperBlock, _nodeid: u64, _name: CStr) -> i32
-    {
-        return -(ENOSYS as i32);
+    fn removexattr(
+        &mut self,
+        _sb: RsSuperBlock,
+        _req: &Request,
+        _ino: u64,
+        _name: CStr, //&OsStr,
+        reply: ReplyEmpty
+    ) {
+        return reply.error(-(ENOSYS as i32));
     }
 
     fn access(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_access_in) -> i32
@@ -1477,6 +1482,25 @@ pub trait FileSystem {
                     }
                 }
             },
+            fuse_opcode_FUSE_REMOVEXATTR => {
+                if inarg.numargs != 1 {
+                    return -1;
+                }
+
+                let req = Request { h: &inarg.h };
+
+                let name = unsafe { CStr::from_raw(inarg.args[0].value as *const raw::c_char) };
+                let mut reply = ReplyEmptyInternal { reply: Err(-(ENOSYS as i32)) };
+                self.removexattr(sb, &req, inarg.h.nodeid, name, &mut reply);
+                match reply.reply() {
+                    Ok(_) => {
+                        0
+                    },
+                    Err(x) => {
+                        *x as i32
+                    },
+                }
+            },
             _ => {
                 println!("got a different opcode");
                 0
@@ -1937,7 +1961,6 @@ pub struct fs_ops<T: FileSystem> {
     /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `nodeid: u64` - Filesystem-provided inode number.
     /// * `name: CStr` - The name of the attribute to remove.
-    pub removexattr: fn(&T, RsSuperBlock, u64, CStr) -> i32,
 
     /// Check file access permissions
     ///
