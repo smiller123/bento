@@ -452,6 +452,32 @@ impl<'a> ReplyCreateInternal<'a> {
     }
 }
 
+pub type ReplyLock<'a, 'b> = &'a mut ReplyLockInternal<'b>;
+
+#[derive(Debug)]
+pub struct ReplyLockInternal<'a> {
+    reply: Result<&'a mut fuse_lk_out, i32>,
+}
+
+impl<'a> ReplyLockInternal<'a> {
+    pub fn locked(&mut self, start: u64, end: u64, typ: u32, pid: u32) {
+        if let Ok(rep) = &mut self.reply {
+            rep.lk.start = start;
+            rep.lk.end = end;
+            rep.lk.type_ = typ;
+            rep.lk.pid = pid;
+        }
+    }
+
+    pub fn error(&mut self, err: i32) {
+        self.reply = Err(err);
+    }
+
+    pub fn reply(&self) -> &Result<&'a mut fuse_lk_out, i32> {
+        return &self.reply;
+    }
+}
+
 /// Register a file system with the BentoFS kernel module.
 ///
 /// Should be called in the init function of a Bento file system module, before
@@ -543,7 +569,6 @@ pub fn bento_add_direntry(
 
 pub const fn get_fs_ops<T: FileSystem>(_fs: &T) -> fs_ops<T> {
     fs_ops {
-        getlk: T::getlk,
         setlk: T::setlk,
         bmap: T::bmap,
         ioctl: T::ioctl,
@@ -888,9 +913,20 @@ pub trait FileSystem {
         return reply.error(-(ENOSYS as i32));
     }
 
-    fn getlk(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_lk_in, _out_arg: &mut fuse_lk_out) -> i32
-    {
-        return -(ENOSYS as i32);
+    fn getlk(
+        &mut self,
+        _sb: RsSuperBlock,
+        _req: &Request,
+        _ino: u64,
+        _fh: u64,
+        _lock_owner: u64,
+        _start: u64,
+        _end: u64,
+        _typ: u32,
+        _pid: u32,
+        reply: ReplyLock
+    ) {
+        return reply.error(-(ENOSYS as i32));
     }
 
     fn setlk(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_lk_in, _sleep: bool) -> i32
@@ -1593,6 +1629,26 @@ pub trait FileSystem {
                     },
                 }
             },
+            fuse_opcode_FUSE_GETLK => {
+                if inarg.numargs != 1 || outarg.numargs != 1 {
+                    return -1;
+                }
+
+                let req = Request { h: &inarg.h };
+                let getlk_in = unsafe { &*(inarg.args[0].value as *const fuse_lk_in) };
+                let getlk_out = unsafe { &mut *(outarg.args[0].value as *mut fuse_lk_out) };
+                let mut reply = ReplyLockInternal { reply: Ok(getlk_out) };
+                self.getlk(sb, &req, inarg.h.nodeid, getlk_in.fh, getlk_in.owner, getlk_in.lk.start,
+                           getlk_in.lk.end, getlk_in.lk.type_, getlk_in.lk.pid, &mut reply);
+                match reply.reply() {
+                    Ok(_) => {
+                        0
+                    },
+                    Err(x) => {
+                        *x as i32
+                    },
+                }
+            },
             _ => {
                 println!("got a different opcode");
                 0
@@ -2097,7 +2153,6 @@ pub struct fs_ops<T: FileSystem> {
     /// * `nodeid: u64` - Filesystem-provided inode number.
     /// * `in_arg: &fuse_lk_in` - Data structure containing getlk input arguments.
     /// * `out_arg: &mut fuse_lk_out` - Data structure to be filled with getlk output information.
-    pub getlk: fn(&T, RsSuperBlock, u64, &fuse_lk_in, &mut fuse_lk_out) -> i32,
 
     /// Acquire, modify or release a POSIX file lock
     ///
