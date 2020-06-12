@@ -478,6 +478,29 @@ impl<'a> ReplyLockInternal<'a> {
     }
 }
 
+pub type ReplyBmap<'a, 'b> = &'a mut ReplyBmapInternal<'b>;
+
+#[derive(Debug)]
+pub struct ReplyBmapInternal<'a> {
+    reply: Result<&'a mut fuse_bmap_out, i32>,
+}
+
+impl<'a> ReplyBmapInternal<'a> {
+    pub fn bmap(&mut self, block: u64) {
+        if let Ok(rep) = &mut self.reply {
+            rep.block = block;
+        }
+    }
+
+    pub fn error(&mut self, err: i32) {
+        self.reply = Err(err);
+    }
+
+    pub fn reply(&self) -> &Result<&'a mut fuse_bmap_out, i32> {
+        return &self.reply;
+    }
+}
+
 /// Register a file system with the BentoFS kernel module.
 ///
 /// Should be called in the init function of a Bento file system module, before
@@ -569,7 +592,6 @@ pub fn bento_add_direntry(
 
 pub const fn get_fs_ops<T: FileSystem>(_fs: &T) -> fs_ops<T> {
     fs_ops {
-        bmap: T::bmap,
         ioctl: T::ioctl,
         poll: T::poll,
         fallocate: T::fallocate,
@@ -945,9 +967,16 @@ pub trait FileSystem {
         return reply.error(-(ENOSYS as i32));
     }
 
-    fn bmap(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_bmap_in, _out_arg: &mut fuse_bmap_out) -> i32
-    {
-        return -(ENOSYS as i32);
+    fn bmap(
+        &mut self,
+        _sb: RsSuperBlock,
+        _req: &Request,
+        _ino: u64,
+        _blocksize: u32,
+        _idx: u64,
+        reply: ReplyBmap
+    ) {
+        return reply.error(-(ENOSYS as i32));
     }
 
     fn ioctl(&self,
@@ -1700,6 +1729,25 @@ pub trait FileSystem {
                     },
                 }
             },
+            fuse_opcode_FUSE_BMAP => {
+                if inarg.numargs != 1 || outarg.numargs != 1 {
+                    return -1;
+                }
+
+                let req = Request { h: &inarg.h };
+                let bmap_in = unsafe { &*(inarg.args[0].value as *const fuse_bmap_in) };
+                let bmap_out = unsafe { &mut *(outarg.args[0].value as *mut fuse_bmap_out) };
+                let mut reply = ReplyBmapInternal { reply: Ok(bmap_out) };
+                self.bmap(sb, &req, inarg.h.nodeid, bmap_in.blocksize, bmap_in.block, &mut reply);
+                match reply.reply() {
+                    Ok(_) => {
+                        0
+                    },
+                    Err(x) => {
+                        *x as i32
+                    },
+                }
+            },
             _ => {
                 println!("got a different opcode");
                 0
@@ -2234,7 +2282,6 @@ pub struct fs_ops<T: FileSystem> {
     /// * `nodeid: u64` - Filesystem-provided inode number.
     /// * `in_arg: &fuse_bmap_in` - Data structure containing bmap input arguments.
     /// * `out_arg: &mut fuse_bmap_out` - Data structure to be filled with bmap output information.
-    pub bmap: fn(&T, RsSuperBlock, u64, &fuse_bmap_in, &mut fuse_bmap_out) -> i32,
 
     /// Ioctl
     ///
