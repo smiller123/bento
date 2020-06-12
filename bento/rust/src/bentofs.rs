@@ -496,7 +496,6 @@ pub fn bento_add_direntry(
 
 pub const fn get_fs_ops<T: FileSystem>(_fs: &T) -> fs_ops<T> {
     fs_ops {
-        access: T::access,
         create: T::create,
         getlk: T::getlk,
         setlk: T::setlk,
@@ -819,9 +818,15 @@ pub trait FileSystem {
         return reply.error(-(ENOSYS as i32));
     }
 
-    fn access(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_access_in) -> i32
-    {
-        return -(ENOSYS as i32);
+    fn access(
+        &mut self,
+        _sb: RsSuperBlock,
+        _req: &Request,
+        _ino: u64,
+        _mask: u32,
+        reply: ReplyEmpty
+    ) {
+        return reply.error(-(ENOSYS as i32));
     }
 
     fn create(&self,
@@ -1501,6 +1506,25 @@ pub trait FileSystem {
                     },
                 }
             },
+            fuse_opcode_FUSE_ACCESS => {
+                if inarg.numargs != 1 {
+                    return -1;
+                }
+
+                let req = Request { h: &inarg.h };
+
+                let access_in = unsafe { &*(inarg.args[0].value as *const fuse_access_in) };
+                let mut reply = ReplyEmptyInternal { reply: Err(-(ENOSYS as i32)) };
+                self.access(sb, &req, inarg.h.nodeid, access_in.mask, &mut reply);
+                match reply.reply() {
+                    Ok(_) => {
+                        0
+                    },
+                    Err(x) => {
+                        *x as i32
+                    },
+                }
+            },
             _ => {
                 println!("got a different opcode");
                 0
@@ -1975,7 +1999,6 @@ pub struct fs_ops<T: FileSystem> {
     /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `nodeid: u64` - Filesystem-provided inode number.
     /// * `in_arg: &fuse_access_in` - Data structure containing access input arguments.
-    pub access: fn(&T, RsSuperBlock, u64, &fuse_access_in) -> i32,
 
     /// Create and open a file
     ///
