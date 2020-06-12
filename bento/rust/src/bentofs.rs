@@ -569,7 +569,6 @@ pub fn bento_add_direntry(
 
 pub const fn get_fs_ops<T: FileSystem>(_fs: &T) -> fs_ops<T> {
     fs_ops {
-        setlk: T::setlk,
         bmap: T::bmap,
         ioctl: T::ioctl,
         poll: T::poll,
@@ -929,9 +928,21 @@ pub trait FileSystem {
         return reply.error(-(ENOSYS as i32));
     }
 
-    fn setlk(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_lk_in, _sleep: bool) -> i32
-    {
-        return -(ENOSYS as i32);
+    fn setlk(
+        &mut self,
+        _sb: RsSuperBlock,
+        _req: &Request,
+        _ino: u64,
+        _fh: u64,
+        _lock_owner: u64,
+        _start: u64,
+        _end: u64,
+        _typ: u32,
+        _pid: u32,
+        _sleep: bool,
+        reply: ReplyEmpty
+    ) {
+        return reply.error(-(ENOSYS as i32));
     }
 
     fn bmap(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_bmap_in, _out_arg: &mut fuse_bmap_out) -> i32
@@ -1649,6 +1660,46 @@ pub trait FileSystem {
                     },
                 }
             },
+            fuse_opcode_FUSE_SETLK => {
+                if inarg.numargs != 1 {
+                    return -1;
+                }
+
+                let req = Request { h: &inarg.h };
+                let setlk_in = unsafe { &*(inarg.args[0].value as *const fuse_lk_in) };
+                let mut reply = ReplyEmptyInternal { reply: Err(-(ENOSYS as i32)) };
+                self.setlk(sb, &req, inarg.h.nodeid, setlk_in.fh, setlk_in.owner,
+                           setlk_in.lk.start, setlk_in.lk.end, setlk_in.lk.type_,
+                           setlk_in.lk.pid, false, &mut reply);
+                match reply.reply() {
+                    Ok(_) => {
+                        0
+                    },
+                    Err(x) => {
+                        *x as i32
+                    },
+                }
+            },
+            fuse_opcode_FUSE_SETLKW => {
+                if inarg.numargs != 1 {
+                    return -1;
+                }
+
+                let req = Request { h: &inarg.h };
+                let setlk_in = unsafe { &*(inarg.args[0].value as *const fuse_lk_in) };
+                let mut reply = ReplyEmptyInternal { reply: Err(-(ENOSYS as i32)) };
+                self.setlk(sb, &req, inarg.h.nodeid, setlk_in.fh, setlk_in.owner,
+                           setlk_in.lk.start, setlk_in.lk.end, setlk_in.lk.type_,
+                           setlk_in.lk.pid, true, &mut reply);
+                match reply.reply() {
+                    Ok(_) => {
+                        0
+                    },
+                    Err(x) => {
+                        *x as i32
+                    },
+                }
+            },
             _ => {
                 println!("got a different opcode");
                 0
@@ -2168,7 +2219,6 @@ pub struct fs_ops<T: FileSystem> {
     /// * `nodeid: u64` - Filesystem-provided inode number.
     /// * `in_arg: &fuse_lk_in` - Data structure containing setlk input arguments.
     /// * `sleep: bool` - Should the filesystem sleep.
-    pub setlk: fn(&T, RsSuperBlock, u64, &fuse_lk_in, bool) -> i32,
 
     /// Map block index within file to block index within device
     ///
