@@ -594,39 +594,57 @@ impl FileSystem for Xv6FileSystem {
         reply.ok();
     }
 
-    fn create(&self, 
+     fn create(
+        &mut self,
         sb: RsSuperBlock,
-        nodeid: u64,
-        _inarg: &fuse_create_in,
-        name: CStr,
-        outentry: &mut fuse_entry_out,
-        outopen: &mut fuse_open_out,
-    ) -> i32 {
+        _req: &Request,
+        parent: u64,
+        name: CStr, //&OsStr,
+        _mode: u32,
+        _flags: u32,
+        reply: ReplyCreate
+    ) {
+    //fn create(&self, 
+    //    sb: RsSuperBlock,
+    //    nodeid: u64,
+    //    _inarg: &fuse_create_in,
+    //    name: CStr,
+    //    outentry: &mut fuse_entry_out,
+    //    outopen: &mut fuse_open_out,
+    //) -> i32 {
         // Check if the file already exists
         let _guard = begin_op(&sb);
-        let child = match create_internal(&sb, nodeid, T_FILE, &name) {
+        let child = match create_internal(&sb, parent, T_FILE, &name) {
             Ok(x) => x,
-            Err(x) => return x as i32,
+            Err(x) => {
+                reply.error(x as i32);
+                return;
+            }
         };
     
         let icache = ILOCK_CACHE.read();
         let inode_guard = match ilock(&sb, child.idx, &icache, child.inum) {
             Ok(x) => x,
-            Err(x) => return x as i32,
+            Err(x) => {
+                reply.error(x as i32);
+                return;
+            }
         };
         let internals = inode_guard.internals.read();
     
-        outopen.fh = 0;
-        outopen.open_flags = FOPEN_KEEP_CACHE;
-        outentry.nodeid = child.inum as u64;
-        outentry.generation = 0;
-        outentry.attr_valid = 1;
-        outentry.entry_valid = 1;
-        outentry.attr_valid_nsec = 999999999;
-        outentry.entry_valid_nsec = 999999999;
-        match stati(outentry.nodeid, &mut outentry.attr, &internals) {
-            Ok(()) => return 0,
-            Err(x) => return x as i32,
+        let fh = 0;
+        let open_flags = FOPEN_KEEP_CACHE;
+        let nodeid = child.inum as u64;
+        let generation = 0;
+        let attr_valid = Timespec::new(1, 999999999);
+        let mut attr = fuse_attr::new();
+        match stati(nodeid, &mut attr, &internals) {
+            Ok(()) => {
+                reply.created(&attr_valid, &attr, generation, fh, open_flags);
+            },
+            Err(x) => {
+                reply.error(x as i32);
+            }
         }
     }
 

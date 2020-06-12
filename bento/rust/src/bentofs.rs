@@ -402,7 +402,54 @@ impl<'a> ReplyXattrInternal<'a> {
     pub fn reply_buf(&self) -> &Result<&'a mut MemContainer<raw::c_uchar>, i32> {
         return &self.reply_buf;
     }
+}
 
+pub type ReplyCreate<'a, 'b> = &'a mut ReplyCreateInternal<'b>;
+
+#[derive(Debug)]
+pub struct ReplyCreateInternal<'a> {
+    reply: Result<(&'a mut fuse_entry_out, &'a mut fuse_open_out), i32>,
+}
+
+impl<'a> ReplyCreateInternal<'a> {
+    pub fn created(&mut self, ttl: &Timespec, attr: &fuse_attr, generation: u64, fh: u64,
+               flags: u32) { 
+        if let Ok((rep_entry, rep_open)) = &mut self.reply {
+            rep_entry.nodeid = attr.ino;
+            rep_entry.generation = generation;
+            rep_entry.entry_valid = ttl.sec as u64;
+            rep_entry.attr_valid = ttl.sec as u64;
+            rep_entry.entry_valid_nsec = ttl.nsec as u32;
+            rep_entry.attr_valid_nsec = ttl.nsec as u32;
+            rep_entry.attr.ino = attr.ino;
+    	    rep_entry.attr.size = attr.size;
+	        rep_entry.attr.blocks = attr.blocks;
+	        rep_entry.attr.atime = attr.atime;
+	        rep_entry.attr.mtime = attr.mtime;
+    	    rep_entry.attr.ctime = attr.ctime;
+	        rep_entry.attr.atimensec = attr.atimensec;
+	        rep_entry.attr.mtimensec = attr.mtimensec;
+	        rep_entry.attr.ctimensec = attr.ctimensec;
+    	    rep_entry.attr.mode = attr.mode;
+	        rep_entry.attr.nlink = attr.nlink;
+	        rep_entry.attr.uid = attr.uid;
+	        rep_entry.attr.gid = attr.gid;
+    	    rep_entry.attr.rdev = attr.rdev;
+	        rep_entry.attr.blksize = attr.blksize;
+	        rep_entry.attr.padding = attr.padding;
+            rep_open.fh = fh;
+            rep_open.open_flags = flags;
+            rep_open.padding = 0;
+        }
+    }
+
+    pub fn error(&mut self, err: i32) {
+        self.reply = Err(err);
+    }
+
+    pub fn reply(&self) -> &Result<(&'a mut fuse_entry_out, &'a mut fuse_open_out), i32> {
+        return &self.reply;
+    }
 }
 
 /// Register a file system with the BentoFS kernel module.
@@ -496,7 +543,6 @@ pub fn bento_add_direntry(
 
 pub const fn get_fs_ops<T: FileSystem>(_fs: &T) -> fs_ops<T> {
     fs_ops {
-        create: T::create,
         getlk: T::getlk,
         setlk: T::setlk,
         bmap: T::bmap,
@@ -829,16 +875,17 @@ pub trait FileSystem {
         return reply.error(-(ENOSYS as i32));
     }
 
-    fn create(&self,
+    fn create(
+        &mut self,
         _sb: RsSuperBlock,
-        _nodeid: u64,
-        _in_arg: &fuse_create_in,
-        _name: CStr,
-        _out_entry: &mut fuse_entry_out,
-        _out_open: &mut fuse_open_out,
-    ) -> i32
-    {
-        return -(ENOSYS as i32);
+        _req: &Request,
+        _parent: u64,
+        _name: CStr, //&OsStr,
+        _mode: u32,
+        _flags: u32,
+        reply: ReplyCreate
+    ) {
+        return reply.error(-(ENOSYS as i32));
     }
 
     fn getlk(&self, _sb: RsSuperBlock, _nodeid: u64, _in_arg: &fuse_lk_in, _out_arg: &mut fuse_lk_out) -> i32
@@ -1525,6 +1572,27 @@ pub trait FileSystem {
                     },
                 }
             },
+            fuse_opcode_FUSE_CREATE => {
+                if inarg.numargs != 2 || outarg.numargs != 2 {
+                    return -1;
+                }
+
+                let req = Request { h: &inarg.h };
+                let create_in = unsafe { &*(inarg.args[0].value as *const fuse_create_in) };
+                let name = unsafe { CStr::from_raw(inarg.args[1].value as *const raw::c_char) };
+                let entry_out = unsafe { &mut *(outarg.args[0].value as *mut fuse_entry_out) };
+                let open_out = unsafe { &mut *(outarg.args[1].value as *mut fuse_open_out) };
+                let mut reply = ReplyCreateInternal { reply: Ok((entry_out, open_out)) };
+                self.create(sb, &req, inarg.h.nodeid, name, create_in.mode, create_in.flags, &mut reply);
+                match reply.reply() {
+                    Ok(_) => {
+                        0
+                    },
+                    Err(x) => {
+                        *x as i32
+                    },
+                }
+            },
             _ => {
                 println!("got a different opcode");
                 0
@@ -2021,14 +2089,6 @@ pub struct fs_ops<T: FileSystem> {
     /// newly created entry.
     /// * `out_open: &mut fuse_open_out` - Data structure to be filled with information about the
     /// newly opened file.
-    pub create: fn(&T, 
-        RsSuperBlock,
-        u64,
-        &fuse_create_in,
-        CStr,
-        &mut fuse_entry_out,
-        &mut fuse_open_out,
-    ) -> i32,
 
     /// Test for a POSIX file lock.
     ///
