@@ -264,7 +264,7 @@ extern "C" {
     pub fn rs_put_wait_queue_head(wq_head: *const raw::c_void);
     pub fn rs_wake_up(wq_head: *const raw::c_void);
     pub fn rs_wait_event(wq_head: *const raw::c_void, condition: Condition);
-    pub fn register_bento_fs(fs: *const raw::c_void, fs_name: *const raw::c_void, fs_ops: *const raw::c_void, dispatch: *const raw::c_void) -> i32;
+    pub fn register_bento_fs(fs: *const raw::c_void, fs_name: *const raw::c_void, dispatch: *const raw::c_void) -> i32;
     pub fn unregister_bento_fs(fs_name: *const raw::c_void) -> i32;
 }
 

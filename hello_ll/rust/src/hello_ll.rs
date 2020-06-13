@@ -1,14 +1,14 @@
 use alloc::vec::Vec;
 use core::sync::atomic;
 
-use bento::bentofs::*;
+use bento::fuse::*;
+use bento::fuse::reply::*;
+use bento::fuse::request::*;
 
 use bento::kernel;
-//use kernel::errno;
 use kernel::fs::*;
 use kernel::fuse::*;
 use kernel::kobj::*;
-//use kernel::mem as kmem;
 use kernel::raw;
 use kernel::stat;
 use kernel::string::*;
@@ -239,21 +239,10 @@ impl FileSystem for HelloFS {
         offset: i64,
         reply: ReplyDirectory
     ) {
-    //fn readdir(&self, 
-    //    _sb: RsSuperBlock,
-    //    nodeid: u64,
-    //    inarg: &fuse_read_in,
-    //    buf: &mut kmem::MemContainer<u8>,
-    //    size: &mut usize,
-    //) -> i32 {
         if nodeid != 1 {
             reply.error(-(ENOTDIR as i32));
             return;
         }
-        //if let Err(x) = kmem::memset_rust(buf, 0, buf.len() as u64) {
-        //    reply.error(x as i32);
-        //    return;
-        //}
         let mut buf_off = 1;
         let mut inarg_offset = offset;
         if inarg_offset < 1 {
@@ -269,12 +258,6 @@ impl FileSystem for HelloFS {
         }
         inarg_offset -= 1;
         buf_off += 1;
-        //if ent_len <= inarg_offset {
-        //    inarg_offset -= ent_len;
-        //} else {
-        //    buf_off += ent_len;
-        //}
-        //let curr_buf_slice = &mut buf_slice[buf_off..];
         if inarg_offset < 1 {
             if reply.add(
                 2 as u64,
@@ -288,23 +271,6 @@ impl FileSystem for HelloFS {
         }
         inarg_offset -= 1;
         buf_off += 1;
-        //ent_len = match bento_add_direntry(
-        //    curr_buf_slice,
-        //    HELLO_NAME,
-        //    2 as u64,
-        //    0,
-        //    buf_off as u64 + inarg.offset,
-        //) {
-        //    Ok(x) => x,
-        //    Err(errno::Error::EOVERFLOW) => return 0,
-        //    Err(x) => return x as i32,
-        //};
-        //if ent_len <= inarg_offset {
-        //    inarg_offset -= ent_len;
-        //} else {
-        //    buf_off += ent_len;
-        //}
-        //let curr_buf_slice = &mut buf_slice[buf_off..];
         if inarg_offset < 1 {
             if reply.add(
                 1 as u64,
@@ -317,34 +283,6 @@ impl FileSystem for HelloFS {
             };
         }
         reply.ok();
-        //inarg_offset -= 1;
-        //buf_off += 1;
-        //ent_len = match bento_add_direntry(
-        //    curr_buf_slice,
-        //    "..",
-        //    1 as u64,
-        //    0,
-        //    buf_off as u64 + inarg.offset,
-        //) {
-        //    Ok(x) => x,
-        //    Err(errno::Error::EOVERFLOW) => return 0,
-        //    Err(x) => return x as i32,
-        //};
-        //if ent_len > inarg_offset {
-        //    buf_off += ent_len;
-        //}
-        //*size = buf_off;
-        //return 0;
-    }
-
-    fn lseek(&self, 
-        _sb: RsSuperBlock,
-        _nodeid: u64,
-        inarg: &fuse_lseek_in,
-        outarg: &mut fuse_lseek_out,
-    ) -> i32 {
-        outarg.offset = inarg.offset;
-        return 0;
     }
 
     fn fsync(

@@ -11,11 +11,13 @@ use kernel::mem as kmem;
 use kernel::raw;
 use kernel::time::*;
 
-use bento::bentofs::*;
 use bento::bindings::*;
 use bento::c_str;
 //use bento::println;
 use bento::DataBlock;
+use bento::fuse::*;
+use bento::fuse::reply::*;
+use bento::fuse::request::*;
 
 use crate::log::*;
 use crate::xv6fs_file::*;
@@ -604,14 +606,6 @@ impl FileSystem for Xv6FileSystem {
         _flags: u32,
         reply: ReplyCreate
     ) {
-    //fn create(&self, 
-    //    sb: RsSuperBlock,
-    //    nodeid: u64,
-    //    _inarg: &fuse_create_in,
-    //    name: CStr,
-    //    outentry: &mut fuse_entry_out,
-    //    outopen: &mut fuse_open_out,
-    //) -> i32 {
         // Check if the file already exists
         let _guard = begin_op(&sb);
         let child = match create_internal(&sb, parent, T_FILE, &name) {
@@ -706,16 +700,6 @@ impl FileSystem for Xv6FileSystem {
         }
     }
     
-    fn lseek(&self, 
-        _sb: RsSuperBlock,
-        _nodeid: u64,
-        inarg: &fuse_lseek_in,
-        outarg: &mut fuse_lseek_out,
-    ) -> i32 {
-        outarg.offset = inarg.offset;
-        return 0;
-    }
-
     fn fsync(
         &mut self,
         sb: RsSuperBlock,
@@ -726,8 +710,6 @@ impl FileSystem for Xv6FileSystem {
         reply: ReplyEmpty
     ) {
         force_commit(&sb);
-        //let mut error_sector = 0;
-        //blkdev_issue_flush_rust(&sb.s_bdev(), GFP_KERNEL as usize, &mut error_sector);
         reply.ok();
     }
 

@@ -12,9 +12,9 @@ extern crate alloc;
 pub mod bindings;
 #[macro_use]
 pub mod io;
-#[allow(non_upper_case_globals)]
-pub mod bentofs;
 pub mod kernel;
+#[allow(non_upper_case_globals)]
+pub mod fuse;
 
 extern crate datablock;
 extern crate rlibc;
