@@ -83,21 +83,21 @@ impl<'a> ReplyEntryInternal<'a> {
             rep.entry_valid_nsec = ttl.nsec as u32;
             rep.attr_valid_nsec = ttl.nsec as u32;
             rep.attr.ino = attr.ino;
-    	    rep.attr.size = attr.size;
-	        rep.attr.blocks = attr.blocks;
-	        rep.attr.atime = attr.atime;
-	        rep.attr.mtime = attr.mtime;
-    	    rep.attr.ctime = attr.ctime;
-	        rep.attr.atimensec = attr.atimensec;
-	        rep.attr.mtimensec = attr.mtimensec;
-	        rep.attr.ctimensec = attr.ctimensec;
-    	    rep.attr.mode = attr.mode;
-	        rep.attr.nlink = attr.nlink;
-	        rep.attr.uid = attr.uid;
-	        rep.attr.gid = attr.gid;
-    	    rep.attr.rdev = attr.rdev;
-	        rep.attr.blksize = attr.blksize;
-	        rep.attr.padding = attr.padding;
+            rep.attr.size = attr.size;
+            rep.attr.blocks = attr.blocks;
+            rep.attr.atime = attr.atime;
+            rep.attr.mtime = attr.mtime;
+            rep.attr.ctime = attr.ctime;
+            rep.attr.atimensec = attr.atimensec;
+            rep.attr.mtimensec = attr.mtimensec;
+            rep.attr.ctimensec = attr.ctimensec;
+            rep.attr.mode = attr.mode;
+            rep.attr.nlink = attr.nlink;
+            rep.attr.uid = attr.uid;
+            rep.attr.gid = attr.gid;
+            rep.attr.rdev = attr.rdev;
+            rep.attr.blksize = attr.blksize;
+            rep.attr.padding = attr.padding;
         }
     }
 
@@ -124,21 +124,21 @@ impl<'a> ReplyAttrInternal<'a> {
             rep.attr_valid_nsec = ttl.nsec as u32;
             rep.dummy = 0;
             rep.attr.ino = attr.ino;
-    	    rep.attr.size = attr.size;
-	        rep.attr.blocks = attr.blocks;
-	        rep.attr.atime = attr.atime;
-	        rep.attr.mtime = attr.mtime;
-    	    rep.attr.ctime = attr.ctime;
-	        rep.attr.atimensec = attr.atimensec;
-	        rep.attr.mtimensec = attr.mtimensec;
-	        rep.attr.ctimensec = attr.ctimensec;
-    	    rep.attr.mode = attr.mode;
-	        rep.attr.nlink = attr.nlink;
-	        rep.attr.uid = attr.uid;
-	        rep.attr.gid = attr.gid;
-    	    rep.attr.rdev = attr.rdev;
-	        rep.attr.blksize = attr.blksize;
-	        rep.attr.padding = attr.padding;
+            rep.attr.size = attr.size;
+            rep.attr.blocks = attr.blocks;
+            rep.attr.atime = attr.atime;
+            rep.attr.mtime = attr.mtime;
+            rep.attr.ctime = attr.ctime;
+            rep.attr.atimensec = attr.atimensec;
+            rep.attr.mtimensec = attr.mtimensec;
+            rep.attr.ctimensec = attr.ctimensec;
+            rep.attr.mode = attr.mode;
+            rep.attr.nlink = attr.nlink;
+            rep.attr.uid = attr.uid;
+            rep.attr.gid = attr.gid;
+            rep.attr.rdev = attr.rdev;
+            rep.attr.blksize = attr.blksize;
+            rep.attr.padding = attr.padding;
         }
     }
 
@@ -263,10 +263,10 @@ impl<'a> ReplyDirectoryInternal<'a> {
                 Ok(len) => {
                     self.length += len;
                     false
-                },
+                }
                 Err(errno::Error::EOVERFLOW) => true,
                 _ => false,
-            }
+            };
         }
         return false;
     }
@@ -294,8 +294,17 @@ pub struct ReplyStatfsInternal<'a> {
 }
 
 impl<'a> ReplyStatfsInternal<'a> {
-    pub fn statfs(&mut self, blocks: u64, bfree: u64, bavail: u64, files: u64,
-                  ffree: u64, bsize: u32, namelen: u32, frsize: u32) {
+    pub fn statfs(
+        &mut self,
+        blocks: u64,
+        bfree: u64,
+        bavail: u64,
+        files: u64,
+        ffree: u64,
+        bsize: u32,
+        namelen: u32,
+        frsize: u32,
+    ) {
         if let Ok(rep) = &mut self.reply {
             rep.st.blocks = blocks;
             rep.st.bfree = bfree;
@@ -362,8 +371,14 @@ pub struct ReplyCreateInternal<'a> {
 }
 
 impl<'a> ReplyCreateInternal<'a> {
-    pub fn created(&mut self, ttl: &Timespec, attr: &fuse_attr, generation: u64, fh: u64,
-               flags: u32) { 
+    pub fn created(
+        &mut self,
+        ttl: &Timespec,
+        attr: &fuse_attr,
+        generation: u64,
+        fh: u64,
+        flags: u32,
+    ) {
         if let Ok((rep_entry, rep_open)) = &mut self.reply {
             rep_entry.nodeid = attr.ino;
             rep_entry.generation = generation;
@@ -372,21 +387,21 @@ impl<'a> ReplyCreateInternal<'a> {
             rep_entry.entry_valid_nsec = ttl.nsec as u32;
             rep_entry.attr_valid_nsec = ttl.nsec as u32;
             rep_entry.attr.ino = attr.ino;
-    	    rep_entry.attr.size = attr.size;
-	        rep_entry.attr.blocks = attr.blocks;
-	        rep_entry.attr.atime = attr.atime;
-	        rep_entry.attr.mtime = attr.mtime;
-    	    rep_entry.attr.ctime = attr.ctime;
-	        rep_entry.attr.atimensec = attr.atimensec;
-	        rep_entry.attr.mtimensec = attr.mtimensec;
-	        rep_entry.attr.ctimensec = attr.ctimensec;
-    	    rep_entry.attr.mode = attr.mode;
-	        rep_entry.attr.nlink = attr.nlink;
-	        rep_entry.attr.uid = attr.uid;
-	        rep_entry.attr.gid = attr.gid;
-    	    rep_entry.attr.rdev = attr.rdev;
-	        rep_entry.attr.blksize = attr.blksize;
-	        rep_entry.attr.padding = attr.padding;
+            rep_entry.attr.size = attr.size;
+            rep_entry.attr.blocks = attr.blocks;
+            rep_entry.attr.atime = attr.atime;
+            rep_entry.attr.mtime = attr.mtime;
+            rep_entry.attr.ctime = attr.ctime;
+            rep_entry.attr.atimensec = attr.atimensec;
+            rep_entry.attr.mtimensec = attr.mtimensec;
+            rep_entry.attr.ctimensec = attr.ctimensec;
+            rep_entry.attr.mode = attr.mode;
+            rep_entry.attr.nlink = attr.nlink;
+            rep_entry.attr.uid = attr.uid;
+            rep_entry.attr.gid = attr.gid;
+            rep_entry.attr.rdev = attr.rdev;
+            rep_entry.attr.blksize = attr.blksize;
+            rep_entry.attr.padding = attr.padding;
             rep_open.fh = fh;
             rep_open.open_flags = flags;
             rep_open.padding = 0;

@@ -229,7 +229,6 @@ pub fn force_commit(sb: &RsSuperBlock) {
     WAIT_Q.wake_up();
 }
 
-
 // Commits in-log transaction, persists data to disk.
 fn commit(sb: &RsSuperBlock, log: &mut Log) -> Result<(), Error> {
     if log.lh.n > 0 {

@@ -1,9 +1,9 @@
 use alloc::vec::Vec;
 use core::sync::atomic;
 
-use bento::fuse::*;
 use bento::fuse::reply::*;
 use bento::fuse::request::*;
+use bento::fuse::*;
 
 use bento::kernel;
 use kernel::fs::*;
@@ -58,45 +58,57 @@ impl HelloFS {
     }
 }
 
-impl FileSystem for HelloFS {
+impl Filesystem for HelloFS {
     fn get_name(&self) -> &str {
         Self::NAME
     }
 
-    fn init(&mut self, _sb: RsSuperBlock, _req: &Request, outarg: &mut FuseConnInfo) -> Result<(), i32> {
+    fn init(
+        &mut self,
+        _sb: RsSuperBlock,
+        _req: &Request,
+        outarg: &mut FuseConnInfo,
+    ) -> Result<(), i32> {
         outarg.proto_major = BENTO_KERNEL_VERSION;
         outarg.proto_minor = BENTO_KERNEL_MINOR_VERSION;
-    
+
         let mut bufsize = FUSE_MAX_MAX_PAGES * PAGE_SIZE as u32 + FUSE_BUFFER_HEADER_SIZE;
         let mut max_write = u32::MAX;
         let mut max_readahead = u32::MAX;
-    
+
         if bufsize < FUSE_MIN_READ_BUFFER {
             bufsize = FUSE_MIN_READ_BUFFER;
         }
-    
+
         if max_write > bufsize - FUSE_BUFFER_HEADER_SIZE {
             max_write = bufsize - FUSE_BUFFER_HEADER_SIZE;
         }
-    
+
         if outarg.max_readahead < max_readahead {
             max_readahead = outarg.max_readahead;
         }
-    
+
         outarg.max_readahead = max_readahead;
         outarg.max_write = max_write;
         outarg.max_background = 0;
         outarg.congestion_threshold = 0;
         outarg.time_gran = 1;
-    
+
         return Ok(());
     }
 
     fn statfs(&mut self, _sb: RsSuperBlock, _req: &Request, _ino: u64, reply: ReplyStatfs) {
-        reply.statfs(0, 0, 0, 0, 0,512, 255, 0);
+        reply.statfs(0, 0, 0, 0, 0, 512, 255, 0);
     }
 
-    fn open(&mut self, _sb: RsSuperBlock, _req: &Request, nodeid: u64, _flags: u32, reply: ReplyOpen) {
+    fn open(
+        &mut self,
+        _sb: RsSuperBlock,
+        _req: &Request,
+        nodeid: u64,
+        _flags: u32,
+        reply: ReplyOpen,
+    ) {
         if nodeid != 2 {
             reply.error(-(EISDIR as i32));
         } else {
@@ -104,7 +116,14 @@ impl FileSystem for HelloFS {
         }
     }
 
-    fn opendir(&mut self, _sb: RsSuperBlock, _req: &Request, nodeid: u64, _flags: u32, reply: ReplyOpen) {
+    fn opendir(
+        &mut self,
+        _sb: RsSuperBlock,
+        _req: &Request,
+        nodeid: u64,
+        _flags: u32,
+        reply: ReplyOpen,
+    ) {
         if nodeid != 1 {
             reply.error(-(EISDIR as i32));
         } else {
@@ -112,12 +131,7 @@ impl FileSystem for HelloFS {
         }
     }
 
-    fn getattr(&mut self,
-        _sb: RsSuperBlock,
-        _req: &Request,
-        nodeid: u64,
-        reply: ReplyAttr,
-    ) {
+    fn getattr(&mut self, _sb: RsSuperBlock, _req: &Request, nodeid: u64, reply: ReplyAttr) {
         let attr_valid = Timespec::new(1, 999999999);
         let mut attr = fuse_attr::new();
         if HelloFS::hello_stat(nodeid, &mut attr) == -1 {
@@ -127,7 +141,8 @@ impl FileSystem for HelloFS {
         }
     }
 
-    fn lookup(&mut self, 
+    fn lookup(
+        &mut self,
         _sb: RsSuperBlock,
         _req: &Request,
         nodeid: u64,
@@ -158,14 +173,14 @@ impl FileSystem for HelloFS {
         _fh: u64,
         offset: i64,
         _size: u32,
-        reply: ReplyData
+        reply: ReplyData,
     ) {
         if nodeid != 2 {
             reply.error(-(ENOENT as i32));
             return;
         }
         let copy_len = LEN.load(atomic::Ordering::SeqCst) - offset as usize;
-    
+
         let maybe_bh = sb_bread_rust(&sb, 0);
         let bh;
         match maybe_bh {
@@ -173,7 +188,7 @@ impl FileSystem for HelloFS {
             None => {
                 reply.error(-(EIO as i32));
                 return;
-            },
+            }
         }
 
         let mut buf_vec: Vec<u8> = vec![0; copy_len];
@@ -196,15 +211,15 @@ impl FileSystem for HelloFS {
         offset: i64,
         data: &[u8],
         _flags: u32,
-        reply: ReplyWrite
+        reply: ReplyWrite,
     ) {
         let total_len = data.len() + offset as usize;
-    
+
         if nodeid != 2 {
             reply.error(-(ENOENT as i32));
             return;
         }
-    
+
         let maybe_bh = sb_bread_rust(&sb, 0);
         let mut bh;
         match maybe_bh {
@@ -212,7 +227,7 @@ impl FileSystem for HelloFS {
             None => {
                 reply.error(-(EIO as i32));
                 return;
-            },
+            }
         }
         {
             let mut b_data = bh.get_buffer_data();
@@ -224,7 +239,7 @@ impl FileSystem for HelloFS {
             write_region.copy_from_slice(data_region);
             LEN.store(total_len, atomic::Ordering::SeqCst);
         }
-    
+
         bh.mark_buffer_dirty();
         bh.sync_dirty_buffer();
         reply.written(data.len() as u32);
@@ -237,7 +252,7 @@ impl FileSystem for HelloFS {
         nodeid: u64,
         _fh: u64,
         offset: i64,
-        reply: ReplyDirectory
+        reply: ReplyDirectory,
     ) {
         if nodeid != 1 {
             reply.error(-(ENOTDIR as i32));
@@ -246,12 +261,7 @@ impl FileSystem for HelloFS {
         let mut buf_off = 1;
         let mut inarg_offset = offset;
         if inarg_offset < 1 {
-            if reply.add(
-                1 as u64,
-                buf_off,
-                0,
-                ".",
-            ) {
+            if reply.add(1 as u64, buf_off, 0, ".") {
                 reply.ok();
                 return;
             };
@@ -259,12 +269,7 @@ impl FileSystem for HelloFS {
         inarg_offset -= 1;
         buf_off += 1;
         if inarg_offset < 1 {
-            if reply.add(
-                2 as u64,
-                buf_off,
-                0,
-                HELLO_NAME,
-            ) {
+            if reply.add(2 as u64, buf_off, 0, HELLO_NAME) {
                 reply.ok();
                 return;
             };
@@ -272,12 +277,7 @@ impl FileSystem for HelloFS {
         inarg_offset -= 1;
         buf_off += 1;
         if inarg_offset < 1 {
-            if reply.add(
-                1 as u64,
-                buf_off,
-                0,
-                "..",
-            ) {
+            if reply.add(1 as u64, buf_off, 0, "..") {
                 reply.ok();
                 return;
             };
@@ -292,7 +292,7 @@ impl FileSystem for HelloFS {
         _ino: u64,
         _fh: u64,
         _datasync: bool,
-        reply: ReplyEmpty
+        reply: ReplyEmpty,
     ) {
         let mut error_sector = 0;
         blkdev_issue_flush_rust(&sb.s_bdev(), GFP_KERNEL as usize, &mut error_sector);

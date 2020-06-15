@@ -11,8 +11,8 @@
 extern crate alloc;
 
 use bento;
-use bento::fuse::*;
 use bento::c_str;
+use bento::fuse::*;
 use bento::println;
 
 pub mod hello_ll;

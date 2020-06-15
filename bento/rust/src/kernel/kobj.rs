@@ -83,9 +83,7 @@ impl CStr {
     }
 
     pub unsafe fn from_raw(inner: *const c_char) -> Self {
-        Self {
-            inner: inner
-        }
+        Self { inner: inner }
     }
 
     /// Calculate the length of the CStr.

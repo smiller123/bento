@@ -11,8 +11,8 @@
 extern crate alloc;
 extern crate bento;
 
-use bento::fuse::*;
 use bento::c_str;
+use bento::fuse::*;
 use bento::println;
 
 extern crate arr_macro;

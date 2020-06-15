@@ -40,4 +40,3 @@ impl fuse_attr {
         }
     }
 }
-
