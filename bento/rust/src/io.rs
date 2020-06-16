@@ -1,3 +1,12 @@
+/*
+ * SPDX-License-Identifier: GPL-2.0
+ * Copyright (C) 2020 Samantha Miller, Kaiyuan Zhang, Danyang Zhuo, Tom
+      Anderson, Ang Chen, University of Washington
+ *
+ * Partially based on code from fishinabarrel/linux-kernel-module-rust on Github
+ *
+ */
+
 use core;
 
 use core::cmp;

@@ -1,4 +1,5 @@
-/// Build file borrowed from fishinabarrel/linux-kernel-module-rust on Github.
+// SPDX-License-Identifier: GPL-2.0
+// Build file from fishinabarrel/linux-kernel-module-rust on Github.
 extern crate bindgen;
 extern crate cc;
 extern crate shlex;

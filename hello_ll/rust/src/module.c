@@ -1,3 +1,10 @@
+/*
+ * SPDX-License-Identifier: GPL-2.0 OR MIT
+ *
+ * Copyright (C) 2020 Samantha Miller, Kaiyuan Zhang, Danyang Zhuo, Tom
+      Anderson, Ang Chen, University of Washington
+ */
+
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -31,4 +38,4 @@ static void hello_exit(void)
 module_init(hello_init);
 module_exit(hello_exit);
 
-MODULE_LICENSE("MIT");
+MODULE_LICENSE("Dual MIT/GPL");

@@ -1,4 +1,10 @@
-// Implementation from linux-kernel-module-rust on Github
+/*
+ * SPDX-License-Identifier: GPL-2.0
+ * Copyright (C) 2020 Samantha Miller, Kaiyuan Zhang, Danyang Zhuo, Tom
+      Anderson, Ang Chen, University of Washington
+ *
+ * Based on code from fishinabarrel/linux-kernel-module-rust on Github
+ */
 
 use core::alloc::{GlobalAlloc, Layout};
 use kernel::ffi::*;

@@ -1,3 +1,11 @@
+/*
+ * SPDX-License-Identifier: GPL-2.0
+ * Copyright (C) 2020 Samantha Miller, Kaiyuan Zhang, Danyang Zhuo, Tom
+      Anderson, Ang Chen, University of Washington
+ *
+ * Based on a no_std lock implementation provided by the spin_rs crate.
+ */
+
 use core::cell::UnsafeCell;
 use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};

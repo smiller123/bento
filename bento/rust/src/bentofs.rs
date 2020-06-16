@@ -1,3 +1,11 @@
+/*
+ * SPDX-License-Identifier: GPL-2.0
+ * Copyright (C) 2020 Samantha Miller, Kaiyuan Zhang, Danyang Zhuo, Tom
+      Anderson, Ang Chen, University of Washington
+ *
+ */
+
+
 use crate::bindings::*;
 use kernel::errno;
 use kernel::ffi::*;

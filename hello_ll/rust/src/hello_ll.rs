@@ -1,3 +1,10 @@
+/*
+ * SPDX-License-Identifier: GPL-2.0 OR MIT
+ *
+ * Copyright (C) 2020 Samantha Miller, Kaiyuan Zhang, Danyang Zhuo, Tom
+      Anderson, Ang Chen, University of Washington
+ */
+
 use core::sync::atomic;
 
 use bento::bentofs::*;
