@@ -23,7 +23,7 @@ use crate::xv6fs_utils::*;
 use bento::println;
 use bento::DataBlock;
 
-//pub static DISK: Semaphore<SimpleDisk> = Semaphore::new(SimpleDisk::new());
+pub static DISK: Semaphore<Option<Disk>> = Semaphore::new(None);
 
 // 'SB': the in-memory data structure for the xv6 superblock, with semaphore support.
 pub static SB: Semaphore<Xv6fsSB> = Semaphore::new(Xv6fsSB {
@@ -39,21 +39,25 @@ pub static SB: Semaphore<Xv6fsSB> = Semaphore::new(Xv6fsSB {
 static LAST_BLOCK: AtomicUsize = AtomicUsize::new(0);
 
 // Read xv6 superblock from disk
-fn readsb(sb: &RsSuperBlock, xv6fs_sb: &mut Xv6fsSB) -> Result<(), Error> {
-    let bh = sb_bread_rust(sb, 1).ok_or(Error::EIO)?;
-
-    let mut b_data = bh.get_buffer_data();
-    b_data.truncate(mem::size_of::<Xv6fsSB>());
-    let b_slice = b_data.to_slice();
-    xv6fs_sb.extract_from(b_slice).map_err(|_| Error::EIO)?;
+fn readsb(xv6fs_sb: &mut Xv6fsSB) -> Result<(), Error> {
+    let disk_guard = DISK.read();
+    if let Some(disk) = &*disk_guard {
+        let bh = disk.bread(1)?;
+        let b_slice = bh.data();
+        xv6fs_sb.extract_from(&b_slice[0..mem::size_of::<Xv6fsSB>()]).map_err(|_| Error::EIO)?;
+    }
     return Ok(());
 }
 
-pub fn bzero(sb: &RsSuperBlock, bno: usize) -> Result<(), Error> {
-    let mut bh = sb_bread_rust(sb, bno as u64).ok_or(Error::EIO)?;
+pub fn bzero(bno: usize) -> Result<(), Error> {
+    let disk_guard = DISK.read();
+    let disk = disk_guard.as_ref().unwrap();
+    let mut bh = disk.bread(bno as u64)?;
 
-    let mut b_data = bh.get_buffer_data();
-    kmem::memset_rust(&mut b_data, 0, BSIZE as u64).map_err(|_| Error::EIO)?;
+    let b_slice = bh.data_mut();
+    for byte in b_slice {
+        *byte = 0;
+    }
 
     bh.mark_buffer_dirty();
     log_write(bno as u32);
@@ -63,7 +67,7 @@ pub fn bzero(sb: &RsSuperBlock, bno: usize) -> Result<(), Error> {
 
 // Allocate a block on disk, using a slightly different alloc strategy from xv6.
 // xv6 scans from 0th block and allocates the first available block, we scan from the latest used block since last boot.
-pub fn balloc(sb: &RsSuperBlock) -> Result<u32, Error> {
+pub fn balloc() -> Result<u32, Error> {
     let fs_size = SB.read().size;
     let mut allocated_block = None;
 
@@ -77,10 +81,11 @@ pub fn balloc(sb: &RsSuperBlock) -> Result<u32, Error> {
     let mut b = last_segment;
 
     while first || b < last_segment {
+        let disk_guard = DISK.read();
+        let disk = disk_guard.as_ref().unwrap();
         // Read bitmap block that contains bitmap for b/last_segment, bitmap_slice contains the data
-        let mut bh = sb_bread_rust(sb, bblock(b as usize, &SB.read()) as u64).ok_or(Error::EIO)?;
-        let mut b_data = bh.get_buffer_data();
-        let bitmap_slice = b_data.to_slice_mut();
+        let mut bh = disk.bread(bblock(b as usize, &SB.read()) as u64)?;
+        let bitmap_slice = bh.data_mut();
 
         let mut changed = false;
 
@@ -112,7 +117,7 @@ pub fn balloc(sb: &RsSuperBlock) -> Result<u32, Error> {
         // extract new block ID x
         if let Some(x) = allocated_block {
             LAST_BLOCK.store(x as usize, Ordering::SeqCst);
-            bzero(sb, x as usize)?;
+            bzero(x as usize)?;
             return Ok(x);
         }
 
@@ -127,13 +132,15 @@ pub fn balloc(sb: &RsSuperBlock) -> Result<u32, Error> {
     return Err(Error::EIO);
 }
 
-pub fn bfree(sb: &RsSuperBlock, block_id: usize) -> Result<(), Error> {
+pub fn bfree(block_id: usize) -> Result<(), Error> {
     // Get block number
     let block_num = bblock(block_id, &SB.read());
 
     // Read block
-    let mut bh = sb_bread_rust(sb, block_num as u64).ok_or(Error::EIO)?;
-    let mut b_data = bh.get_buffer_data();
+    let disk_guard = DISK.read();
+    let disk = disk_guard.as_ref().unwrap();
+    let mut bh = disk.bread(block_num as u64)?;
+    let b_slice = bh.data_mut();
 
     // Get bit id
     let bit_id = block_id % BPB;
@@ -141,7 +148,7 @@ pub fn bfree(sb: &RsSuperBlock, block_id: usize) -> Result<(), Error> {
     let bit_in_byte = bit_id % 8;
 
     // Clear the bit
-    let maybe_mut_byte = b_data.to_slice_mut().get_mut(byte_id);
+    let maybe_mut_byte = b_slice.get_mut(byte_id);
     let mut_byte = maybe_mut_byte.ok_or(Error::EIO)?;
 
     *mut_byte &= !(1 << bit_in_byte);
@@ -159,13 +166,13 @@ pub static ILOCK_CACHE: Semaphore<[Semaphore<Inode>; NINODE]> =
 pub static IALLOC_LOCK: Semaphore<usize> = Semaphore::new(0);
 pub static BALLOC_LOCK: Semaphore<usize> = Semaphore::new(0);
 
-pub fn iinit(sb: &RsSuperBlock) {
+pub fn iinit() {
     SB.init();
     let mut sb_ref = SB.write();
-    if readsb(sb, &mut sb_ref).is_err() {
+    if readsb(&mut sb_ref).is_err() {
         println!("Unable to read super block from disk.");
     }
-    let _ = initlog(sb, &mut sb_ref);
+    let _ = initlog(&mut sb_ref);
     println!(
         "sb: size {}, nblocks {}, ninodes {}, nlog {}, logstart {} inodestart {}, bmap start {}",
         sb_ref.size,
@@ -185,13 +192,14 @@ pub fn iinit(sb: &RsSuperBlock) {
     }
 }
 
-pub fn ialloc<'a>(sb: &'a RsSuperBlock, i_type: u16) -> Result<CachedInode<'a>, Error> {
+pub fn ialloc(i_type: u16) -> Result<CachedInode, Error> {
     let num_inodes = SB.read().ninodes;
     for block_inum in (0..num_inodes as usize).step_by(IPB) {
         let _guard = IALLOC_LOCK.write();
-        let mut bh = sb_bread_rust(sb, iblock(block_inum, &SB.read()) as u64).ok_or(Error::EIO)?;
-        let mut b_data = bh.get_buffer_data();
-        let data_slice = b_data.to_slice_mut();
+        let disk_guard = DISK.read();
+        let disk = disk_guard.as_ref().unwrap();
+        let mut bh = disk.bread(iblock(block_inum, &SB.read()) as u64)?;
+        let data_slice = bh.data_mut();
         for inum_idx in (block_inum % IPB)..IPB {
             let inum = block_inum + inum_idx;
             if inum == 0 {
@@ -206,39 +214,38 @@ pub fn ialloc<'a>(sb: &'a RsSuperBlock, i_type: u16) -> Result<CachedInode<'a>, 
             let mut dinode = Xv6fsInode::new();
             dinode.extract_from(inode_slice).map_err(|_| Error::EIO)?;
             let mut allocated = false;
-            {
-                // Check if inode is free
-                if dinode.inode_type == 0 {
-                    dinode.major = 0;
-                    dinode.minor = 0;
-                    dinode.size = 0;
-                    for addr_mut in dinode.addrs.iter_mut() {
-                        *addr_mut = 0;
-                    }
-                    dinode.inode_type = i_type;
-                    dinode.nlink = 1;
-                    dinode.dump_into(inode_slice).map_err(|_| Error::EIO)?;
-                    bh.mark_buffer_dirty();
-                    log_write(iblock(block_inum, &SB.read()) as u32);
-                    allocated = true;
+            // Check if inode is free
+            if dinode.inode_type == 0 {
+                dinode.major = 0;
+                dinode.minor = 0;
+                dinode.size = 0;
+                for addr_mut in dinode.addrs.iter_mut() {
+                    *addr_mut = 0;
                 }
+                dinode.inode_type = i_type;
+                dinode.nlink = 1;
+                dinode.dump_into(inode_slice).map_err(|_| Error::EIO)?;
+                allocated = true;
             }
 
             if allocated {
-                return iget(sb, inum as u64);
+                bh.mark_buffer_dirty();
+                log_write(iblock(block_inum, &SB.read()) as u32);
+                return iget(inum as u64);
             }
         }
     }
     return Err(Error::EIO);
 }
 
-pub fn iupdate(sb: &RsSuperBlock, internals: &InodeInternal, inum: u32) -> Result<(), Error> {
-    let mut bh = sb_bread_rust(sb, iblock(inum as usize, &SB.read()) as u64).ok_or(Error::EIO)?;
-    let mut b_data = bh.get_buffer_data();
+pub fn iupdate(internals: &InodeInternal, inum: u32) -> Result<(), Error> {
+    let disk_guard = DISK.read();
+    let disk = disk_guard.as_ref().unwrap();
+    let mut bh = disk.bread(iblock(inum as usize, &SB.read()) as u64)?;
+    let data_slice = bh.data_mut();
 
     // Get the specific inode offset
     let inode_offset = (inum as usize % IPB) * mem::size_of::<Xv6fsInode>();
-    let data_slice = b_data.to_slice_mut();
     let inode_slice = &mut data_slice[inode_offset..inode_offset + mem::size_of::<Xv6fsInode>()];
 
     let mut disk_inode = Xv6fsInode::new();
@@ -258,7 +265,7 @@ pub fn iupdate(sb: &RsSuperBlock, internals: &InodeInternal, inum: u32) -> Resul
     return Ok(());
 }
 
-pub fn iget<'a>(sb: &'a RsSuperBlock, inum: u64) -> Result<CachedInode<'a>, Error> {
+pub fn iget(inum: u64) -> Result<CachedInode, Error> {
     let mut final_idx = None;
 
     let ilock_cache = ILOCK_CACHE.read();
@@ -268,11 +275,11 @@ pub fn iget<'a>(sb: &'a RsSuperBlock, inum: u64) -> Result<CachedInode<'a>, Erro
             continue;
         }
         let mut inode = inode_opt.ok_or(Error::EIO)?;
-        if inode.nref > 0 && inode.dev == sb.get_raw() as u32 && inode.inum == inum as u32 {
+        // TODO: get dev id
+        if inode.nref > 0 && inode.dev == 3 as u32 && inode.inum == inum as u32 {
             inode.nref += 1;
 
             return Ok(CachedInode {
-                sb: sb,
                 idx: idx,
                 inum: inum as u32,
             });
@@ -282,7 +289,7 @@ pub fn iget<'a>(sb: &'a RsSuperBlock, inum: u64) -> Result<CachedInode<'a>, Erro
                 let mut new_inode_int = inode.internals.write();
                 new_inode_int.valid = 0;
             }
-            inode.dev = sb.get_raw() as u32;
+            inode.dev = 3 as u32;
             inode.inum = inum as u32;
             inode.nref = 1;
             final_idx = Some(idx);
@@ -292,17 +299,15 @@ pub fn iget<'a>(sb: &'a RsSuperBlock, inum: u64) -> Result<CachedInode<'a>, Erro
     let new_inode_idx = final_idx.ok_or(Error::EIO)?;
 
     let ret = Ok(CachedInode {
-        sb: sb,
         idx: new_inode_idx,
         inum: inum as u32,
     });
     return ret;
 }
 
-pub fn ilock<'a>(
-    sb: &RsSuperBlock,
+pub fn ilock(
     inode_idx: usize,
-    icache: &'a [Semaphore<Inode>; 300],
+    icache: &[Semaphore<Inode>; 300],
     inum: u32,
 ) -> Result<SemaphoreReadGuard<Inode>, Error> {
     let inode_outer_lock = icache.get(inode_idx).ok_or(Error::EIO)?;
@@ -311,41 +316,42 @@ pub fn ilock<'a>(
         let mut internals = inode_outer.internals.write();
 
         if internals.valid == 0 {
-            let bh =
-                sb_bread_rust(sb, iblock(inum as usize, &SB.read()) as u64).ok_or(Error::EIO)?;
-            let b_data = bh.get_buffer_data();
+            let disk_guard = DISK.read();
+            if let Some(disk) = &*disk_guard {
+                let bh = disk.bread(iblock(inum as usize, &SB.read()) as u64)?;
+                let data_slice = bh.data();
 
-            // Get the specific inode offset
-            let inode_offset = (inum as usize % IPB) * mem::size_of::<Xv6fsInode>();
+                // Get the specific inode offset
+                let inode_offset = (inum as usize % IPB) * mem::size_of::<Xv6fsInode>();
 
-            let data_slice = b_data.to_slice();
-            let inode_slice =
-                &data_slice[inode_offset..inode_offset + mem::size_of::<Xv6fsInode>()];
-            let mut disk_inode = Xv6fsInode::new();
-            disk_inode
-                .extract_from(inode_slice)
-                .map_err(|_| Error::EIO)?;
+                let inode_slice =
+                    &data_slice[inode_offset..inode_offset + mem::size_of::<Xv6fsInode>()];
+                let mut disk_inode = Xv6fsInode::new();
+                disk_inode
+                    .extract_from(inode_slice)
+                    .map_err(|_| Error::EIO)?;
 
-            internals.valid = 0;
-            internals.inode_type = disk_inode.inode_type;
-            internals.major = disk_inode.major;
-            internals.minor = disk_inode.minor;
-            internals.nlink = disk_inode.nlink;
-            internals.size = disk_inode.size;
-            internals.addrs.copy_from_slice(&disk_inode.addrs);
-            internals.valid = 1;
-            if internals.inode_type == 0 {
-                return Err(Error::EIO);
+                internals.valid = 0;
+                internals.inode_type = disk_inode.inode_type;
+                internals.major = disk_inode.major;
+                internals.minor = disk_inode.minor;
+                internals.nlink = disk_inode.nlink;
+                internals.size = disk_inode.size;
+                internals.addrs.copy_from_slice(&disk_inode.addrs);
+                internals.valid = 1;
+                if internals.inode_type == 0 {
+                    return Err(Error::EIO);
+                }
             }
         }
     }
     return Ok(inode_outer);
 }
 
-pub fn iput<'a>(inode: &mut CachedInode<'a>) -> Result<(), Error> {
+pub fn iput<'a>(inode: &mut CachedInode) -> Result<(), Error> {
     let ilock_cache = ILOCK_CACHE.read();
     {
-        let inode_guard = ilock(inode.sb, inode.idx, &ilock_cache, inode.inum)?;
+        let inode_guard = ilock(inode.idx, &ilock_cache, inode.inum)?;
         let mut internals = inode_guard.internals.write();
         if internals.valid != 0 && internals.nlink == 0 {
             let r;
@@ -357,7 +363,7 @@ pub fn iput<'a>(inode: &mut CachedInode<'a>) -> Result<(), Error> {
             if r == 1 {
                 itrunc(inode, &mut internals)?;
                 internals.inode_type = 0;
-                iupdate(inode.sb, &internals, inode.inum)?;
+                iupdate(&internals, inode.inum)?;
                 internals.valid = 0;
             }
         }
@@ -369,12 +375,12 @@ pub fn iput<'a>(inode: &mut CachedInode<'a>) -> Result<(), Error> {
     return Ok(());
 }
 
-pub fn bmap(sb: &RsSuperBlock, inode: &mut InodeInternal, blk_idx: usize) -> Result<u32, Error> {
+pub fn bmap(inode: &mut InodeInternal, blk_idx: usize) -> Result<u32, Error> {
     let mut idx = blk_idx;
     if idx < NDIRECT as usize {
         let addr = inode.addrs.get_mut(idx).ok_or(Error::EIO)?;
         if *addr == 0 {
-            return balloc(sb).map(|blk_id| {
+            return balloc().map(|blk_id| {
                 *addr = blk_id;
                 blk_id
             });
@@ -387,13 +393,15 @@ pub fn bmap(sb: &RsSuperBlock, inode: &mut InodeInternal, blk_idx: usize) -> Res
         // indirect block
         let ind_blk_id = inode.addrs.get_mut(NDIRECT as usize).ok_or(Error::EIO)?;
         if *ind_blk_id == 0 {
-            balloc(sb).map(|blk_id| {
+            balloc().map(|blk_id| {
                 *ind_blk_id = blk_id;
             })?;
         }
 
         let result_blk_id: u32;
-        let mut bh = sb_bread_rust(sb, *ind_blk_id as u64).ok_or(Error::EIO)?;
+        let disk_guard = DISK.read();
+        let disk = disk_guard.as_ref().unwrap();
+        let mut bh = disk.bread(*ind_blk_id as u64)?;
         let b_data = bh.get_buffer_data();
 
         let mut blks_cont = b_data.into_container::<u32>().ok_or(Error::EIO)?;
@@ -401,7 +409,7 @@ pub fn bmap(sb: &RsSuperBlock, inode: &mut InodeInternal, blk_idx: usize) -> Res
         let cell: &mut u32 = blks.get_mut(idx).ok_or(Error::EIO)?;
         if *cell == 0 {
             // need to allocate blk
-            result_blk_id = balloc(sb)?;
+            result_blk_id = balloc()?;
             *cell = result_blk_id;
             bh.mark_buffer_dirty();
             log_write(*ind_blk_id);
@@ -421,12 +429,14 @@ pub fn bmap(sb: &RsSuperBlock, inode: &mut InodeInternal, blk_idx: usize) -> Res
             .get_mut(NDIRECT as usize + 1)
             .ok_or(Error::EIO)?;
         if *dind_blk_id == 0 {
-            balloc(sb).map(|blk_id| {
+            balloc().map(|blk_id| {
                 *dind_blk_id = blk_id;
             })?;
         }
 
-        let mut bh = sb_bread_rust(sb, *dind_blk_id as u64).ok_or(Error::EIO)?;
+        let disk_guard = DISK.read();
+        let disk = disk_guard.as_ref().unwrap();
+        let mut bh = disk.bread(*dind_blk_id as u64)?;
         let b_data = bh.get_buffer_data();
         let dind_idx = idx / NINDIRECT as usize;
 
@@ -434,12 +444,12 @@ pub fn bmap(sb: &RsSuperBlock, inode: &mut InodeInternal, blk_idx: usize) -> Res
         let blks = blks_cont.to_slice_mut();
         let cell: &mut u32 = blks.get_mut(dind_idx).ok_or(Error::EIO)?;
         if *cell == 0 {
-            *cell = balloc(sb)?;
+            *cell = balloc()?;
             bh.mark_buffer_dirty();
             log_write(*dind_blk_id);
         }
 
-        let mut dbh = sb_bread_rust(sb, *cell as u64).ok_or(Error::EIO)?;
+        let mut dbh = disk.bread(*cell as u64)?;
         let db_data = dbh.get_buffer_data();
         let dblock_idx = idx % NINDIRECT as usize;
 
@@ -448,7 +458,7 @@ pub fn bmap(sb: &RsSuperBlock, inode: &mut InodeInternal, blk_idx: usize) -> Res
         let dblks = dblks_cont.to_slice_mut();
         let dcell: &mut u32 = dblks.get_mut(dblock_idx).ok_or(Error::EIO)?;
         if *dcell == 0 {
-            result_blk_id = balloc(sb)?;
+            result_blk_id = balloc()?;
             *dcell = result_blk_id;
             dbh.mark_buffer_dirty();
             log_write(*dcell);
@@ -461,21 +471,23 @@ pub fn bmap(sb: &RsSuperBlock, inode: &mut InodeInternal, blk_idx: usize) -> Res
     return Err(Error::EIO);
 }
 
-pub fn itrunc<'a>(inode: &mut CachedInode<'a>, internals: &mut InodeInternal) -> Result<(), Error> {
+pub fn itrunc(inode: &mut CachedInode, internals: &mut InodeInternal) -> Result<(), Error> {
     for i in 0..NDIRECT as usize {
         let addr = internals.addrs.get_mut(i).ok_or(Error::EIO)?;
         if *addr != 0 {
-            bfree(inode.sb, *addr as usize)?;
+            bfree(*addr as usize)?;
             *addr = 0;
         }
     }
 
+    let disk_guard = DISK.read();
+    let disk = disk_guard.as_ref().unwrap();
     let ind_blk_id = internals
         .addrs
         .get_mut(NDIRECT as usize)
         .ok_or(Error::EIO)?;
     if *ind_blk_id != 0 {
-        let bh = sb_bread_rust(inode.sb, *ind_blk_id as u64).ok_or(Error::EIO)?;
+        let bh = disk.bread(*ind_blk_id as u64)?;
         let b_data = bh.get_buffer_data();
 
         let mut blks_cont = b_data.into_container::<u32>().ok_or(Error::EIO)?;
@@ -483,10 +495,10 @@ pub fn itrunc<'a>(inode: &mut CachedInode<'a>, internals: &mut InodeInternal) ->
         for i in 0..NINDIRECT as usize {
             let addr = blks.get_mut(i).ok_or(Error::EIO)?;
             if *addr != 0 {
-                bfree(inode.sb, *addr as usize)?;
+                bfree(*addr as usize)?;
             }
         }
-        bfree(inode.sb, *ind_blk_id as usize)?;
+        bfree(*ind_blk_id as usize)?;
         *ind_blk_id = 0;
     }
     let dind_blk_id = internals
@@ -494,7 +506,7 @@ pub fn itrunc<'a>(inode: &mut CachedInode<'a>, internals: &mut InodeInternal) ->
         .get_mut(NDIRECT as usize + 1)
         .ok_or(Error::EIO)?;
     if *dind_blk_id != 0 {
-        let bh = sb_bread_rust(inode.sb, *dind_blk_id as u64).ok_or(Error::EIO)?;
+        let bh = disk.bread(*dind_blk_id as u64)?;
         let b_data = bh.get_buffer_data();
 
         let mut blks_cont = b_data.into_container::<u32>().ok_or(Error::EIO)?;
@@ -502,7 +514,7 @@ pub fn itrunc<'a>(inode: &mut CachedInode<'a>, internals: &mut InodeInternal) ->
         for i in 0..NINDIRECT as usize {
             let ind_blk_id = blks.get_mut(i).ok_or(Error::EIO)?;
             if *ind_blk_id != 0 {
-                let dbh = sb_bread_rust(inode.sb, *ind_blk_id as u64).ok_or(Error::EIO)?;
+                let dbh = disk.bread(*ind_blk_id as u64)?;
                 let db_data = dbh.get_buffer_data();
 
                 let mut dblks_cont = db_data.into_container::<u32>().ok_or(Error::EIO)?;
@@ -510,19 +522,19 @@ pub fn itrunc<'a>(inode: &mut CachedInode<'a>, internals: &mut InodeInternal) ->
                 for j in 0..NINDIRECT as usize {
                     let daddr = dblks.get_mut(j).ok_or(Error::EIO)?;
                     if *daddr != 0 {
-                        bfree(inode.sb, *daddr as usize)?;
+                        bfree(*daddr as usize)?;
                     }
                 }
-                bfree(inode.sb, *ind_blk_id as usize)?;
+                bfree(*ind_blk_id as usize)?;
                 *ind_blk_id = 0;
             }
         }
-        bfree(inode.sb, *dind_blk_id as usize)?;
+        bfree(*dind_blk_id as usize)?;
         *dind_blk_id = 0;
     }
 
     internals.size = 0;
-    return iupdate(inode.sb, &internals, inode.inum);
+    return iupdate(&internals, inode.inum);
 }
 
 pub fn stati(ino: u64, stbuf: &mut fuse_attr, internals: &InodeInternal) -> Result<(), Error> {
@@ -554,7 +566,6 @@ pub fn stati(ino: u64, stbuf: &mut fuse_attr, internals: &InodeInternal) -> Resu
 }
 
 pub fn readi(
-    sb: &RsSuperBlock,
     buf: &mut [u8],
     _off: usize,
     _n: usize,
@@ -574,12 +585,13 @@ pub fn readi(
     let mut tot = 0;
 
     while tot < n {
-        let block_no = bmap(sb, internals, off / BSIZE)?;
+        let block_no = bmap(internals, off / BSIZE)?;
         m = min(n - tot, BSIZE - off % BSIZE);
+        let disk_guard = DISK.read();
+        let disk = disk_guard.as_ref().unwrap();
+        let bh = disk.bread(block_no as u64)?;
+        let data_slice = bh.data();
 
-        let bh = sb_bread_rust(sb, block_no as u64).ok_or(Error::EIO)?;
-        let b_data = bh.get_buffer_data();
-        let data_slice = b_data.to_slice();
         let data_off = off % BSIZE;
         let data_region = &data_slice[data_off..data_off + m];
 
@@ -594,7 +606,6 @@ pub fn readi(
 }
 
 pub fn writei(
-    sb: &RsSuperBlock,
     buf: &[u8],
     _off: usize,
     n: usize,
@@ -620,10 +631,12 @@ pub fn writei(
             if written_blocks >= max_blocks {
                 break;
             }
-            let block_no = bmap(sb, internals, start_off / BSIZE)?;
+            let block_no = bmap(internals, start_off / BSIZE)?;
+            let disk_guard = DISK.read();
+            let disk = disk_guard.as_ref().unwrap();
+            let mut bh = disk.bread(block_no as u64)?;
 
-            let mut bh = sb_bread_rust(sb, block_no as u64).ok_or(Error::EIO)?;
-            let b_data = bh.get_mut_data();
+            let b_data = bh.data_mut();
 
             let m = min(off - start_off, BSIZE - start_off % BSIZE);
             for i in start_off..start_off + m {
@@ -646,13 +659,15 @@ pub fn writei(
         if written_blocks >= max_blocks {
             break;
         }
-        let block_no = bmap(sb, internals, off / BSIZE)?;
+        let block_no = bmap(internals, off / BSIZE)?;
         let m = min(n - tot, BSIZE - off % BSIZE);
 
-        let mut bh = sb_bread_rust(sb, block_no as u64).ok_or(Error::EIO)?;
-        let mut b_data = bh.get_buffer_data();
+        let disk_guard = DISK.read();
+        let disk = disk_guard.as_ref().unwrap();
+        let mut bh = disk.bread(block_no as u64)?;
+
+        let data_slice = bh.data_mut();
         let data_off = off % BSIZE;
-        let data_slice = b_data.to_slice_mut();
         let data_region = &mut data_slice[data_off..data_off + m];
 
         let copy_region = &buf[src..src + m];
@@ -669,7 +684,7 @@ pub fn writei(
 
     if n > 0 && end_size > i_size {
         internals.size = end_size as u64;
-        iupdate(sb, internals, inum)?;
+        iupdate(internals, inum)?;
     }
     return Ok(n);
 }
@@ -678,12 +693,11 @@ pub fn namecmp(s: &CStr, t: &str) -> i32 {
     return strcmp_rs(s.to_raw() as *const i8, t.as_ptr() as *const i8);
 }
 
-pub fn dirlookup<'a>(
-    sb: &'a RsSuperBlock,
+pub fn dirlookup(
     internals: &mut InodeInternal,
     name: &CStr,
     poff: &mut u64,
-) -> Result<CachedInode<'a>, Error> {
+) -> Result<CachedInode, Error> {
     // Check if inode is directory
     if internals.inode_type != T_DIR {
         return Err(Error::ENOTDIR);
@@ -698,7 +712,7 @@ pub fn dirlookup<'a>(
 
     for block_idx in 0..num_blocks {
         let de_arr_slice = de_arr_cont.to_slice_mut();
-        readi(sb, de_arr_slice, BSIZE * block_idx, BSIZE, internals)?;
+        readi(de_arr_slice, BSIZE * block_idx, BSIZE, internals)?;
         // resolve all dirent entries in the current data block.
         for de_idx in 0..BSIZE / de_size {
             let mut de = Xv6fsDirent::new();
@@ -717,7 +731,7 @@ pub fn dirlookup<'a>(
             };
             if namecmp(name, name_str) == 0 {
                 *poff = (block_idx * BSIZE + de_idx * de_size) as u64;
-                return iget(sb, de.inum as u64);
+                return iget(de.inum as u64);
             }
         }
     }
@@ -727,7 +741,6 @@ pub fn dirlookup<'a>(
 
 // create subdirectory with 'name' under the directory pointed to by 'internals'
 pub fn dirlink(
-    sb: &RsSuperBlock,
     internals: &mut InodeInternal,
     name: &CStr,
     child_inum: u32,
@@ -748,7 +761,7 @@ pub fn dirlink(
     };
     for block_idx in 0..num_blocks {
         let de_arr_slice = de_arr_cont.to_slice_mut();
-        readi(sb, de_arr_slice, BSIZE * block_idx, BSIZE, internals)?;
+        readi(de_arr_slice, BSIZE * block_idx, BSIZE, internals)?;
 
         for de_idx in 0..BSIZE / de_size {
             if (block_idx * BSIZE + de_idx * de_size) >= internals.size as usize {
@@ -789,7 +802,6 @@ pub fn dirlink(
     de.dump_into(de_slice).map_err(|_| Error::EIO)?;
 
     if writei(
-        sb,
         de_slice,
         final_off as usize,
         buf_len,

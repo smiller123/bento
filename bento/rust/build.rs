@@ -82,6 +82,9 @@ const INCLUDED_FUNCTIONS: &[&str] = &[
     "IS_ERR",
 ];
 const INCLUDED_VARS: &[&str] = &[
+    "FMODE_READ",
+    "FMODE_WRITE",
+    "FMODE_EXCL",
     "EPERM",
     "ENOENT",
     "EIO",

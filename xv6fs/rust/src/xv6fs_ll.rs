@@ -10,6 +10,7 @@ use kernel::kobj::*;
 use kernel::mem as kmem;
 use kernel::raw;
 use kernel::time::*;
+//use kernel::time::*;
 
 use bento::bindings::*;
 use bento::c_str;
@@ -24,52 +25,51 @@ use crate::xv6fs_file::*;
 use crate::xv6fs_fs::*;
 use crate::xv6fs_utils::*;
 
-pub fn create_internal<'a>(
-    sb: &'a RsSuperBlock,
+pub fn create_internal(
     nodeid: u64,
     itype: u16,
     name: &CStr,
-) -> Result<CachedInode<'a>, errno::Error> {
+) -> Result<CachedInode, errno::Error> {
     // Get inode for parent directory
 
-    let parent = iget(sb, nodeid)?;
+    let parent = iget(nodeid)?;
     let icache = ILOCK_CACHE.read();
     // Get inode for new file
-    let parent_inode_guard = ilock(sb, parent.idx, &icache, parent.inum)?;
+    let parent_inode_guard = ilock(parent.idx, &icache, parent.inum)?;
     let mut parent_internals = parent_inode_guard.internals.write();
 
-    let inode = ialloc(sb, itype)?;
+    let inode = ialloc(itype)?;
     if (parent_internals.size as usize + mem::size_of::<Xv6fsDirent>()) > (MAXFILE as usize * BSIZE)
     {
         return Err(errno::Error::EIO);
     }
 
-    let inode_guard = ilock(sb, inode.idx, &icache, inode.inum)?;
+    let inode_guard = ilock(inode.idx, &icache, inode.inum)?;
     let mut internals = inode_guard.internals.write();
 
     internals.major = parent_internals.major;
     internals.minor = parent_internals.minor;
     internals.nlink = 1;
 
-    iupdate(sb, &internals, inode.inum)?;
+    iupdate(&internals, inode.inum)?;
 
     if itype == T_DIR {
         parent_internals.nlink += 1;
-        iupdate(sb, &parent_internals, parent.inum)?;
+        iupdate(&parent_internals, parent.inum)?;
         let d_bytes = &['.' as u8, '\0' as u8];
         let d = CStr::from_bytes_with_nul(d_bytes)?;
-        dirlink(sb, &mut internals, &d, inode.inum, inode.inum)?;
+        dirlink(&mut internals, &d, inode.inum, inode.inum)?;
 
         let dd_bytes = &['.' as u8, '.' as u8, '\0' as u8];
         let dd = CStr::from_bytes_with_nul(dd_bytes)?;
-        dirlink(sb, &mut internals, &dd, nodeid as u32, inode.inum)?;
+        dirlink(&mut internals, &dd, nodeid as u32, inode.inum)?;
     }
 
-    dirlink(sb, &mut parent_internals, name, inode.inum, parent.inum)?;
+    dirlink(&mut parent_internals, name, inode.inum, parent.inum)?;
     return Ok(inode);
 }
 
-fn isdirempty(sb: &RsSuperBlock, internals: &mut InodeInternal) -> Result<bool, errno::Error> {
+fn isdirempty(internals: &mut InodeInternal) -> Result<bool, errno::Error> {
     let mut de_cont =
         kmem::MemContainer::<u8>::alloc(mem::size_of::<Xv6fsDirent>()).ok_or(errno::Error::EIO)?;
 
@@ -77,7 +77,7 @@ fn isdirempty(sb: &RsSuperBlock, internals: &mut InodeInternal) -> Result<bool, 
     for off in (2 * step_size..internals.size as usize).step_by(step_size) {
         let buf_len = de_cont.len();
         let de_slice = de_cont.to_slice_mut();
-        match readi(sb, de_slice, off as usize, buf_len, internals) {
+        match readi(de_slice, off as usize, buf_len, internals) {
             Ok(x) if x != buf_len => return Err(errno::Error::EIO),
             Err(x) => return Err(x),
             _ => {}
@@ -92,18 +92,18 @@ fn isdirempty(sb: &RsSuperBlock, internals: &mut InodeInternal) -> Result<bool, 
     return Ok(true);
 }
 
-fn dounlink(sb: &RsSuperBlock, nodeid: u64, name: &CStr) -> Result<usize, errno::Error> {
-    let parent = iget(sb, nodeid)?;
+fn dounlink(nodeid: u64, name: &CStr) -> Result<usize, errno::Error> {
+    let parent = iget(nodeid)?;
     let icache = ILOCK_CACHE.read();
-    let parent_inode_guard = ilock(sb, parent.idx, &icache, parent.inum)?;
+    let parent_inode_guard = ilock(parent.idx, &icache, parent.inum)?;
     let mut parent_internals = parent_inode_guard.internals.write();
     let mut poff = 0;
     if namecmp(name, ".") == 0 || namecmp(name, "..") == 0 {
         return Err(errno::Error::EIO);
     }
-    let inode = dirlookup(sb, &mut parent_internals, name, &mut poff)?;
+    let inode = dirlookup(&mut parent_internals, name, &mut poff)?;
 
-    let inode_guard = ilock(sb, inode.idx, &icache, inode.inum)?;
+    let inode_guard = ilock(inode.idx, &icache, inode.inum)?;
     let mut inode_internals = inode_guard.internals.write();
 
     if inode_internals.nlink < 1 {
@@ -111,7 +111,7 @@ fn dounlink(sb: &RsSuperBlock, nodeid: u64, name: &CStr) -> Result<usize, errno:
     }
 
     if inode_internals.inode_type == T_DIR {
-        match isdirempty(sb, &mut inode_internals) {
+        match isdirempty(&mut inode_internals) {
             Ok(true) => {}
             _ => {
                 return Err(errno::Error::ENOTEMPTY);
@@ -122,7 +122,6 @@ fn dounlink(sb: &RsSuperBlock, nodeid: u64, name: &CStr) -> Result<usize, errno:
     let de_arr = [0; mem::size_of::<Xv6fsDirent>()];
     let buf_len = mem::size_of::<Xv6fsDirent>();
     let r = writei(
-        sb,
         &de_arr,
         poff as usize,
         buf_len,
@@ -136,11 +135,11 @@ fn dounlink(sb: &RsSuperBlock, nodeid: u64, name: &CStr) -> Result<usize, errno:
 
     if inode_internals.inode_type == T_DIR {
         parent_internals.nlink -= 1;
-        iupdate(sb, &parent_internals, parent.inum)?;
+        iupdate(&parent_internals, parent.inum)?;
     }
 
     inode_internals.nlink -= 1;
-    iupdate(sb, &inode_internals, inode.inum)?;
+    iupdate(&inode_internals, inode.inum)?;
 
     return Ok(0);
 }
@@ -160,7 +159,6 @@ impl Filesystem for Xv6FileSystem {
 
     fn init(
         &mut self,
-        sb: RsSuperBlock,
         _req: &Request,
         fc_info: &mut FuseConnInfo,
     ) -> Result<(), i32> {
@@ -184,7 +182,7 @@ impl Filesystem for Xv6FileSystem {
             max_readahead = fc_info.max_readahead;
         }
 
-        iinit(&sb);
+        iinit();
 
         fc_info.want |= FUSE_BIG_WRITES;
         fc_info.want |= FUSE_ATOMIC_O_TRUNC;
@@ -199,20 +197,19 @@ impl Filesystem for Xv6FileSystem {
         return Ok(());
     }
 
-    fn statfs(&mut self, _sb: RsSuperBlock, _req: &Request, _ino: u64, reply: ReplyStatfs) {
+    fn statfs(&mut self, _req: &Request, _ino: u64, reply: ReplyStatfs) {
         let fs_size = SB.read().size;
         reply.statfs(fs_size as u64, 0, 0, 0, 0, BSIZE as u32, DIRSIZ as u32, 0);
     }
 
     fn open(
         &mut self,
-        sb: RsSuperBlock,
         _req: &Request,
         nodeid: u64,
         flags: u32,
         reply: ReplyOpen,
     ) {
-        let inode = match iget(&sb, nodeid) {
+        let inode = match iget(nodeid) {
             Ok(x) => x,
             Err(x) => {
                 reply.error(x as i32);
@@ -221,7 +218,7 @@ impl Filesystem for Xv6FileSystem {
         };
 
         let icache = ILOCK_CACHE.read();
-        let inode_guard = match ilock(&sb, inode.idx, &icache, inode.inum) {
+        let inode_guard = match ilock(inode.idx, &icache, inode.inum) {
             Ok(x) => x,
             Err(x) => {
                 reply.error(x as i32);
@@ -237,9 +234,9 @@ impl Filesystem for Xv6FileSystem {
         }
 
         if flags & O_TRUNC != 0 {
-            let _guard = begin_op(&sb);
+            let _guard = begin_op();
             internals.size = 0;
-            if let Err(x) = iupdate(&sb, &internals, inode.inum) {
+            if let Err(x) = iupdate(&internals, inode.inum) {
                 reply.error(x as i32);
                 return;
             }
@@ -252,13 +249,12 @@ impl Filesystem for Xv6FileSystem {
 
     fn opendir(
         &mut self,
-        sb: RsSuperBlock,
         _req: &Request,
         nodeid: u64,
         _flags: u32,
         reply: ReplyOpen,
     ) {
-        let inode = match iget(&sb, nodeid) {
+        let inode = match iget(nodeid) {
             Ok(x) => x,
             Err(x) => {
                 reply.error(x as i32);
@@ -267,7 +263,7 @@ impl Filesystem for Xv6FileSystem {
         };
 
         let icache = ILOCK_CACHE.read();
-        let inode_guard = match ilock(&sb, inode.idx, &icache, inode.inum) {
+        let inode_guard = match ilock(inode.idx, &icache, inode.inum) {
             Ok(x) => x,
             Err(x) => {
                 reply.error(x as i32);
@@ -285,8 +281,8 @@ impl Filesystem for Xv6FileSystem {
         }
     }
 
-    fn getattr(&mut self, sb: RsSuperBlock, _req: &Request, nodeid: u64, reply: ReplyAttr) {
-        let inode = match iget(&sb, nodeid) {
+    fn getattr(&mut self, _req: &Request, nodeid: u64, reply: ReplyAttr) {
+        let inode = match iget(nodeid) {
             Ok(x) => x,
             Err(x) => {
                 reply.error(x as i32);
@@ -295,7 +291,7 @@ impl Filesystem for Xv6FileSystem {
         };
 
         let icache = ILOCK_CACHE.read();
-        let inode_guard = match ilock(&sb, inode.idx, &icache, inode.inum) {
+        let inode_guard = match ilock(inode.idx, &icache, inode.inum) {
             Ok(x) => x,
             Err(x) => {
                 reply.error(x as i32);
@@ -317,7 +313,6 @@ impl Filesystem for Xv6FileSystem {
 
     fn setattr(
         &mut self,
-        sb: RsSuperBlock,
         _req: &Request,
         ino: u64,
         _mode: Option<u32>,
@@ -333,8 +328,8 @@ impl Filesystem for Xv6FileSystem {
         _flags: Option<u32>,
         reply: ReplyAttr,
     ) {
-        let _guard = begin_op(&sb);
-        let inode = match iget(&sb, ino) {
+        let _guard = begin_op();
+        let inode = match iget(ino) {
             Ok(x) => x,
             Err(x) => {
                 reply.error(x as i32);
@@ -343,7 +338,7 @@ impl Filesystem for Xv6FileSystem {
         };
 
         let icache = ILOCK_CACHE.read();
-        let inode_guard = match ilock(&sb, inode.idx, &icache, inode.inum) {
+        let inode_guard = match ilock(inode.idx, &icache, inode.inum) {
             Ok(x) => x,
             Err(x) => {
                 reply.error(x as i32);
@@ -361,14 +356,13 @@ impl Filesystem for Xv6FileSystem {
 
     fn lookup(
         &mut self,
-        sb: RsSuperBlock,
         _req: &Request,
         nodeid: u64,
         name: CStr,
         reply: ReplyEntry,
     ) {
         // Get inode number from nodeid
-        let inode = match iget(&sb, nodeid) {
+        let inode = match iget(nodeid) {
             Ok(x) => x,
             Err(x) => {
                 reply.error(x as i32);
@@ -376,7 +370,7 @@ impl Filesystem for Xv6FileSystem {
             }
         };
         let icache = ILOCK_CACHE.read();
-        let inode_guard = match ilock(&sb, inode.idx, &icache, inode.inum) {
+        let inode_guard = match ilock(inode.idx, &icache, inode.inum) {
             Ok(x) => x,
             Err(x) => {
                 reply.error(x as i32);
@@ -385,7 +379,7 @@ impl Filesystem for Xv6FileSystem {
         };
         let mut internals = inode_guard.internals.write();
         let mut poff = 0;
-        let child = match dirlookup(&sb, &mut internals, &name, &mut poff) {
+        let child = match dirlookup(&mut internals, &name, &mut poff) {
             Ok(x) => x,
             Err(x) => {
                 reply.error(x as i32);
@@ -397,7 +391,7 @@ impl Filesystem for Xv6FileSystem {
         let outarg_generation = 0;
         let attr_valid = Timespec::new(1, 999999999);
 
-        let child_inode_guard = match ilock(&sb, child.idx, &icache, child.inum) {
+        let child_inode_guard = match ilock(child.idx, &icache, child.inum) {
             Ok(x) => x,
             Err(x) => {
                 reply.error(x as i32);
@@ -416,7 +410,6 @@ impl Filesystem for Xv6FileSystem {
 
     fn read(
         &mut self,
-        sb: RsSuperBlock,
         _req: &Request,
         nodeid: u64,
         _fh: u64,
@@ -425,7 +418,7 @@ impl Filesystem for Xv6FileSystem {
         reply: ReplyData,
     ) {
         // Get inode number nodeid
-        let inode = match iget(&sb, nodeid) {
+        let inode = match iget(nodeid) {
             Ok(x) => x,
             Err(x) => {
                 reply.error(x as i32);
@@ -434,7 +427,7 @@ impl Filesystem for Xv6FileSystem {
         };
 
         let icache = ILOCK_CACHE.read();
-        let inode_guard = match ilock(&sb, inode.idx, &icache, inode.inum) {
+        let inode_guard = match ilock(inode.idx, &icache, inode.inum) {
             Ok(x) => x,
             Err(x) => {
                 reply.error(x as i32);
@@ -455,7 +448,7 @@ impl Filesystem for Xv6FileSystem {
         let mut buf_vec: Vec<u8> = vec![0; n as usize];
         let buf_slice = buf_vec.as_mut_slice();
 
-        let read_rs = match readi(&sb, buf_slice, off, n, &mut internals) {
+        let read_rs = match readi(buf_slice, off, n, &mut internals) {
             Ok(x) => x as i32,
             Err(x) => {
                 reply.error(x as i32);
@@ -467,7 +460,6 @@ impl Filesystem for Xv6FileSystem {
 
     fn write(
         &mut self,
-        sb: RsSuperBlock,
         _req: &Request,
         nodeid: u64,
         _fh: u64,
@@ -483,8 +475,8 @@ impl Filesystem for Xv6FileSystem {
         let mut off = offset as usize;
         let mut file_off = 0;
         while i < n {
-            let _guard = begin_op(&sb);
-            let inode = match iget(&sb, nodeid) {
+            let _guard = begin_op();
+            let inode = match iget(nodeid) {
                 Ok(x) => x,
                 Err(x) => {
                     reply.error(x as i32);
@@ -493,7 +485,7 @@ impl Filesystem for Xv6FileSystem {
             };
 
             let icache = ILOCK_CACHE.read();
-            let inode_guard = match ilock(&sb, inode.idx, &icache, inode.inum) {
+            let inode_guard = match ilock(inode.idx, &icache, inode.inum) {
                 Ok(x) => x,
                 Err(x) => {
                     reply.error(x as i32);
@@ -513,7 +505,7 @@ impl Filesystem for Xv6FileSystem {
                 n1 = max;
             }
             let data_region = &data[file_off..];
-            let r = match writei(&sb, data_region, off, n1, &mut internals, inode.inum) {
+            let r = match writei(data_region, off, n1, &mut internals, inode.inum) {
                 Ok(x) => x,
                 Err(x) => {
                     reply.error(x as i32);
@@ -530,7 +522,6 @@ impl Filesystem for Xv6FileSystem {
 
     fn readdir(
         &mut self,
-        sb: RsSuperBlock,
         _req: &Request,
         nodeid: u64,
         _fh: u64,
@@ -538,7 +529,7 @@ impl Filesystem for Xv6FileSystem {
         reply: ReplyDirectory,
     ) {
         // Get inode number nodeid
-        let inode = match iget(&sb, nodeid) {
+        let inode = match iget(nodeid) {
             Ok(x) => x,
             Err(x) => {
                 reply.error(x as i32);
@@ -547,7 +538,7 @@ impl Filesystem for Xv6FileSystem {
         };
 
         let icache = ILOCK_CACHE.read();
-        let inode_guard = match ilock(&sb, inode.idx, &icache, inode.inum) {
+        let inode_guard = match ilock(inode.idx, &icache, inode.inum) {
             Ok(x) => x,
             Err(x) => {
                 reply.error(x as i32);
@@ -580,7 +571,7 @@ impl Filesystem for Xv6FileSystem {
             }
             let buf_len = de_cont.len();
             let de_slice = de_cont.to_slice_mut();
-            match readi(&sb, de_slice, off as usize, buf_len, &mut internals) {
+            match readi(de_slice, off as usize, buf_len, &mut internals) {
                 Ok(x) if x != buf_len => {
                     reply.error(-1);
                     return;
@@ -611,7 +602,6 @@ impl Filesystem for Xv6FileSystem {
 
     fn create(
         &mut self,
-        sb: RsSuperBlock,
         _req: &Request,
         parent: u64,
         name: CStr, //&OsStr,
@@ -620,8 +610,8 @@ impl Filesystem for Xv6FileSystem {
         reply: ReplyCreate,
     ) {
         // Check if the file already exists
-        let _guard = begin_op(&sb);
-        let child = match create_internal(&sb, parent, T_FILE, &name) {
+        let _guard = begin_op();
+        let child = match create_internal(parent, T_FILE, &name) {
             Ok(x) => x,
             Err(x) => {
                 reply.error(x as i32);
@@ -630,7 +620,7 @@ impl Filesystem for Xv6FileSystem {
         };
 
         let icache = ILOCK_CACHE.read();
-        let inode_guard = match ilock(&sb, child.idx, &icache, child.inum) {
+        let inode_guard = match ilock(child.idx, &icache, child.inum) {
             Ok(x) => x,
             Err(x) => {
                 reply.error(x as i32);
@@ -657,15 +647,14 @@ impl Filesystem for Xv6FileSystem {
 
     fn mkdir(
         &mut self,
-        sb: RsSuperBlock,
         _req: &Request,
         parent: u64,
         name: CStr,
         _mode: u32,
         reply: ReplyEntry,
     ) {
-        let _guard = begin_op(&sb);
-        let child = match create_internal(&sb, parent, T_DIR, &name) {
+        let _guard = begin_op();
+        let child = match create_internal(parent, T_DIR, &name) {
             Ok(x) => x,
             Err(x) => {
                 reply.error(x as i32);
@@ -674,7 +663,7 @@ impl Filesystem for Xv6FileSystem {
         };
 
         let icache = ILOCK_CACHE.read();
-        let inode_guard = match ilock(&sb, child.idx, &icache, child.inum) {
+        let inode_guard = match ilock(child.idx, &icache, child.inum) {
             Ok(x) => x,
             Err(x) => {
                 reply.error(x as i32);
@@ -700,14 +689,13 @@ impl Filesystem for Xv6FileSystem {
 
     fn rmdir(
         &mut self,
-        sb: RsSuperBlock,
         _req: &Request,
         parent: u64,
         name: CStr,
         reply: ReplyEmpty,
     ) {
-        let _guard = begin_op(&sb);
-        match dounlink(&sb, parent, &name) {
+        let _guard = begin_op();
+        match dounlink(parent, &name) {
             Ok(_) => reply.ok(),
             Err(x) => reply.error(x as i32),
         }
@@ -715,14 +703,13 @@ impl Filesystem for Xv6FileSystem {
 
     fn unlink(
         &mut self,
-        sb: RsSuperBlock,
         _req: &Request,
         parent: u64,
         name: CStr,
         reply: ReplyEmpty,
     ) {
-        let _guard = begin_op(&sb);
-        match dounlink(&sb, parent, &name) {
+        let _guard = begin_op();
+        match dounlink(parent, &name) {
             Ok(_) => reply.ok(),
             Err(x) => reply.error(x as i32),
         }
@@ -730,29 +717,27 @@ impl Filesystem for Xv6FileSystem {
 
     fn fsync(
         &mut self,
-        sb: RsSuperBlock,
         _req: &Request,
         _ino: u64,
         _fh: u64,
         _datasync: bool,
         reply: ReplyEmpty,
     ) {
-        force_commit(&sb);
+        force_commit();
         reply.ok();
     }
 
     fn symlink(
         &mut self,
-        sb: RsSuperBlock,
         _req: &Request,
         nodeid: u64,
         name: CStr,
         linkname: CStr,
         reply: ReplyEntry,
     ) {
-        let _guard = begin_op(&sb);
+        let _guard = begin_op();
         // Create new file
-        let child = match create_internal(&sb, nodeid, T_LNK, &name) {
+        let child = match create_internal(nodeid, T_LNK, &name) {
             Ok(x) => x,
             Err(x) => {
                 reply.error(x as i32);
@@ -761,7 +746,7 @@ impl Filesystem for Xv6FileSystem {
         };
 
         let icache = ILOCK_CACHE.read();
-        let inode_guard = match ilock(&sb, child.idx, &icache, child.inum) {
+        let inode_guard = match ilock(child.idx, &icache, child.inum) {
             Ok(x) => x,
             Err(x) => {
                 reply.error(x as i32);
@@ -775,7 +760,6 @@ impl Filesystem for Xv6FileSystem {
         let strlen_slice = str_length.to_ne_bytes();
         len_slice.copy_from_slice(&strlen_slice);
         if let Err(x) = writei(
-            &sb,
             &len_slice,
             0,
             mem::size_of::<u32>(),
@@ -797,7 +781,6 @@ impl Filesystem for Xv6FileSystem {
         let name_slice = name_buf.to_slice_mut();
         name_slice.copy_from_slice(linkname.to_bytes_with_nul());
         if let Err(x) = writei(
-            &sb,
             name_slice,
             mem::size_of::<u32>(),
             linkname.len(),
@@ -819,8 +802,8 @@ impl Filesystem for Xv6FileSystem {
         }
     }
 
-    fn readlink(&self, sb: RsSuperBlock, _req: &Request, nodeid: u64, reply: ReplyData) {
-        let inode = match iget(&sb, nodeid) {
+    fn readlink(&self, _req: &Request, nodeid: u64, reply: ReplyData) {
+        let inode = match iget(nodeid) {
             Ok(x) => x,
             Err(x) => {
                 reply.error(x as i32);
@@ -829,7 +812,7 @@ impl Filesystem for Xv6FileSystem {
         };
 
         let icache = ILOCK_CACHE.read();
-        let inode_guard = match ilock(&sb, inode.idx, &icache, inode.inum) {
+        let inode_guard = match ilock(inode.idx, &icache, inode.inum) {
             Ok(x) => x,
             Err(x) => {
                 reply.error(x as i32);
@@ -847,7 +830,6 @@ impl Filesystem for Xv6FileSystem {
         let mut len_slice = [0; 4];
 
         match readi(
-            &sb,
             &mut len_slice,
             0,
             mem::size_of::<u32>(),
@@ -871,7 +853,6 @@ impl Filesystem for Xv6FileSystem {
         let buf_slice = buf_vec.as_mut_slice();
 
         match readi(
-            &sb,
             buf_slice,
             mem::size_of::<u32>(),
             str_len as usize,

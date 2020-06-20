@@ -10,6 +10,7 @@ use kernel::fs::*;
 use kernel::fuse::*;
 use kernel::kobj::*;
 use kernel::raw;
+use kernel::semaphore::*;
 use kernel::stat;
 use kernel::string::*;
 use kernel::time::Timespec;
@@ -22,6 +23,7 @@ pub const PAGE_SIZE: usize = 4096;
 
 static LEN: atomic::AtomicUsize = atomic::AtomicUsize::new(13);
 static HELLO_NAME: &str = "hello\0";
+pub static DISK: Semaphore<Option<Disk>> = Semaphore::new(None);
 
 pub struct HelloFS;
 
@@ -65,7 +67,6 @@ impl Filesystem for HelloFS {
 
     fn init(
         &mut self,
-        _sb: RsSuperBlock,
         _req: &Request,
         outarg: &mut FuseConnInfo,
     ) -> Result<(), i32> {
@@ -97,13 +98,12 @@ impl Filesystem for HelloFS {
         return Ok(());
     }
 
-    fn statfs(&mut self, _sb: RsSuperBlock, _req: &Request, _ino: u64, reply: ReplyStatfs) {
+    fn statfs(&mut self, _req: &Request, _ino: u64, reply: ReplyStatfs) {
         reply.statfs(0, 0, 0, 0, 0, 512, 255, 0);
     }
 
     fn open(
         &mut self,
-        _sb: RsSuperBlock,
         _req: &Request,
         nodeid: u64,
         _flags: u32,
@@ -118,7 +118,6 @@ impl Filesystem for HelloFS {
 
     fn opendir(
         &mut self,
-        _sb: RsSuperBlock,
         _req: &Request,
         nodeid: u64,
         _flags: u32,
@@ -131,7 +130,7 @@ impl Filesystem for HelloFS {
         }
     }
 
-    fn getattr(&mut self, _sb: RsSuperBlock, _req: &Request, nodeid: u64, reply: ReplyAttr) {
+    fn getattr(&mut self, _req: &Request, nodeid: u64, reply: ReplyAttr) {
         let attr_valid = Timespec::new(1, 999999999);
         let mut attr = fuse_attr::new();
         if HelloFS::hello_stat(nodeid, &mut attr) == -1 {
@@ -143,7 +142,6 @@ impl Filesystem for HelloFS {
 
     fn lookup(
         &mut self,
-        _sb: RsSuperBlock,
         _req: &Request,
         nodeid: u64,
         name: CStr,
@@ -167,7 +165,6 @@ impl Filesystem for HelloFS {
 
     fn read(
         &mut self,
-        sb: RsSuperBlock,
         _req: &Request,
         nodeid: u64,
         _fh: u64,
@@ -181,21 +178,20 @@ impl Filesystem for HelloFS {
         }
         let copy_len = LEN.load(atomic::Ordering::SeqCst) - offset as usize;
 
-        let maybe_bh = sb_bread_rust(&sb, 0);
-        let bh;
-        match maybe_bh {
-            Some(x) => bh = x,
-            None => {
-                reply.error(-(EIO as i32));
+        let disk_guard = DISK.read();
+        let disk = disk_guard.as_ref().unwrap();
+        let mut bh = match disk.bread(0) {
+            Ok(x) => x,
+            Err(x)=> {
+                reply.error(x as i32);
                 return;
             }
-        }
+        };
 
         let mut buf_vec: Vec<u8> = vec![0; copy_len];
         let buf_slice = buf_vec.as_mut_slice();
 
-        let b_data = bh.get_buffer_data();
-        let b_slice = b_data.to_slice();
+        let b_slice = bh.data_mut();
         let offset = offset as usize;
         let data_region = &b_slice[offset..offset + copy_len];
         buf_slice.copy_from_slice(data_region);
@@ -204,7 +200,6 @@ impl Filesystem for HelloFS {
 
     fn write(
         &mut self,
-        sb: RsSuperBlock,
         _req: &Request,
         nodeid: u64,
         _fh: u64,
@@ -220,19 +215,20 @@ impl Filesystem for HelloFS {
             return;
         }
 
-        let maybe_bh = sb_bread_rust(&sb, 0);
-        let mut bh;
-        match maybe_bh {
-            Some(x) => bh = x,
-            None => {
-                reply.error(-(EIO as i32));
+        let disk_guard = DISK.read();
+        let disk = disk_guard.as_ref().unwrap();
+        let mut bh = match disk.bread(0) {
+            Ok(x) => x,
+            Err(x) => {
+                reply.error(x as i32);
                 return;
             }
-        }
+        };
         {
-            let mut b_data = bh.get_buffer_data();
+            let b_slice = bh.data_mut();
+            //let mut b_data = bh.get_buffer_data();
             let offset = offset as usize;
-            let b_slice = b_data.to_slice_mut();
+            //let b_slice = b_data.to_slice_mut();
             let copy_size = data.len();
             let write_region = &mut b_slice[offset..offset + copy_size];
             let data_region = &data[..copy_size];
@@ -247,7 +243,6 @@ impl Filesystem for HelloFS {
 
     fn readdir(
         &mut self,
-        _sb: RsSuperBlock,
         _req: &Request,
         nodeid: u64,
         _fh: u64,
@@ -287,15 +282,18 @@ impl Filesystem for HelloFS {
 
     fn fsync(
         &mut self,
-        sb: RsSuperBlock,
         _req: &Request,
         _ino: u64,
         _fh: u64,
         _datasync: bool,
         reply: ReplyEmpty,
     ) {
-        let mut error_sector = 0;
-        blkdev_issue_flush_rust(&sb.s_bdev(), GFP_KERNEL as usize, &mut error_sector);
-        reply.ok();
+        let disk_guard = DISK.read();
+        let disk = disk_guard.as_ref().unwrap();
+        if let Err(x) = disk.sync_all() {
+            reply.error(x as i32);
+        } else {
+            reply.ok();
+        }
     }
 }

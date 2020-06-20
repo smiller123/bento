@@ -2,16 +2,14 @@ use crate::xv6fs_fs::*;
 use crate::xv6fs_utils::*;
 
 use bento::kernel;
-use kernel::kobj::*;
 use kernel::semaphore::*;
 
-pub struct CachedInode<'a> {
-    pub sb: &'a RsSuperBlock,
+pub struct CachedInode {
     pub idx: usize,
     pub inum: u32,
 }
 
-impl<'a> Drop for CachedInode<'a> {
+impl Drop for CachedInode {
     fn drop(&mut self) {
         let _ = iput(self);
     }

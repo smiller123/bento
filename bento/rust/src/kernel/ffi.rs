@@ -173,11 +173,11 @@ macro_rules! def_kernel_val_accessors {
 ///
 /// Examples:
 /// ```
-/// def_kernel_obj_type!(RsBufferHead);
-/// def_kobj_op!(RsBufferHead, sync_dirty_buffer, sync_dirty_buffer, i32);
+/// def_kernel_obj_type!(BufferHead);
+/// def_kobj_op!(BufferHead, sync_dirty_buffer, sync_dirty_buffer, i32);
 ///
 /// // bh should be provided by C.
-/// fn do_something(bh: RsBufferHead) {
+/// fn do_something(bh: BufferHead) {
 ///     // Calls sync_dirty_buffer(*const buffer_head bh) in the kernel
 ///     let ret: i32 = bh.sync_dirty_buffer();
 ///     ...
@@ -226,6 +226,7 @@ extern "C" {
 
     // block cache
     pub fn rs_sb_bread(sb: *const raw::c_void, blockno: u64) -> *const raw::c_void;
+    pub fn bread_helper(ptr: *const raw::c_void, blockno: u64, size: u32) -> *const raw::c_void;
     pub fn __brelse(buf: *const raw::c_void);
     pub fn blkdev_issue_flush(
         bdev: *const raw::c_void,
@@ -270,6 +271,9 @@ extern "C" {
         dispatch: *const raw::c_void,
     ) -> i32;
     pub fn unregister_bento_fs(fs_name: *const raw::c_void) -> i32;
+    pub fn mount() -> i32;
+    pub fn get_bdev_helper(dev_name: *const raw::c_char, mode: u32, blk: bool) -> *mut raw::c_void;
+    pub fn blkdev_put(bdev: *const raw::c_void, mode: u32);
 }
 
 pub unsafe fn sb_bread(sb: *const raw::c_void, blockno: u64) -> *const raw::c_void {

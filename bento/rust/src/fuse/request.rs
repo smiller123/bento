@@ -114,7 +114,6 @@ impl<'a> Request<'a> {
 pub fn dispatch<T: Filesystem>(
     fs: &mut T,
     opcode: fuse_opcode,
-    sb: RsSuperBlock,
     inarg: &bento_in,
     outarg: &mut bento_out,
 ) -> i32 {
@@ -129,7 +128,7 @@ pub fn dispatch<T: Filesystem>(
             let init_in = unsafe { &*(inarg.args[0].value as *const fuse_init_in) };
             let init_out = unsafe { &mut *(outarg.args[0].value as *mut fuse_init_out) };
             let mut fc_info = FuseConnInfo::from_init_in(&init_in);
-            match fs.init(sb, &req, &mut fc_info) {
+            match fs.init(&req, &mut fc_info) {
                 Ok(()) => {
                     fc_info.to_init_out(init_out);
                     0
@@ -139,7 +138,7 @@ pub fn dispatch<T: Filesystem>(
         }
         fuse_opcode_FUSE_DESTROY => {
             let req = Request { h: &inarg.h };
-            match fs.destroy(sb, &req) {
+            match fs.destroy(&req) {
                 Ok(()) => 0,
                 Err(x) => x as i32,
             }
@@ -154,7 +153,7 @@ pub fn dispatch<T: Filesystem>(
             let mut reply = ReplyEntryInternal {
                 reply: Ok(entry_out),
             };
-            fs.lookup(sb, &req, inarg.h.nodeid, name, &mut reply);
+            fs.lookup(&req, inarg.h.nodeid, name, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
                 Err(x) => *x as i32,
@@ -167,7 +166,7 @@ pub fn dispatch<T: Filesystem>(
             let req = Request { h: &inarg.h };
             let forget_in = unsafe { &*(inarg.args[0].value as *const fuse_forget_in) };
 
-            fs.forget(sb, &req, inarg.h.nodeid, forget_in.nlookup);
+            fs.forget(&req, inarg.h.nodeid, forget_in.nlookup);
             0
         }
         fuse_opcode_FUSE_GETATTR => {
@@ -182,7 +181,7 @@ pub fn dispatch<T: Filesystem>(
             let mut reply = ReplyAttrInternal {
                 reply: Ok(getattr_out),
             };
-            fs.getattr(sb, &req, inarg.h.nodeid, &mut reply);
+            fs.getattr(&req, inarg.h.nodeid, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
                 Err(x) => *x as i32,
@@ -235,7 +234,6 @@ pub fn dispatch<T: Filesystem>(
                 _ => Some(setattr_in.fh),
             };
             fs.setattr(
-                sb,
                 &req,
                 inarg.h.nodeid,
                 mode,
@@ -267,7 +265,7 @@ pub fn dispatch<T: Filesystem>(
             let mut reply = ReplyDataInternal {
                 reply: Ok(data_out),
             };
-            fs.readlink(sb, &req, inarg.h.nodeid, &mut reply);
+            fs.readlink(&req, inarg.h.nodeid, &mut reply);
             match reply.reply() {
                 Ok(buf) => {
                     let buf_slice = buf.to_slice();
@@ -289,7 +287,6 @@ pub fn dispatch<T: Filesystem>(
                 reply: Ok(entry_out),
             };
             fs.mknod(
-                sb,
                 &req,
                 inarg.h.nodeid,
                 name,
@@ -313,7 +310,7 @@ pub fn dispatch<T: Filesystem>(
             let mut reply = ReplyEntryInternal {
                 reply: Ok(entry_out),
             };
-            fs.mkdir(sb, &req, inarg.h.nodeid, name, mkdir_in.mode, &mut reply);
+            fs.mkdir(&req, inarg.h.nodeid, name, mkdir_in.mode, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
                 Err(x) => *x as i32,
@@ -328,7 +325,7 @@ pub fn dispatch<T: Filesystem>(
             let mut reply = ReplyEmptyInternal {
                 reply: Err(-(ENOSYS as i32)),
             };
-            fs.unlink(sb, &req, inarg.h.nodeid, name, &mut reply);
+            fs.unlink(&req, inarg.h.nodeid, name, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
                 Err(x) => *x as i32,
@@ -343,7 +340,7 @@ pub fn dispatch<T: Filesystem>(
             let mut reply = ReplyEmptyInternal {
                 reply: Err(-(ENOSYS as i32)),
             };
-            fs.rmdir(sb, &req, inarg.h.nodeid, name, &mut reply);
+            fs.rmdir(&req, inarg.h.nodeid, name, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
                 Err(x) => *x as i32,
@@ -361,7 +358,7 @@ pub fn dispatch<T: Filesystem>(
             let mut reply = ReplyEntryInternal {
                 reply: Ok(entry_out),
             };
-            fs.symlink(sb, &req, inarg.h.nodeid, name, link, &mut reply);
+            fs.symlink(&req, inarg.h.nodeid, name, link, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
                 Err(x) => *x as i32,
@@ -379,7 +376,6 @@ pub fn dispatch<T: Filesystem>(
                 reply: Err(-(ENOSYS as i32)),
             };
             fs.rename(
-                sb,
                 &req,
                 inarg.h.nodeid,
                 oldname,
@@ -405,7 +401,6 @@ pub fn dispatch<T: Filesystem>(
                 reply: Ok(entry_out),
             };
             fs.link(
-                sb,
                 &req,
                 link_in.oldnodeid,
                 inarg.h.nodeid,
@@ -429,7 +424,7 @@ pub fn dispatch<T: Filesystem>(
             let mut reply = ReplyOpenInternal {
                 reply: Ok(open_out),
             };
-            fs.open(sb, &req, inarg.h.nodeid, open_in.flags, &mut reply);
+            fs.open(&req, inarg.h.nodeid, open_in.flags, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
                 Err(x) => *x as i32,
@@ -448,7 +443,6 @@ pub fn dispatch<T: Filesystem>(
                 reply: Ok(data_out),
             };
             fs.read(
-                sb,
                 &req,
                 inarg.h.nodeid,
                 read_in.fh,
@@ -475,7 +469,6 @@ pub fn dispatch<T: Filesystem>(
                 reply: Ok(write_out),
             };
             fs.write(
-                sb,
                 &req,
                 inarg.h.nodeid,
                 write_in.fh,
@@ -500,7 +493,6 @@ pub fn dispatch<T: Filesystem>(
                 reply: Err(-(ENOSYS as i32)),
             };
             fs.flush(
-                sb,
                 &req,
                 inarg.h.nodeid,
                 flush_in.fh,
@@ -523,7 +515,6 @@ pub fn dispatch<T: Filesystem>(
                 reply: Err(-(ENOSYS as i32)),
             };
             fs.release(
-                sb,
                 &req,
                 inarg.h.nodeid,
                 release_in.fh,
@@ -551,7 +542,7 @@ pub fn dispatch<T: Filesystem>(
                 1 => true,
                 _ => false,
             };
-            fs.fsync(sb, &req, inarg.h.nodeid, fsync_in.fh, datasync, &mut reply);
+            fs.fsync(&req, inarg.h.nodeid, fsync_in.fh, datasync, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
                 Err(x) => *x as i32,
@@ -569,7 +560,7 @@ pub fn dispatch<T: Filesystem>(
             let mut reply = ReplyOpenInternal {
                 reply: Ok(open_out),
             };
-            fs.opendir(sb, &req, inarg.h.nodeid, open_in.flags, &mut reply);
+            fs.opendir(&req, inarg.h.nodeid, open_in.flags, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
                 Err(x) => *x as i32,
@@ -589,7 +580,6 @@ pub fn dispatch<T: Filesystem>(
                 length: 0,
             };
             fs.readdir(
-                sb,
                 &req,
                 inarg.h.nodeid,
                 read_in.fh,
@@ -615,7 +605,6 @@ pub fn dispatch<T: Filesystem>(
                 reply: Err(-(ENOSYS as i32)),
             };
             fs.releasedir(
-                sb,
                 &req,
                 inarg.h.nodeid,
                 release_in.fh,
@@ -641,7 +630,7 @@ pub fn dispatch<T: Filesystem>(
                 1 => true,
                 _ => false,
             };
-            fs.fsyncdir(sb, &req, inarg.h.nodeid, fsync_in.fh, datasync, &mut reply);
+            fs.fsyncdir(&req, inarg.h.nodeid, fsync_in.fh, datasync, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
                 Err(x) => *x as i32,
@@ -657,7 +646,7 @@ pub fn dispatch<T: Filesystem>(
             let mut reply = ReplyStatfsInternal {
                 reply: Ok(statfs_out),
             };
-            fs.statfs(sb, &req, inarg.h.nodeid, &mut reply);
+            fs.statfs(&req, inarg.h.nodeid, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
                 Err(x) => *x as i32,
@@ -679,7 +668,6 @@ pub fn dispatch<T: Filesystem>(
                 reply: Err(-(ENOSYS as i32)),
             };
             fs.setxattr(
-                sb,
                 &req,
                 inarg.h.nodeid,
                 name,
@@ -709,7 +697,7 @@ pub fn dispatch<T: Filesystem>(
                     reply_arg: Err(-(ENOSYS as i32)),
                     reply_buf: Ok(data_out),
                 };
-                fs.getxattr(sb, &req, inarg.h.nodeid, name, getxattr_in.size, &mut reply);
+                fs.getxattr(&req, inarg.h.nodeid, name, getxattr_in.size, &mut reply);
                 match reply.reply_buf() {
                     Ok(_) => 0,
                     Err(x) => *x as i32,
@@ -721,7 +709,7 @@ pub fn dispatch<T: Filesystem>(
                     reply_arg: Ok(getxattr_out),
                     reply_buf: Err(-(ENOSYS as i32)),
                 };
-                fs.getxattr(sb, &req, inarg.h.nodeid, name, getxattr_in.size, &mut reply);
+                fs.getxattr(&req, inarg.h.nodeid, name, getxattr_in.size, &mut reply);
                 match reply.reply_arg() {
                     Ok(_) => 0,
                     Err(x) => *x as i32,
@@ -743,7 +731,7 @@ pub fn dispatch<T: Filesystem>(
                     reply_arg: Err(-(ENOSYS as i32)),
                     reply_buf: Ok(data_out),
                 };
-                fs.listxattr(sb, &req, inarg.h.nodeid, getxattr_in.size, &mut reply);
+                fs.listxattr(&req, inarg.h.nodeid, getxattr_in.size, &mut reply);
                 match reply.reply_buf() {
                     Ok(_) => 0,
                     Err(x) => *x as i32,
@@ -755,7 +743,7 @@ pub fn dispatch<T: Filesystem>(
                     reply_arg: Ok(getxattr_out),
                     reply_buf: Err(-(ENOSYS as i32)),
                 };
-                fs.listxattr(sb, &req, inarg.h.nodeid, getxattr_in.size, &mut reply);
+                fs.listxattr(&req, inarg.h.nodeid, getxattr_in.size, &mut reply);
                 match reply.reply_arg() {
                     Ok(_) => 0,
                     Err(x) => *x as i32,
@@ -773,7 +761,7 @@ pub fn dispatch<T: Filesystem>(
             let mut reply = ReplyEmptyInternal {
                 reply: Err(-(ENOSYS as i32)),
             };
-            fs.removexattr(sb, &req, inarg.h.nodeid, name, &mut reply);
+            fs.removexattr(&req, inarg.h.nodeid, name, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
                 Err(x) => *x as i32,
@@ -790,7 +778,7 @@ pub fn dispatch<T: Filesystem>(
             let mut reply = ReplyEmptyInternal {
                 reply: Err(-(ENOSYS as i32)),
             };
-            fs.access(sb, &req, inarg.h.nodeid, access_in.mask, &mut reply);
+            fs.access(&req, inarg.h.nodeid, access_in.mask, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
                 Err(x) => *x as i32,
@@ -810,7 +798,6 @@ pub fn dispatch<T: Filesystem>(
                 reply: Ok((entry_out, open_out)),
             };
             fs.create(
-                sb,
                 &req,
                 inarg.h.nodeid,
                 name,
@@ -835,7 +822,6 @@ pub fn dispatch<T: Filesystem>(
                 reply: Ok(getlk_out),
             };
             fs.getlk(
-                sb,
                 &req,
                 inarg.h.nodeid,
                 getlk_in.fh,
@@ -862,7 +848,6 @@ pub fn dispatch<T: Filesystem>(
                 reply: Err(-(ENOSYS as i32)),
             };
             fs.setlk(
-                sb,
                 &req,
                 inarg.h.nodeid,
                 setlk_in.fh,
@@ -890,7 +875,6 @@ pub fn dispatch<T: Filesystem>(
                 reply: Err(-(ENOSYS as i32)),
             };
             fs.setlk(
-                sb,
                 &req,
                 inarg.h.nodeid,
                 setlk_in.fh,
@@ -919,7 +903,6 @@ pub fn dispatch<T: Filesystem>(
                 reply: Ok(bmap_out),
             };
             fs.bmap(
-                sb,
                 &req,
                 inarg.h.nodeid,
                 bmap_in.blocksize,

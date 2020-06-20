@@ -62,13 +62,11 @@ pub trait Filesystem {
     /// No support is provided for readdirplus and async DIO.
     ///
     /// Arguments:
-    /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `req: &Request` - Request data structure.
     /// * `fc_info: &mut FuseConnInfo` - Connection information used to pass initialization
     /// arguments to Bento.
     fn init(
         &mut self,
-        _sb: RsSuperBlock,
         _req: &Request,
         _fc_info: &mut FuseConnInfo,
     ) -> Result<(), i32> {
@@ -78,9 +76,8 @@ pub trait Filesystem {
     /// Perform any necessary cleanup on the file system.
     ///
     /// Arguments:
-    /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `req: &Request` - Request data structure.
-    fn destroy(&mut self, _sb: RsSuperBlock, _req: &Request) -> Result<(), i32> {
+    fn destroy(&mut self, _req: &Request) -> Result<(), i32> {
         return Ok(());
     }
 
@@ -90,14 +87,12 @@ pub trait Filesystem {
     /// Otherwise, return `-ENOENT`.
     ///
     /// Arguments:
-    /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `req: &Request` - Request data structure.
     /// * `parent: u64` - The file system-provided inode number of the parent directory
     /// * `name: CStr` - The name of the file to lookup.
     /// * `reply: ReplyEntry` - Output data structure for the entry data or error vaule.
     fn lookup(
         &mut self,
-        _sb: RsSuperBlock,
         _req: &Request,
         _parent: u64,
         _name: CStr,
@@ -124,11 +119,10 @@ pub trait Filesystem {
     /// that the file system will receive corresponding forget messages for the affected inodes.
     ///
     /// Arguments:
-    /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `req: &Request` - Request data structure.
     /// * `ino: u64` - Filesystem-provided inode number of the inode to forget.
     /// * `nlookup: u64` - The number of lookups to forget.
-    fn forget(&mut self, _sb: RsSuperBlock, _req: &Request, _ino: u64, _nlookup: u64) {}
+    fn forget(&mut self, _req: &Request, _ino: u64, _nlookup: u64) {}
 
     /// Get file attributes.
     ///
@@ -139,11 +133,10 @@ pub trait Filesystem {
     /// In this case, the st_size value provided by the file system will be ignored.
     ///
     /// Arguments:
-    /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `req: &Request` - Request data structure.
     /// * `ino: u64` - Filesystem-provided id of the inode.
     /// * `reply: ReplyAttr` - Output data structure for the attribute data or error value.
-    fn getattr(&mut self, _sb: RsSuperBlock, _req: &Request, _ino: u64, reply: ReplyAttr) {
+    fn getattr(&mut self, _req: &Request, _ino: u64, reply: ReplyAttr) {
         reply.error(-(ENOSYS as i32));
     }
 
@@ -153,7 +146,6 @@ pub trait Filesystem {
     /// and setgid bits if the file size or owner is being changed.
     ///
     /// Arguments:
-    /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `req: &Request` - Request data structure.
     /// * `ino: u64` - Filesystem-provided id of the inode.
     /// * `mode: Option<u32>` - Attribute mode to set if provided, otherwise None.
@@ -170,7 +162,6 @@ pub trait Filesystem {
     /// * `reply: ReplyAttr` - Output data structure for the attribute data or error value.
     fn setattr(
         &mut self,
-        _sb: RsSuperBlock,
         _req: &Request,
         _ino: u64,
         _mode: Option<u32>,
@@ -192,11 +183,10 @@ pub trait Filesystem {
     /// Read symbolic link.
     ///
     /// Arguments:
-    /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `req: &Request` - Request data structure.
     /// * `ino: u64` - Filesystem-provided id of the inode.
     /// * `reply: ReplyData` - Output data structure for the read link data or error value.
-    fn readlink(&self, _sb: RsSuperBlock, _req: &Request, _ino: u64, reply: ReplyData) {
+    fn readlink(&self, _req: &Request, _ino: u64, reply: ReplyData) {
         return reply.error(-(ENOSYS as i32));
     }
 
@@ -205,7 +195,6 @@ pub trait Filesystem {
     /// Create a regular file, character device, block device, fifo or socket node.
     ///
     /// Arguments:
-    /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `req: &Request` - Request data structure.
     /// * `parent: u64` - Filesystem-provided inode number of the parent directory.
     /// * `name: CStr` - Name of the file to be created.
@@ -214,7 +203,6 @@ pub trait Filesystem {
     /// * `reply: ReplyEntry` - Output data structure for the entry data or error value.
     fn mknod(
         &mut self,
-        _sb: RsSuperBlock,
         _req: &Request,
         _parent: u64,
         _name: CStr, //&OsStr
@@ -228,7 +216,6 @@ pub trait Filesystem {
     /// Create directory.
     ///
     /// Arguments:
-    /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `req: &Request` - Request data structure.
     /// * `parent: u64` - Filesystem-provided inode number of the parent directory.
     /// * `name: CStr` - Name of the directory to be created.
@@ -236,7 +223,6 @@ pub trait Filesystem {
     /// * `reply: ReplyEntry` - Output data structure for the entry data or error value.
     fn mkdir(
         &mut self,
-        _sb: RsSuperBlock,
         _req: &Request,
         _parent: u64,
         _name: CStr, //&OsStr
@@ -253,14 +239,12 @@ pub trait Filesystem {
     /// function).
     ///
     /// Arguments:
-    /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `req: &Request` - Request data structure.
     /// * `parent: u64` - Filesystem-provided inode number of the parent directory.
     /// * `name: CStr` - Name of the file to be removed.
     /// * `reply: ReplyEmpty` - Output data structure for a possible error value.
     fn unlink(
         &mut self,
-        _sb: RsSuperBlock,
         _req: &Request,
         _parent: u64,
         _name: CStr, //&OsStr
@@ -276,14 +260,12 @@ pub trait Filesystem {
     /// function).
     ///
     /// Arguments:
-    /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `req: &Request` - Request data structure.
     /// * `parent: u64` - Filesystem-provided inode number of the parent directory.
     /// * `name: CStr` - Name of the file to be removed.
     /// * `reply: ReplyEmpty` - Output data structure for a possible error value.
     fn rmdir(
         &mut self,
-        _sb: RsSuperBlock,
         _req: &Request,
         _parent: u64,
         _name: CStr, //&OsStr
@@ -295,7 +277,6 @@ pub trait Filesystem {
     /// Create a symbolic link.
     ///
     /// Arguments:
-    /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `req: &Request` - Request data structure.
     /// * `parent: u64` - Filesystem-provided inode number of the parent directory.
     /// * `name: CStr` - Name of the file to be removed.
@@ -303,7 +284,6 @@ pub trait Filesystem {
     /// * `reply: ReplyEntry` - Output data structure for the entry data or error value.
     fn symlink(
         &mut self,
-        _sb: RsSuperBlock,
         _req: &Request,
         _parent: u64,
         _name: CStr, // &OsStr
@@ -329,7 +309,6 @@ pub trait Filesystem {
     /// atomically exchange the two files, i.e. both must exist and neither may be deleted.
     ///
     /// Arguments:
-    /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `req: &Request` - Request data structure.
     /// * `parent: u64` - Filesystem-provided inode number of the parent directory.
     /// * `name: CStr` - Name of the file to be removed.
@@ -338,7 +317,6 @@ pub trait Filesystem {
     /// * `reply: ReplyEmpty` - Output data structure for a possible error value.
     fn rename(
         &mut self,
-        _sb: RsSuperBlock,
         _req: &Request,
         _parent: u64,
         _name: CStr, //&OsStr
@@ -352,7 +330,6 @@ pub trait Filesystem {
     /// Create a hard link.
     ///
     /// Arguments:
-    /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `req: &Request` - Request data structure.
     /// * `ino: u64` - Filesystem-provided inode number of the old node.
     /// * `newparent: u64` - Filesystem-provided inode number of the new parent directory.
@@ -360,7 +337,6 @@ pub trait Filesystem {
     /// * `reply: ReplyEntry` - Output data structure for the entry data or error value.
     fn link(
         &mut self,
-        _sb: RsSuperBlock,
         _req: &Request,
         _ino: u64,
         _newparent: u64,
@@ -400,14 +376,12 @@ pub trait Filesystem {
     /// release will also succeed without being sent to the filesystem.
     ///
     /// Arguments:
-    /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `req: &Request` - Request data structure.
     /// * `ino: u64` - Filesystem-provided inode number of the file to open.
     /// * `flags: u32` - Open flags.
     /// * `reply: ReplyOpen` - Output data structure for the opened file data or error value.
     fn open(
         &mut self,
-        _sb: RsSuperBlock,
         _req: &Request,
         _ino: u64,
         _flags: u32,
@@ -425,7 +399,6 @@ pub trait Filesystem {
     /// method didn't set any value.
     ///
     /// Arguments:
-    /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `req: &Request` - Request data structure.
     /// * `ino: u64` - Filesystem-provided inode number.
     /// * `fh: u64` - Filesystem-provided file handle.
@@ -434,7 +407,6 @@ pub trait Filesystem {
     /// * `reply: ReplyData` - Output data structure for the read data or error value.
     fn read(
         &mut self,
-        _sb: RsSuperBlock,
         _req: &Request,
         _ino: u64,
         _fh: u64,
@@ -456,7 +428,6 @@ pub trait Filesystem {
     /// method didn't set any value.
     ///
     /// Arguments:
-    /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `req: &Request` - Request data structure.
     /// * `ino: u64` - Filesystem-provided inode number.
     /// * `fh: u64` - Filesystem-provided file handle.
@@ -466,7 +437,6 @@ pub trait Filesystem {
     /// * `reply: ReplyWrite` - Output data structure for the write size or error value.
     fn write(
         &mut self,
-        _sb: RsSuperBlock,
         _req: &Request,
         _ino: u64,
         _fh: u64,
@@ -503,7 +473,6 @@ pub trait Filesystem {
     /// future calls to `flush()` will succeed automatically without being sent to the filesystem.
     ///
     /// Arguments:
-    /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `req: &Request` - Request data structure.
     /// * `ino: u64` - Filesystem-provided inode number.
     /// * `fh: u64` - Filesystem-provided file handle.
@@ -511,7 +480,6 @@ pub trait Filesystem {
     /// * `reply: ReplyEmpty` - Output data structure for a possible error value.
     fn flush(
         &mut self,
-        _sb: RsSuperBlock,
         _req: &Request,
         _ino: u64,
         _fh: u64,
@@ -536,7 +504,6 @@ pub trait Filesystem {
     /// method didn't set any value. `flags` will contain the same flags as for open.
     ///
     /// Arguments:
-    /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `req: &Request` - Request data structure.
     /// * `ino: u64` - Filesystem-provided inode number.
     /// * `fh: u64` - Filesystem-provided file handle.
@@ -546,7 +513,6 @@ pub trait Filesystem {
     /// * `reply: ReplyEmpty` - Output data structure for a possible error value.
     fn release(
         &mut self,
-        _sb: RsSuperBlock,
         _req: &Request,
         _ino: u64,
         _fh: u64,
@@ -567,7 +533,6 @@ pub trait Filesystem {
     /// future calls to `fsync()` will succeed automatically without being sent to the filesystem.
     ///
     /// Arguments:
-    /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `req: &Request` - Request data structure.
     /// * `ino: u64` - Filesystem-provided inode number.
     /// * `fh: u64` - Filesystem-provided file handle.
@@ -575,7 +540,6 @@ pub trait Filesystem {
     /// * `reply: ReplyEmpty` - Output data structure for a possible error value.
     fn fsync(
         &mut self,
-        _sb: RsSuperBlock,
         _req: &Request,
         _ino: u64,
         _fh: u64,
@@ -597,14 +561,12 @@ pub trait Filesystem {
     /// `FOPEN_KEEP_CACHE` | `FOPEN_CACHE_DIR`.
     ///
     /// Arguments:
-    /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `req: &Request` - Request data structure.
     /// * `ino: u64` - Filesystem-provided inode number.
     /// * `flags: u32` - Open flags.
     /// * `reply: ReplyOpen` - Output data structure for the opened file data or error value.
     fn opendir(
         &mut self,
-        _sb: RsSuperBlock,
         _req: &Request,
         _ino: u64,
         _flags: u32,
@@ -639,7 +601,6 @@ pub trait Filesystem {
     /// behavior is observable by the caller.
     ///
     /// Arguments:
-    /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `req: &Request` - Request data structure.
     /// * `ino: u64` - Filesystem-provided inode number.
     /// * `fh: u64` - Filesystem-provided file handle.
@@ -649,7 +610,6 @@ pub trait Filesystem {
     /// error value.
     fn readdir(
         &mut self,
-        _sb: RsSuperBlock,
         _req: &Request,
         _ino: u64,
         _fh: u64,
@@ -675,7 +635,6 @@ pub trait Filesystem {
     /// * `reply: ReplyEmpty` - Output data structure for a possible error value.
     fn releasedir(
         &mut self,
-        _sb: RsSuperBlock,
         _req: &Request,
         _ino: u64,
         _fh: u64,
@@ -697,7 +656,6 @@ pub trait Filesystem {
     /// future calls to `fsyncdir()` will succeed automatically without being sent to the filesystem.
     ///
     /// Arguments:
-    /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `req: &Request` - Request data structure.
     /// * `ino: u64` - Filesystem-provided inode number.
     /// * `fh: u64` - Filesystem-provided file handle.
@@ -705,7 +663,6 @@ pub trait Filesystem {
     /// * `reply: ReplyEmpty` - Output data structure for a possible error value.
     fn fsyncdir(
         &mut self,
-        _sb: RsSuperBlock,
         _req: &Request,
         _ino: u64,
         _fh: u64,
@@ -718,11 +675,10 @@ pub trait Filesystem {
     /// Get filesystem statistics.
     ///
     /// Arguments:
-    /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `req: &Request` - Request data structure.
     /// * `ino: u64` - Filesystem-provided inode number, zero means "undefined".
     /// * `reply: ReplyStatfs` - Output data structure for file system stat data or error value.
-    fn statfs(&mut self, _sb: RsSuperBlock, _req: &Request, _ino: u64, reply: ReplyStatfs) {
+    fn statfs(&mut self, _req: &Request, _ino: u64, reply: ReplyStatfs) {
         return reply.error(-(ENOSYS as i32));
     }
 
@@ -733,7 +689,6 @@ pub trait Filesystem {
     /// `EOPNOTSUPP` without being sent to the filesystem.
     ///
     /// Arguments:
-    /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `req: &Request` - Request data structure.
     /// * `ino: u64` - Filesystem-provided inode number.
     /// * `name: CStr` - Name of the extended attribute.
@@ -743,7 +698,6 @@ pub trait Filesystem {
     /// * `reply: ReplyEmpty` - Output data structure for a possible error value.
     fn setxattr(
         &mut self,
-        _sb: RsSuperBlock,
         _req: &Request,
         _ino: u64,
         _name: CStr, //&OsStr,
@@ -768,7 +722,6 @@ pub trait Filesystem {
     /// with `EOPNOTSUPP` without being sent to the filesystem.
     ///
     /// Arguments:
-    /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `req: &Request` - Request data structure.
     /// * `ino: u64` - Filesystem-provided inode number.
     /// * `name: CStr` - The name of the attribute.
@@ -776,7 +729,6 @@ pub trait Filesystem {
     /// * `reply: ReplyXattr` - Output data structure for the xattr data.
     fn getxattr(
         &mut self,
-        _sb: RsSuperBlock,
         _req: &Request,
         _ino: u64,
         _name: CStr, //&OsStr,
@@ -800,14 +752,12 @@ pub trait Filesystem {
     /// `EOPNOTSUPP` without being sent to the filesystem.
     ///
     /// Arguments:
-    /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `req: &Request` - Request data structure.
     /// * `ino: u64` - Filesystem-provided inode number.
     /// * `size: u32` - The size of the buffer to write xattr data into.
     /// * `reply: ReplyXattr` - Output data structure for the xattr data.
     fn listxattr(
         &mut self,
-        _sb: RsSuperBlock,
         _req: &Request,
         _ino: u64,
         _size: u32,
@@ -823,14 +773,12 @@ pub trait Filesystem {
     /// with `EOPNOTSUPP` without being sent to the filesystem.
     ///
     /// Arguments:
-    /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `req: &Request` - Request data structure.
     /// * `ino: u64` - Filesystem-provided inode number.
     /// * `name: CStr` - The name of the attribute to remove.
     /// * `reply: ReplyEmpty` - Output data structure for a possible error value.
     fn removexattr(
         &mut self,
-        _sb: RsSuperBlock,
         _req: &Request,
         _ino: u64,
         _name: CStr, //&OsStr,
@@ -849,14 +797,12 @@ pub trait Filesystem {
     /// the filesystem.
     ///
     /// Arguments:
-    /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `req: &Request` - Request data structure.
     /// * `ino: u64` - Filesystem-provided inode number.
     /// * `mask: u32` - Access mask.
     /// * `reply: ReplyEmpty` - Output data structure for a possible error value.
     fn access(
         &mut self,
-        _sb: RsSuperBlock,
         _req: &Request,
         _ino: u64,
         _mask: u32,
@@ -878,7 +824,6 @@ pub trait Filesystem {
     /// called instead).
     ///
     /// Arguments:
-    /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `req: &Request` - Request data structure.
     /// * `parent: u64` - Filesystem-provided inode number of the parent directory.
     /// * `name: CStr` - The name of the new file.
@@ -887,7 +832,6 @@ pub trait Filesystem {
     /// * `reply: ReplyCreate` - Output data structure for entry and open data or error value.
     fn create(
         &mut self,
-        _sb: RsSuperBlock,
         _req: &Request,
         _parent: u64,
         _name: CStr, //&OsStr,
@@ -901,7 +845,6 @@ pub trait Filesystem {
     /// Test for a POSIX file lock.
     ///
     /// Arguments:
-    /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `req: &Request` - Request data structure.
     /// * `ino: u64` - Filesystem-provided inode number.
     /// * `fh: u64` - Filesystem-provided file handle.
@@ -913,7 +856,6 @@ pub trait Filesystem {
     /// * `reply: ReplyLock` - Output data structure for lock data or error value.
     fn getlk(
         &mut self,
-        _sb: RsSuperBlock,
         _req: &Request,
         _ino: u64,
         _fh: u64,
@@ -937,7 +879,6 @@ pub trait Filesystem {
     /// to work locally. Hence these are only interesting for network filesystems and similar.
     ///
     /// Arguments:
-    /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `req: &Request` - Request data structure.
     /// * `ino: u64` - Filesystem-provided inode number.
     /// * `fh: u64` - Filesystem-provided file handle.
@@ -950,7 +891,6 @@ pub trait Filesystem {
     /// * `reply: ReplyEmpty` - Output data structure for a possible error value.
     fn setlk(
         &mut self,
-        _sb: RsSuperBlock,
         _req: &Request,
         _ino: u64,
         _fh: u64,
@@ -975,7 +915,6 @@ pub trait Filesystem {
     /// sent to the filesystem.
     ///
     /// Arguments:
-    /// * `sb: RsSuperBlock` - Kernel `super_block` for disk accesses.
     /// * `req: &Request` - Request data structure.
     /// * `ino: u64` - Filesystem-provided inode number.
     /// * `blocksize: u32` - Blocksize.
@@ -983,7 +922,6 @@ pub trait Filesystem {
     /// * `reply: ReplyBmap` - Output data structure for bmap data or error value.
     fn bmap(
         &mut self,
-        _sb: RsSuperBlock,
         _req: &Request,
         _ino: u64,
         _blocksize: u32,
