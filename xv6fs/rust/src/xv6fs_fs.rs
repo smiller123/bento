@@ -1,3 +1,5 @@
+use alloc::vec::Vec;
+
 use core::cmp::min;
 use core::mem;
 use core::str;
@@ -11,7 +13,6 @@ use bento::kernel;
 use kernel::errno::*;
 use kernel::fs::*;
 use kernel::kobj::*;
-use kernel::mem as kmem;
 use kernel::semaphore::*;
 use kernel::stat;
 use kernel::string::*;
@@ -402,20 +403,22 @@ pub fn bmap(inode: &mut InodeInternal, blk_idx: usize) -> Result<u32, Error> {
         let disk_guard = DISK.read();
         let disk = disk_guard.as_ref().unwrap();
         let mut bh = disk.bread(*ind_blk_id as u64)?;
-        let b_data = bh.get_buffer_data();
+        let b_data = bh.data_mut();
 
-        let mut blks_cont = b_data.into_container::<u32>().ok_or(Error::EIO)?;
-        let blks = blks_cont.to_slice_mut();
-        let cell: &mut u32 = blks.get_mut(idx).ok_or(Error::EIO)?;
-        if *cell == 0 {
+        let mut cell_data = [0; 4];
+        let cell_segment = &mut b_data[idx * 4 .. (idx + 1) * 4];
+        cell_data.copy_from_slice(cell_segment);
+        let cell = u32::from_ne_bytes(cell_data);
+        if cell == 0 {
             // need to allocate blk
             result_blk_id = balloc()?;
-            *cell = result_blk_id;
+            let blk_data = result_blk_id.to_ne_bytes();
+            cell_segment.copy_from_slice(&blk_data);
             bh.mark_buffer_dirty();
             log_write(*ind_blk_id);
         } else {
             // just return the blk
-            result_blk_id = *cell;
+            result_blk_id = cell;
         }
 
         return Ok(result_blk_id);
@@ -437,33 +440,39 @@ pub fn bmap(inode: &mut InodeInternal, blk_idx: usize) -> Result<u32, Error> {
         let disk_guard = DISK.read();
         let disk = disk_guard.as_ref().unwrap();
         let mut bh = disk.bread(*dind_blk_id as u64)?;
-        let b_data = bh.get_buffer_data();
+        let b_data = bh.data_mut();
         let dind_idx = idx / NINDIRECT as usize;
 
-        let mut blks_cont = b_data.into_container::<u32>().ok_or(Error::EIO)?;
-        let blks = blks_cont.to_slice_mut();
-        let cell: &mut u32 = blks.get_mut(dind_idx).ok_or(Error::EIO)?;
-        if *cell == 0 {
-            *cell = balloc()?;
+        let mut cell_data = [0; 4];
+        let cell_segment = &mut b_data[dind_idx * 4 .. (dind_idx + 1) * 4];
+        cell_data.copy_from_slice(cell_segment);
+        let cell = u32::from_ne_bytes(cell_data);
+
+        if cell == 0 {
+            let result_blk_id = balloc()?;
+            let result_blk_data = result_blk_id.to_ne_bytes();
+            cell_segment.copy_from_slice(&result_blk_data);
             bh.mark_buffer_dirty();
             log_write(*dind_blk_id);
         }
 
-        let mut dbh = disk.bread(*cell as u64)?;
-        let db_data = dbh.get_buffer_data();
+        let mut dbh = disk.bread(cell as u64)?;
+        let db_data = dbh.data_mut();
         let dblock_idx = idx % NINDIRECT as usize;
 
         let result_blk_id: u32;
-        let mut dblks_cont = db_data.into_container::<u32>().ok_or(Error::EIO)?;
-        let dblks = dblks_cont.to_slice_mut();
-        let dcell: &mut u32 = dblks.get_mut(dblock_idx).ok_or(Error::EIO)?;
-        if *dcell == 0 {
+        let mut dcell_data = [0; 4];
+        let dcell_segment = &mut db_data[dblock_idx * 4 .. (dblock_idx + 1) * 4];
+        dcell_data.copy_from_slice(dcell_segment);
+        let dcell = u32::from_ne_bytes(dcell_data);
+        if dcell == 0 {
             result_blk_id = balloc()?;
-            *dcell = result_blk_id;
+            let result_blk_data = result_blk_id.to_ne_bytes();
+            dcell_segment.copy_from_slice(&result_blk_data);
             dbh.mark_buffer_dirty();
-            log_write(*dcell);
+            log_write(cell);
         } else {
-            result_blk_id = *dcell;
+            result_blk_id = dcell;
         }
         return Ok(result_blk_id);
     }
@@ -488,14 +497,14 @@ pub fn itrunc(inode: &mut CachedInode, internals: &mut InodeInternal) -> Result<
         .ok_or(Error::EIO)?;
     if *ind_blk_id != 0 {
         let bh = disk.bread(*ind_blk_id as u64)?;
-        let b_data = bh.get_buffer_data();
+        let b_data = bh.data();
 
-        let mut blks_cont = b_data.into_container::<u32>().ok_or(Error::EIO)?;
-        let blks = blks_cont.to_slice_mut();
+        let mut addr_slice = [0; 4];
         for i in 0..NINDIRECT as usize {
-            let addr = blks.get_mut(i).ok_or(Error::EIO)?;
-            if *addr != 0 {
-                bfree(*addr as usize)?;
+            addr_slice.copy_from_slice(&b_data[i * 4..(i + 1) * 4]);
+            let addr = u32::from_ne_bytes(addr_slice);
+            if addr != 0 {
+                bfree(addr as usize)?;
             }
         }
         bfree(*ind_blk_id as usize)?;
@@ -506,27 +515,29 @@ pub fn itrunc(inode: &mut CachedInode, internals: &mut InodeInternal) -> Result<
         .get_mut(NDIRECT as usize + 1)
         .ok_or(Error::EIO)?;
     if *dind_blk_id != 0 {
-        let bh = disk.bread(*dind_blk_id as u64)?;
-        let b_data = bh.get_buffer_data();
+        let mut bh = disk.bread(*dind_blk_id as u64)?;
+        let b_data = bh.data_mut();
 
-        let mut blks_cont = b_data.into_container::<u32>().ok_or(Error::EIO)?;
-        let blks = blks_cont.to_slice_mut();
+        let mut ind_addr_slice = [0; 4];
         for i in 0..NINDIRECT as usize {
-            let ind_blk_id = blks.get_mut(i).ok_or(Error::EIO)?;
-            if *ind_blk_id != 0 {
-                let dbh = disk.bread(*ind_blk_id as u64)?;
-                let db_data = dbh.get_buffer_data();
+            let ind_region = &mut b_data[i * 4..(i + 1) * 4];
+            ind_addr_slice.copy_from_slice(ind_region);
+            let ind_blk_id = u32::from_ne_bytes(ind_addr_slice);
+            if ind_blk_id != 0 {
+                let dbh = disk.bread(ind_blk_id as u64)?;
+                let db_data = dbh.data();
+                let mut daddr_slice = [0; 4];
 
-                let mut dblks_cont = db_data.into_container::<u32>().ok_or(Error::EIO)?;
-                let dblks = dblks_cont.to_slice_mut();
                 for j in 0..NINDIRECT as usize {
-                    let daddr = dblks.get_mut(j).ok_or(Error::EIO)?;
-                    if *daddr != 0 {
-                        bfree(*daddr as usize)?;
+                    let daddr_region = &db_data[j * 4..(j + 1) * 4];
+                    daddr_slice.copy_from_slice(&daddr_region);
+                    let daddr = u32::from_ne_bytes(daddr_slice);
+                    if daddr != 0 {
+                        bfree(daddr as usize)?;
                     }
                 }
-                bfree(*ind_blk_id as usize)?;
-                *ind_blk_id = 0;
+                bfree(ind_blk_id as usize)?;
+                ind_region.copy_from_slice(&[0; 4]);
             }
         }
         bfree(*dind_blk_id as usize)?;
@@ -703,7 +714,7 @@ pub fn dirlookup(
         return Err(Error::ENOTDIR);
     }
     let de_size = mem::size_of::<Xv6fsDirent>();
-    let mut de_arr_cont = kmem::MemContainer::<u8>::alloc(BSIZE).ok_or(Error::EIO)?;
+    let mut de_arr_vec: Vec<u8> = vec![0; BSIZE];
 
     let num_blocks = match internals.size {
         0 => 0,
@@ -711,7 +722,7 @@ pub fn dirlookup(
     };
 
     for block_idx in 0..num_blocks {
-        let de_arr_slice = de_arr_cont.to_slice_mut();
+        let de_arr_slice = de_arr_vec.as_mut_slice();
         readi(de_arr_slice, BSIZE * block_idx, BSIZE, internals)?;
         // resolve all dirent entries in the current data block.
         for de_idx in 0..BSIZE / de_size {
@@ -752,7 +763,7 @@ pub fn dirlink(
     }
 
     let de_size = mem::size_of::<Xv6fsDirent>();
-    let mut de_arr_cont = kmem::MemContainer::<u8>::alloc(BSIZE).ok_or(Error::EIO)?;
+    let mut de_arr_vec: Vec<u8> = vec![0; BSIZE];
     let mut final_off = None;
 
     let num_blocks = match internals.size {
@@ -760,7 +771,7 @@ pub fn dirlink(
         _ => (internals.size as usize - 1) / BSIZE + 1,
     };
     for block_idx in 0..num_blocks {
-        let de_arr_slice = de_arr_cont.to_slice_mut();
+        let de_arr_slice = de_arr_vec.as_mut_slice();
         readi(de_arr_slice, BSIZE * block_idx, BSIZE, internals)?;
 
         for de_idx in 0..BSIZE / de_size {
@@ -780,11 +791,10 @@ pub fn dirlink(
         }
     }
     let final_off = final_off.unwrap_or(internals.size);
-    let mut de_cont = kmem::MemContainer::<u8>::alloc(de_size).ok_or(Error::EIO)?;
+    let mut de_vec: Vec<u8> = vec![0; de_size];
 
-    let buf_len = de_cont.len();
     let mut de = Xv6fsDirent::new();
-    let de_slice = de_cont.to_slice_mut();
+    let de_slice = de_vec.as_mut_slice();
     de.extract_from(de_slice).map_err(|_| Error::EIO)?;
 
     let name_slice = name.to_bytes_with_nul();
@@ -804,10 +814,10 @@ pub fn dirlink(
     if writei(
         de_slice,
         final_off as usize,
-        buf_len,
+        de_size,
         internals,
         parent_inum,
-    )? != buf_len
+    )? != de_size
     {
         return Err(Error::EIO);
     }

@@ -139,9 +139,8 @@ impl DiskFile {
         if offset + data.len() > self.bdev.bsize as usize {
             return Err(Error::EOVERFLOW);
         }
-        let bh = self.bdev.bread(sector)?;
-        let mut b_data = bh.get_buffer_data();
-        let b_slice = b_data.to_slice_mut();
+        let mut bh = self.bdev.bread(sector)?;
+        let b_slice = bh.data_mut();
         let write_region = &mut b_slice[offset..offset+data.len()];
         write_region.copy_from_slice(data);
         Ok(())
@@ -152,8 +151,7 @@ impl DiskFile {
             return Err(Error::EOVERFLOW);
         }
         let bh = self.bdev.bread(sector)?;
-        let b_data = bh.get_buffer_data();
-        let b_slice = b_data.to_slice();
+        let b_slice = bh.data();
         let read_region = &b_slice[offset..offset+data.len()];
         data.copy_from_slice(read_region);
         Ok(())

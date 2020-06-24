@@ -1,7 +1,6 @@
 use kernel;
 use kernel::errno::Error;
 use kernel::fs::*;
-use kernel::mem;
 use kernel::raw::*;
 
 use core::slice;
@@ -161,15 +160,6 @@ impl CStr {
 }
 
 impl BufferHead {
-    /// Return the associated data as a `kernel::MemContainer<c_uchar>`.
-    pub fn get_buffer_data(&self) -> mem::MemContainer<c_uchar> {
-        let b_data = self.b_data();
-        let size = self.b_size();
-        unsafe {
-            return mem::MemContainer::new_from_raw(b_data as *mut c_uchar, size as usize);
-        }
-    }
-
     /// Return the associated data as a `u8` slice.
     pub fn data(&self) -> &[u8] {
         let b_data = self.b_data();

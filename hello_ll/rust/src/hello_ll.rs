@@ -232,9 +232,7 @@ impl Filesystem for HelloFS {
         };
         {
             let b_slice = bh.data_mut();
-            //let mut b_data = bh.get_buffer_data();
             let offset = offset as usize;
-            //let b_slice = b_data.to_slice_mut();
             let copy_size = data.len();
             let write_region = &mut b_slice[offset..offset + copy_size];
             let data_region = &data[..copy_size];

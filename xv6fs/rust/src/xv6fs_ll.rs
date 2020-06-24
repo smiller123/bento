@@ -8,8 +8,6 @@ use kernel::errno;
 use kernel::fs::Disk;
 use kernel::fuse::*;
 use kernel::kobj::*;
-use kernel::mem as kmem;
-use kernel::raw;
 use kernel::time::*;
 //use kernel::time::*;
 
@@ -71,15 +69,12 @@ pub fn create_internal(
 }
 
 fn isdirempty(internals: &mut InodeInternal) -> Result<bool, errno::Error> {
-    let mut de_cont =
-        kmem::MemContainer::<u8>::alloc(mem::size_of::<Xv6fsDirent>()).ok_or(errno::Error::EIO)?;
-
-    let step_size = mem::size_of::<Xv6fsDirent>();
-    for off in (2 * step_size..internals.size as usize).step_by(step_size) {
-        let buf_len = de_cont.len();
-        let de_slice = de_cont.to_slice_mut();
-        match readi(de_slice, off as usize, buf_len, internals) {
-            Ok(x) if x != buf_len => return Err(errno::Error::EIO),
+    let de_len = mem::size_of::<Xv6fsDirent>();
+    let mut de_vec: Vec<u8> = vec![0; de_len];
+    for off in (2 * de_len..internals.size as usize).step_by(de_len) {
+        let de_slice = de_vec.as_mut_slice();
+        match readi(de_slice, off as usize, de_len, internals) {
+            Ok(x) if x != de_len => return Err(errno::Error::EIO),
             Err(x) => return Err(x),
             _ => {}
         };
@@ -558,26 +553,20 @@ impl Filesystem for Xv6FileSystem {
             return;
         }
 
-        let mut de_cont = match kmem::MemContainer::<u8>::alloc(mem::size_of::<Xv6fsDirent>()) {
-            Some(x) => x,
-            None => {
-                reply.error(-1);
-                return;
-            }
-        };
+        let de_len = mem::size_of::<Xv6fsDirent>();
+        let mut de_vec: Vec<u8> = vec![0; de_len];
 
         let mut buf_off = 1;
         let mut inarg_offset = offset as usize;
-        for off in (0..internals.size).step_by(mem::size_of::<Xv6fsDirent>()) {
+        for off in (0..internals.size).step_by(de_len) {
             if inarg_offset >= 1 {
                 inarg_offset -= 1;
                 buf_off += 1;
                 continue;
             }
-            let buf_len = de_cont.len();
-            let de_slice = de_cont.to_slice_mut();
-            match readi(de_slice, off as usize, buf_len, &mut internals) {
-                Ok(x) if x != buf_len => {
+            let de_slice = de_vec.as_mut_slice();
+            match readi(de_slice, off as usize, de_len, &mut internals) {
+                Ok(x) if x != de_len => {
                     reply.error(-1);
                     return;
                 }
@@ -775,18 +764,8 @@ impl Filesystem for Xv6FileSystem {
             return;
         };
 
-        // Write linkname to file
-        let mut name_buf = match kmem::MemContainer::<raw::c_uchar>::alloc(linkname.len()) {
-            Some(x) => x,
-            None => {
-                reply.error(-(EIO as i32));
-                return;
-            }
-        };
-        let name_slice = name_buf.to_slice_mut();
-        name_slice.copy_from_slice(linkname.to_bytes_with_nul());
         if let Err(x) = writei(
-            name_slice,
+            linkname.to_bytes_with_nul(),
             mem::size_of::<u32>(),
             linkname.len(),
             &mut internals,

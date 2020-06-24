@@ -218,10 +218,6 @@ fn write_log(log: &mut Log) -> Result<(), Error> {
             let src_slice = src_bh.data();
             let dst_slice = dst_bh.data_mut();
             dst_slice.copy_from_slice(src_slice);
-            //let mut src_data = src_bh.get_buffer_data();
-            //let mut dst_data = dst_bh.get_buffer_data();
-            //kmem::memcpy_rust(&mut dst_data, &mut src_data, BSIZE as u64)
-            //    .map_err(|_| Error::EIO)?;
             dst_bh.mark_buffer_dirty();
             dst_bh.sync_dirty_buffer();
             Ok(())
