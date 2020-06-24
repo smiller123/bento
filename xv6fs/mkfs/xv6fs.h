@@ -7,7 +7,7 @@
 
 #define MAXOPBLOCKS 	32
 #define LOGSIZE 	(MAXOPBLOCKS*3)
-#define FSSIZE       	5000000
+#define FSSIZE       	2000000
 
 /*
  *  Disk layout:
