@@ -68,6 +68,7 @@ pub trait Filesystem {
     fn init(
         &mut self,
         _req: &Request,
+        _devname: &CStr,
         _fc_info: &mut FuseConnInfo,
     ) -> Result<(), i32> {
         return Err(-(ENOSYS as i32));

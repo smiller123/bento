@@ -21,17 +21,8 @@ void put_filesystem(struct file_system_type *fs)
 }
 
 struct block_device *
-get_bdev_helper(const char* dev_name, fmode_t mode, bool blk) {
-	struct block_device *bdev;
-	struct file_system_type *fs_type;
-	if (blk)
-		fs_type = get_fs_type("bentoblk");
-	else
-		fs_type = get_fs_type("bento");
-	bdev = blkdev_get_by_path(dev_name, mode, fs_type);
-	blkdev_put(bdev, mode); //FMODE_READ | FMODE_EXCL | FMODE_WRITE);
-	put_filesystem(fs_type);
-	return bdev;
+get_bdev_helper(const char* dev_name, fmode_t mode) {
+	return lookup_bdev(dev_name, mode);
 }
 
 long mount(void) {

@@ -58,7 +58,7 @@ pub struct FuseConnInfo {
 }
 
 impl FuseConnInfo {
-    fn from_init_in(inarg: &fuse_init_in) -> Self {
+    fn from_init_in(inarg: &bento_init_in) -> Self {
         let mut me: Self = Default::default();
         me.proto_major = inarg.major;
         me.proto_minor = inarg.minor;
@@ -111,6 +111,15 @@ impl<'a> Request<'a> {
     }
 }
 
+#[repr(C)]
+struct bento_init_in {
+    major: u32,
+    minor: u32,
+    max_readahead: u32,
+    flags: u32,
+    devname: CStr,
+}
+
 pub fn dispatch<T: Filesystem>(
     fs: &mut T,
     opcode: fuse_opcode,
@@ -125,10 +134,10 @@ pub fn dispatch<T: Filesystem>(
 
             let req = Request { h: &inarg.h };
 
-            let init_in = unsafe { &*(inarg.args[0].value as *const fuse_init_in) };
+            let init_in = unsafe { &*(inarg.args[0].value as *const bento_init_in) };
             let init_out = unsafe { &mut *(outarg.args[0].value as *mut fuse_init_out) };
             let mut fc_info = FuseConnInfo::from_init_in(&init_in);
-            match fs.init(&req, &mut fc_info) {
+            match fs.init(&req, &init_in.devname, &mut fc_info) {
                 Ok(()) => {
                     fc_info.to_init_out(init_out);
                     0

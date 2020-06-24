@@ -272,7 +272,7 @@ extern "C" {
     ) -> i32;
     pub fn unregister_bento_fs(fs_name: *const raw::c_void) -> i32;
     pub fn mount() -> i32;
-    pub fn get_bdev_helper(dev_name: *const raw::c_char, mode: u32, blk: bool) -> *mut raw::c_void;
+    pub fn get_bdev_helper(dev_name: *const raw::c_char, mode: u32) -> *mut raw::c_void;
     pub fn blkdev_put(bdev: *const raw::c_void, mode: u32);
 }
 

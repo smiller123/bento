@@ -5,6 +5,7 @@ use core::str;
 
 use bento::kernel;
 use kernel::errno;
+use kernel::fs::Disk;
 use kernel::fuse::*;
 use kernel::kobj::*;
 use kernel::mem as kmem;
@@ -160,6 +161,7 @@ impl Filesystem for Xv6FileSystem {
     fn init(
         &mut self,
         _req: &Request,
+        devname: &CStr,
         fc_info: &mut FuseConnInfo,
     ) -> Result<(), i32> {
         fc_info.proto_major = BENTO_KERNEL_VERSION;
@@ -181,6 +183,9 @@ impl Filesystem for Xv6FileSystem {
         if fc_info.max_readahead < max_readahead {
             max_readahead = fc_info.max_readahead;
         }
+        let devname_str = str::from_utf8(devname.to_bytes_with_nul()).unwrap();
+        let mut mut_disk = DISK.write();
+        *mut_disk = Some(Disk::new(devname_str, BSIZE as u32));
 
         iinit();
 

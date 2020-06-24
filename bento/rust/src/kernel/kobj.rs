@@ -46,7 +46,7 @@ def_kobj_immut_op!(RsWaitQueueHead, wake_up, rs_wake_up, ());
 impl RsBlockDevice {
     pub fn new(name: &str) -> Self {
         unsafe {
-            Self::from_raw(get_bdev_helper(name.as_ptr() as *const c_char, FMODE_READ | FMODE_WRITE | FMODE_EXCL, true))
+            Self::from_raw(get_bdev_helper(name.as_ptr() as *const c_char, FMODE_READ | FMODE_WRITE | FMODE_EXCL))
         }
     }
     pub fn bread(&self, blockno: u64, size: u32) -> Option<BufferHead> {

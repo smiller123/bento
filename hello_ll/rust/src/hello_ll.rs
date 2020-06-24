@@ -1,5 +1,6 @@
 use alloc::vec::Vec;
 use core::sync::atomic;
+use core::str;
 
 use bento::fuse::reply::*;
 use bento::fuse::request::*;
@@ -68,6 +69,7 @@ impl Filesystem for HelloFS {
     fn init(
         &mut self,
         _req: &Request,
+        devname: &CStr,
         outarg: &mut FuseConnInfo,
     ) -> Result<(), i32> {
         outarg.proto_major = BENTO_KERNEL_VERSION;
@@ -94,6 +96,10 @@ impl Filesystem for HelloFS {
         outarg.max_background = 0;
         outarg.congestion_threshold = 0;
         outarg.time_gran = 1;
+
+        let mut mut_disk = DISK.write();
+        let devname_str = str::from_utf8(devname.to_bytes_with_nul()).unwrap();
+        *mut_disk = Some(Disk::new(devname_str, 4096));
 
         return Ok(());
     }
