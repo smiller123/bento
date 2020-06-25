@@ -5,69 +5,10 @@
 #include <linux/backing-dev.h>
 #include <linux/module.h>
 
-//static int test_bdev_super(struct super_block *s, void *data)
-//{
-//	return (void *)s->s_bdev == data;
-//}
-//
-//static int set_bdev_super(struct super_block *s, void *data)
-//{
-//	return 0;
-//}
-
-void put_filesystem(struct file_system_type *fs)
-{
-	module_put(fs->owner);
-}
-
 struct block_device *
 get_bdev_helper(const char* dev_name, fmode_t mode) {
 	return lookup_bdev(dev_name, mode);
 }
-
-long mount(void) {
-	long ret = 0;
-	//const char* dev = "/dev/nvme0n1";
-	//const char __user * dir = "/mnt/xv6fsll";
-	//const char* type = "bentoblk";
-	//unsigned long flags = 0;
-	//const char* options = "fd=10,rootmode=40000,user_id=0,group_id=0,blksize=4096,name=xv6fs_ll";
-	//ret = do_mount(dev, dir, type, flags, (void *) options);
-	//ret = do_mount((const char*) 0, (const char __user *) 0, (const char *) 0, 0, (const char *) 0);
-	return ret;
-}
-
-//static int mount() {
-//	struct file_system_type *type;
-//	struct vfsmount *mnt;
-//	int err;
-//	int mnt_flags = 0;
-//	struct path path;
-//	int sb_flags = (SB_RDONLY |
-//		SB_SYNCHRONOUS |
-//		SB_MANDLOCK |
-//		SB_DIRSYNC |
-//		SB_SILENT |
-//		SB_POSIXACL |
-//		SB_LAZYTIME |
-//		SB_I_VERSION);
-//
-//	type = get_fs_type("bentoblk");
-//	if (!type)
-//		return -ENODEV;
-//
-//	mnt = vfs_kern_mount(type, sb_flags, "/dev/nvme0n1", "fd=10,rootmode=40000,user_id=0,group_id=0,blksize=4096,name=xv6fs_ll");
-//
-//	put_filesystem(type);
-//	if (IS_ERR(mnt))
-//		return PTR_ERR(mnt);
-//
-//	err = kern_path("/mnt/xv6fsll", LOOKUP_FOLLOW, &path);
-//	err = do_add_mount(real_mount(mnt), &path, mnt_flags);
-//	if (err)
-//		mntput(mnt);
-//	return err;
-//}
 
 void
 rs_dump_super_block(struct super_block* sb) {
@@ -101,6 +42,12 @@ struct block_device*
 rs_super_block_get_s_bdev(struct super_block *sb)
 {
     return sb->s_bdev;
+}
+
+dev_t
+rs_block_device_get_bd_dev(struct block_device *bdev)
+{
+	return bdev->bd_dev;
 }
 
 void*

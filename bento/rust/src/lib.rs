@@ -15,6 +15,7 @@ pub mod io;
 #[allow(non_upper_case_globals)]
 pub mod fuse;
 pub mod kernel;
+pub mod std;
 
 extern crate datablock;
 extern crate rlibc;

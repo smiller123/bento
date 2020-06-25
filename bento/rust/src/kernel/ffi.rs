@@ -239,6 +239,8 @@ extern "C" {
     pub fn rs_buffer_head_get_b_data(bh: *const raw::c_void) -> *const raw::c_void;
     pub fn rs_buffer_head_get_b_size(bh: *const raw::c_void) -> raw::c_size_t;
 
+    pub fn rs_block_device_get_bd_dev(bdev: *const raw::c_void) -> u32;
+
     pub fn mark_buffer_dirty(bh: *const raw::c_void);
     pub fn sync_dirty_buffer(bh: *const raw::c_void) -> i32;
 
@@ -272,7 +274,8 @@ extern "C" {
     ) -> i32;
     pub fn unregister_bento_fs(fs_name: *const raw::c_void) -> i32;
     pub fn mount() -> i32;
-    pub fn get_bdev_helper(dev_name: *const raw::c_char, mode: u32) -> *mut raw::c_void;
+    //pub fn get_bdev_helper(dev_name: *const raw::c_char, mode: u32) -> *mut raw::c_void;
+    pub fn lookup_bdev(dev_name: *const raw::c_char, mode: u32) -> *mut raw::c_void;
     pub fn blkdev_put(bdev: *const raw::c_void, mode: u32);
 }
 

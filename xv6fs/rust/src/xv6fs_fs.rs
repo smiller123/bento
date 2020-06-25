@@ -24,6 +24,8 @@ use crate::xv6fs_utils::*;
 use bento::println;
 use bento::DataBlock;
 
+use bento::std::os::unix::io::AsRawFd;
+
 pub static DISK: Semaphore<Option<Disk>> = Semaphore::new(None);
 
 // 'SB': the in-memory data structure for the xv6 superblock, with semaphore support.
@@ -277,7 +279,10 @@ pub fn iget(inum: u64) -> Result<CachedInode, Error> {
         }
         let mut inode = inode_opt.ok_or(Error::EIO)?;
         // TODO: get dev id
-        if inode.nref > 0 && inode.dev == 3 as u32 && inode.inum == inum as u32 {
+        let disk_guard = DISK.read();
+        let disk = disk_guard.as_ref().unwrap();
+        let dev_id = disk.as_raw_fd();
+        if inode.nref > 0 && inode.dev == dev_id as u32 && inode.inum == inum as u32 {
             inode.nref += 1;
 
             return Ok(CachedInode {
@@ -290,7 +295,7 @@ pub fn iget(inum: u64) -> Result<CachedInode, Error> {
                 let mut new_inode_int = inode.internals.write();
                 new_inode_int.valid = 0;
             }
-            inode.dev = 3 as u32;
+            inode.dev = dev_id as u32;
             inode.inum = inum as u32;
             inode.nref = 1;
             final_idx = Some(idx);

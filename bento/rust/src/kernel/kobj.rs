@@ -29,6 +29,8 @@ use kernel::ffi::*;
 def_kernel_obj_getter!(RsSuperBlock, s_bdev, super_block, RsBlockDevice);
 def_kobj_op!(RsSuperBlock, dump, rs_dump_super_block, ());
 
+def_kernel_val_getter!(RsBlockDevice, bd_dev, block_device, u32);
+
 def_kobj_op!(BufferHead, brelse, __brelse, ());
 def_kobj_op!(BufferHead, mark_buffer_dirty, mark_buffer_dirty, ());
 def_kobj_op!(BufferHead, sync_dirty_buffer, sync_dirty_buffer, i32);
@@ -45,7 +47,8 @@ def_kobj_immut_op!(RsWaitQueueHead, wake_up, rs_wake_up, ());
 impl RsBlockDevice {
     pub fn new(name: &str) -> Self {
         unsafe {
-            Self::from_raw(get_bdev_helper(name.as_ptr() as *const c_char, FMODE_READ | FMODE_WRITE | FMODE_EXCL))
+            //Self::from_raw(get_bdev_helper(name.as_ptr() as *const c_char, FMODE_READ | FMODE_WRITE | FMODE_EXCL))
+            Self::from_raw(lookup_bdev(name.as_ptr() as *const c_char, FMODE_READ | FMODE_WRITE | FMODE_EXCL))
         }
     }
     pub fn bread(&self, blockno: u64, size: u32) -> Option<BufferHead> {

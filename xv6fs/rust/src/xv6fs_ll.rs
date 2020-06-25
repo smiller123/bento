@@ -180,7 +180,7 @@ impl Filesystem for Xv6FileSystem {
         }
         let devname_str = str::from_utf8(devname.to_bytes_with_nul()).unwrap();
         let mut mut_disk = DISK.write();
-        *mut_disk = Some(Disk::new(devname_str, BSIZE as u32));
+        *mut_disk = Some(Disk::new(devname_str, BSIZE as u64));
 
         iinit();
 
