@@ -204,15 +204,10 @@ impl FileExt for DiskFile {
             let write_region = &mut b_slice[curr_off..curr_off+write_size];
             let data_region = &data[written..written+write_size];
             write_region.copy_from_slice(data_region);
+            bh.mark_buffer_dirty();
             written += write_size;
         }
         Ok(written)
-        //let mut bh = self.bdev.bread(sector)
-        //    .map_err(|err| { io::Error::from_raw_os_error(err) })?;
-        //let b_slice = bh.data_mut();
-        //let write_region = &mut b_slice[offset..offset+data.len()];
-        //write_region.copy_from_slice(data);
-        //Ok(())
     }
 }
 
