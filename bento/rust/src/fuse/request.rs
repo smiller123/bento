@@ -2,6 +2,9 @@ use core::str;
 
 use crate::bindings::*;
 
+use crate::std::ffi::OsStr;
+use crate::std::path::Path;
+
 use kernel::kobj::*;
 use kernel::mem::*;
 use kernel::raw;
@@ -137,7 +140,9 @@ pub fn dispatch<T: Filesystem>(
             let init_in = unsafe { &*(inarg.args[0].value as *const bento_init_in) };
             let init_out = unsafe { &mut *(outarg.args[0].value as *mut fuse_init_out) };
             let mut fc_info = FuseConnInfo::from_init_in(&init_in);
-            match fs.init(&req, &init_in.devname, &mut fc_info) {
+            let devname_str = str::from_utf8(init_in.devname.to_bytes_with_nul()).unwrap();
+            let devname = OsStr::new(devname_str);
+            match fs.init(&req, devname, &mut fc_info) {
                 Ok(()) => {
                     fc_info.to_init_out(init_out);
                     0
@@ -162,7 +167,8 @@ pub fn dispatch<T: Filesystem>(
             let mut reply = ReplyEntryInternal {
                 reply: Ok(entry_out),
             };
-            fs.lookup(&req, inarg.h.nodeid, name, &mut reply);
+            let name_str = OsStr::new(str::from_utf8(name.to_bytes_with_nul()).unwrap());
+            fs.lookup(&req, inarg.h.nodeid, name_str, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
                 Err(x) => *x as i32,
@@ -291,6 +297,7 @@ pub fn dispatch<T: Filesystem>(
             let req = Request { h: &inarg.h };
             let mknod_in = unsafe { &*(inarg.args[0].value as *const fuse_mknod_in) };
             let name = unsafe { CStr::from_raw(inarg.args[1].value as *const raw::c_char) };
+            let name_str = OsStr::new(str::from_utf8(name.to_bytes_with_nul()).unwrap());
             let entry_out = unsafe { &mut *(outarg.args[0].value as *mut fuse_entry_out) };
             let mut reply = ReplyEntryInternal {
                 reply: Ok(entry_out),
@@ -298,7 +305,7 @@ pub fn dispatch<T: Filesystem>(
             fs.mknod(
                 &req,
                 inarg.h.nodeid,
-                name,
+                name_str,
                 mknod_in.mode,
                 mknod_in.rdev,
                 &mut reply,
@@ -315,11 +322,12 @@ pub fn dispatch<T: Filesystem>(
             let req = Request { h: &inarg.h };
             let mkdir_in = unsafe { &*(inarg.args[0].value as *const fuse_mkdir_in) };
             let name = unsafe { CStr::from_raw(inarg.args[1].value as *const raw::c_char) };
+            let name_str = OsStr::new(str::from_utf8(name.to_bytes_with_nul()).unwrap());
             let entry_out = unsafe { &mut *(outarg.args[0].value as *mut fuse_entry_out) };
             let mut reply = ReplyEntryInternal {
                 reply: Ok(entry_out),
             };
-            fs.mkdir(&req, inarg.h.nodeid, name, mkdir_in.mode, &mut reply);
+            fs.mkdir(&req, inarg.h.nodeid, name_str, mkdir_in.mode, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
                 Err(x) => *x as i32,
@@ -331,10 +339,11 @@ pub fn dispatch<T: Filesystem>(
             }
             let req = Request { h: &inarg.h };
             let name = unsafe { CStr::from_raw(inarg.args[0].value as *const raw::c_char) };
+            let name_str = OsStr::new(str::from_utf8(name.to_bytes_with_nul()).unwrap());
             let mut reply = ReplyEmptyInternal {
                 reply: Err(-(ENOSYS as i32)),
             };
-            fs.unlink(&req, inarg.h.nodeid, name, &mut reply);
+            fs.unlink(&req, inarg.h.nodeid, name_str, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
                 Err(x) => *x as i32,
@@ -346,10 +355,11 @@ pub fn dispatch<T: Filesystem>(
             }
             let req = Request { h: &inarg.h };
             let name = unsafe { CStr::from_raw(inarg.args[0].value as *const raw::c_char) };
+            let name_str = OsStr::new(str::from_utf8(name.to_bytes_with_nul()).unwrap());
             let mut reply = ReplyEmptyInternal {
                 reply: Err(-(ENOSYS as i32)),
             };
-            fs.rmdir(&req, inarg.h.nodeid, name, &mut reply);
+            fs.rmdir(&req, inarg.h.nodeid, name_str, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
                 Err(x) => *x as i32,
@@ -362,12 +372,14 @@ pub fn dispatch<T: Filesystem>(
 
             let req = Request { h: &inarg.h };
             let name = unsafe { CStr::from_raw(inarg.args[0].value as *const raw::c_char) };
+            let name_str = OsStr::new(str::from_utf8(name.to_bytes_with_nul()).unwrap());
             let link = unsafe { CStr::from_raw(inarg.args[1].value as *const raw::c_char) };
+            let link_path = Path::new(str::from_utf8(link.to_bytes_with_nul()).unwrap());
             let entry_out = unsafe { &mut *(outarg.args[0].value as *mut fuse_entry_out) };
             let mut reply = ReplyEntryInternal {
                 reply: Ok(entry_out),
             };
-            fs.symlink(&req, inarg.h.nodeid, name, link, &mut reply);
+            fs.symlink(&req, inarg.h.nodeid, name_str, link_path, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
                 Err(x) => *x as i32,
@@ -380,16 +392,18 @@ pub fn dispatch<T: Filesystem>(
             let req = Request { h: &inarg.h };
             let rename_in = unsafe { &*(inarg.args[0].value as *const fuse_rename2_in) };
             let oldname = unsafe { CStr::from_raw(inarg.args[1].value as *const raw::c_char) };
+            let oldname_str = OsStr::new(str::from_utf8(oldname.to_bytes_with_nul()).unwrap());
             let newname = unsafe { CStr::from_raw(inarg.args[2].value as *const raw::c_char) };
+            let newname_str = OsStr::new(str::from_utf8(newname.to_bytes_with_nul()).unwrap());
             let mut reply = ReplyEmptyInternal {
                 reply: Err(-(ENOSYS as i32)),
             };
             fs.rename(
                 &req,
                 inarg.h.nodeid,
-                oldname,
+                oldname_str,
                 rename_in.newdir,
-                newname,
+                newname_str,
                 &mut reply,
             );
             match reply.reply() {
@@ -405,6 +419,7 @@ pub fn dispatch<T: Filesystem>(
             let req = Request { h: &inarg.h };
             let link_in = unsafe { &*(inarg.args[0].value as *const fuse_link_in) };
             let name = unsafe { CStr::from_raw(inarg.args[1].value as *const raw::c_char) };
+            let name_str = OsStr::new(str::from_utf8(name.to_bytes_with_nul()).unwrap());
             let entry_out = unsafe { &mut *(outarg.args[0].value as *mut fuse_entry_out) };
             let mut reply = ReplyEntryInternal {
                 reply: Ok(entry_out),
@@ -413,7 +428,7 @@ pub fn dispatch<T: Filesystem>(
                 &req,
                 link_in.oldnodeid,
                 inarg.h.nodeid,
-                name,
+                name_str,
                 &mut reply,
             );
             match reply.reply() {
@@ -670,6 +685,7 @@ pub fn dispatch<T: Filesystem>(
 
             let setxattr_in = unsafe { &*(inarg.args[0].value as *const fuse_setxattr_in) };
             let name = unsafe { CStr::from_raw(inarg.args[1].value as *const raw::c_char) };
+            let name_str = OsStr::new(str::from_utf8(name.to_bytes_with_nul()).unwrap());
             let value_in =
                 unsafe { &mut *(inarg.args[2].value as *mut MemContainer<raw::c_uchar>) };
             let value = value_in.to_slice();
@@ -679,7 +695,7 @@ pub fn dispatch<T: Filesystem>(
             fs.setxattr(
                 &req,
                 inarg.h.nodeid,
-                name,
+                name_str,
                 value,
                 setxattr_in.flags,
                 setxattr_in.size,
@@ -699,6 +715,7 @@ pub fn dispatch<T: Filesystem>(
 
             let getxattr_in = unsafe { &*(inarg.args[0].value as *const fuse_getxattr_in) };
             let name = unsafe { CStr::from_raw(inarg.args[1].value as *const raw::c_char) };
+            let name_str = OsStr::new(str::from_utf8(name.to_bytes_with_nul()).unwrap());
             if outarg.argvar == 1 {
                 let data_out =
                     unsafe { &mut *(outarg.args[0].value as *mut MemContainer<raw::c_uchar>) };
@@ -706,7 +723,7 @@ pub fn dispatch<T: Filesystem>(
                     reply_arg: Err(-(ENOSYS as i32)),
                     reply_buf: Ok(data_out),
                 };
-                fs.getxattr(&req, inarg.h.nodeid, name, getxattr_in.size, &mut reply);
+                fs.getxattr(&req, inarg.h.nodeid, name_str, getxattr_in.size, &mut reply);
                 match reply.reply_buf() {
                     Ok(_) => 0,
                     Err(x) => *x as i32,
@@ -718,7 +735,7 @@ pub fn dispatch<T: Filesystem>(
                     reply_arg: Ok(getxattr_out),
                     reply_buf: Err(-(ENOSYS as i32)),
                 };
-                fs.getxattr(&req, inarg.h.nodeid, name, getxattr_in.size, &mut reply);
+                fs.getxattr(&req, inarg.h.nodeid, name_str, getxattr_in.size, &mut reply);
                 match reply.reply_arg() {
                     Ok(_) => 0,
                     Err(x) => *x as i32,
@@ -767,10 +784,11 @@ pub fn dispatch<T: Filesystem>(
             let req = Request { h: &inarg.h };
 
             let name = unsafe { CStr::from_raw(inarg.args[0].value as *const raw::c_char) };
+            let name_str = OsStr::new(str::from_utf8(name.to_bytes_with_nul()).unwrap());
             let mut reply = ReplyEmptyInternal {
                 reply: Err(-(ENOSYS as i32)),
             };
-            fs.removexattr(&req, inarg.h.nodeid, name, &mut reply);
+            fs.removexattr(&req, inarg.h.nodeid, name_str, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
                 Err(x) => *x as i32,
@@ -801,6 +819,7 @@ pub fn dispatch<T: Filesystem>(
             let req = Request { h: &inarg.h };
             let create_in = unsafe { &*(inarg.args[0].value as *const fuse_create_in) };
             let name = unsafe { CStr::from_raw(inarg.args[1].value as *const raw::c_char) };
+            let name_str = OsStr::new(str::from_utf8(name.to_bytes_with_nul()).unwrap());
             let entry_out = unsafe { &mut *(outarg.args[0].value as *mut fuse_entry_out) };
             let open_out = unsafe { &mut *(outarg.args[1].value as *mut fuse_open_out) };
             let mut reply = ReplyCreateInternal {
@@ -809,7 +828,7 @@ pub fn dispatch<T: Filesystem>(
             fs.create(
                 &req,
                 inarg.h.nodeid,
-                name,
+                name_str,
                 create_in.mode,
                 create_in.flags,
                 &mut reply,

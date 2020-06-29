@@ -7,9 +7,7 @@ use bento::kernel;
 use kernel::errno;
 use kernel::fs::Disk;
 use kernel::fuse::*;
-use kernel::kobj::*;
 use kernel::time::*;
-//use kernel::time::*;
 
 use bento::bindings::*;
 use bento::c_str;
@@ -19,6 +17,9 @@ use bento::fuse::request::*;
 use bento::fuse::*;
 use bento::DataBlock;
 
+use bento::std::ffi::OsStr;
+use bento::std::path::Path;
+
 use crate::log::*;
 use crate::xv6fs_file::*;
 use crate::xv6fs_fs::*;
@@ -27,7 +28,7 @@ use crate::xv6fs_utils::*;
 pub fn create_internal(
     nodeid: u64,
     itype: u16,
-    name: &CStr,
+    name: &OsStr,
 ) -> Result<CachedInode, errno::Error> {
     // Get inode for parent directory
 
@@ -55,12 +56,10 @@ pub fn create_internal(
     if itype == T_DIR {
         parent_internals.nlink += 1;
         iupdate(&parent_internals, parent.inum)?;
-        let d_bytes = &['.' as u8, '\0' as u8];
-        let d = CStr::from_bytes_with_nul(d_bytes)?;
+        let d = OsStr::new(".");
         dirlink(&mut internals, &d, inode.inum, inode.inum)?;
 
-        let dd_bytes = &['.' as u8, '.' as u8, '\0' as u8];
-        let dd = CStr::from_bytes_with_nul(dd_bytes)?;
+        let dd = OsStr::new("..");
         dirlink(&mut internals, &dd, nodeid as u32, inode.inum)?;
     }
 
@@ -88,13 +87,14 @@ fn isdirempty(internals: &mut InodeInternal) -> Result<bool, errno::Error> {
     return Ok(true);
 }
 
-fn dounlink(nodeid: u64, name: &CStr) -> Result<usize, errno::Error> {
+fn dounlink(nodeid: u64, name: &OsStr) -> Result<usize, errno::Error> {
     let parent = iget(nodeid)?;
     let icache = ILOCK_CACHE.read();
     let parent_inode_guard = ilock(parent.idx, &icache, parent.inum)?;
     let mut parent_internals = parent_inode_guard.internals.write();
     let mut poff = 0;
-    if namecmp(name, ".") == 0 || namecmp(name, "..") == 0 {
+    let name_str = name.to_str().unwrap();
+    if name_str == "." || name_str == ".." {
         return Err(errno::Error::EIO);
     }
     let inode = dirlookup(&mut parent_internals, name, &mut poff)?;
@@ -156,7 +156,7 @@ impl Filesystem for Xv6FileSystem {
     fn init(
         &mut self,
         _req: &Request,
-        devname: &CStr,
+        devname: &OsStr,
         fc_info: &mut FuseConnInfo,
     ) -> Result<(), i32> {
         fc_info.proto_major = BENTO_KERNEL_VERSION;
@@ -178,7 +178,7 @@ impl Filesystem for Xv6FileSystem {
         if fc_info.max_readahead < max_readahead {
             max_readahead = fc_info.max_readahead;
         }
-        let devname_str = str::from_utf8(devname.to_bytes_with_nul()).unwrap();
+        let devname_str = devname.to_str().unwrap();
         let mut mut_disk = DISK.write();
         *mut_disk = Some(Disk::new(devname_str, BSIZE as u64));
 
@@ -244,6 +244,7 @@ impl Filesystem for Xv6FileSystem {
 
         let fh = 0;
         let open_flags = FOPEN_KEEP_CACHE;
+        //let open_flags = 0;
         reply.opened(fh, open_flags);
     }
 
@@ -358,7 +359,7 @@ impl Filesystem for Xv6FileSystem {
         &mut self,
         _req: &Request,
         nodeid: u64,
-        name: CStr,
+        name: &OsStr,
         reply: ReplyEntry,
     ) {
         // Get inode number from nodeid
@@ -379,7 +380,7 @@ impl Filesystem for Xv6FileSystem {
         };
         let mut internals = inode_guard.internals.write();
         let mut poff = 0;
-        let child = match dirlookup(&mut internals, &name, &mut poff) {
+        let child = match dirlookup(&mut internals, name, &mut poff) {
             Ok(x) => x,
             Err(x) => {
                 reply.error(x as i32);
@@ -598,14 +599,14 @@ impl Filesystem for Xv6FileSystem {
         &mut self,
         _req: &Request,
         parent: u64,
-        name: CStr, //&OsStr,
+        name: &OsStr,
         _mode: u32,
         _flags: u32,
         reply: ReplyCreate,
     ) {
         // Check if the file already exists
         let _guard = begin_op();
-        let child = match create_internal(parent, T_FILE, &name) {
+        let child = match create_internal(parent, T_FILE, name) {
             Ok(x) => x,
             Err(x) => {
                 reply.error(x as i32);
@@ -643,7 +644,7 @@ impl Filesystem for Xv6FileSystem {
         &mut self,
         _req: &Request,
         parent: u64,
-        name: CStr,
+        name: &OsStr,
         _mode: u32,
         reply: ReplyEntry,
     ) {
@@ -685,11 +686,11 @@ impl Filesystem for Xv6FileSystem {
         &mut self,
         _req: &Request,
         parent: u64,
-        name: CStr,
+        name: &OsStr,
         reply: ReplyEmpty,
     ) {
         let _guard = begin_op();
-        match dounlink(parent, &name) {
+        match dounlink(parent, name) {
             Ok(_) => reply.ok(),
             Err(x) => reply.error(x as i32),
         }
@@ -699,11 +700,11 @@ impl Filesystem for Xv6FileSystem {
         &mut self,
         _req: &Request,
         parent: u64,
-        name: CStr,
+        name: &OsStr,
         reply: ReplyEmpty,
     ) {
         let _guard = begin_op();
-        match dounlink(parent, &name) {
+        match dounlink(parent, name) {
             Ok(_) => reply.ok(),
             Err(x) => reply.error(x as i32),
         }
@@ -725,13 +726,13 @@ impl Filesystem for Xv6FileSystem {
         &mut self,
         _req: &Request,
         nodeid: u64,
-        name: CStr,
-        linkname: CStr,
+        name: &OsStr,
+        linkname: &Path,
         reply: ReplyEntry,
     ) {
         let _guard = begin_op();
         // Create new file
-        let child = match create_internal(nodeid, T_LNK, &name) {
+        let child = match create_internal(nodeid, T_LNK, name) {
             Ok(x) => x,
             Err(x) => {
                 reply.error(x as i32);
@@ -750,7 +751,8 @@ impl Filesystem for Xv6FileSystem {
         let mut internals = inode_guard.internals.write();
 
         let mut len_slice = [0; mem::size_of::<u32>()];
-        let str_length: u32 = linkname.len() as u32 + 1;
+        let linkname_str = linkname.to_str().unwrap();
+        let str_length: u32 = linkname_str.len() as u32 + 1;
         let strlen_slice = str_length.to_ne_bytes();
         len_slice.copy_from_slice(&strlen_slice);
         if let Err(x) = writei(
@@ -765,9 +767,9 @@ impl Filesystem for Xv6FileSystem {
         };
 
         if let Err(x) = writei(
-            linkname.to_bytes_with_nul(),
+            linkname_str.as_bytes(),
             mem::size_of::<u32>(),
-            linkname.len(),
+            linkname_str.len(),
             &mut internals,
             child.inum,
         ) {

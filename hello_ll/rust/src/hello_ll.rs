@@ -9,21 +9,20 @@ use bento::fuse::*;
 use bento::kernel;
 use kernel::fs::*;
 use kernel::fuse::*;
-use kernel::kobj::*;
-use kernel::raw;
 use kernel::semaphore::*;
 use kernel::stat;
-use kernel::string::*;
 use kernel::time::Timespec;
 
 //use bento::println;
 
 use bento::bindings::*;
 
+use bento::std::ffi::OsStr;
+
 pub const PAGE_SIZE: usize = 4096;
 
 static LEN: atomic::AtomicUsize = atomic::AtomicUsize::new(13);
-static HELLO_NAME: &str = "hello\0";
+static HELLO_NAME: &str = "hello";
 pub static DISK: Semaphore<Option<Disk>> = Semaphore::new(None);
 
 pub struct HelloFS;
@@ -69,7 +68,7 @@ impl Filesystem for HelloFS {
     fn init(
         &mut self,
         _req: &Request,
-        devname: &CStr,
+        devname: &OsStr,
         outarg: &mut FuseConnInfo,
     ) -> Result<(), i32> {
         outarg.proto_major = BENTO_KERNEL_VERSION;
@@ -98,7 +97,8 @@ impl Filesystem for HelloFS {
         outarg.time_gran = 1;
 
         let mut mut_disk = DISK.write();
-        let devname_str = str::from_utf8(devname.to_bytes_with_nul()).unwrap();
+        //let devname_str = str::from_utf8(devname.to_bytes_with_nul()).unwrap();
+        let devname_str = devname.to_str().unwrap();
         *mut_disk = Some(Disk::new(devname_str, 4096));
 
         return Ok(());
@@ -150,11 +150,11 @@ impl Filesystem for HelloFS {
         &mut self,
         _req: &Request,
         nodeid: u64,
-        name: CStr,
+        name: &OsStr,
         reply: ReplyEntry,
     ) {
-        let c_name = HELLO_NAME.as_ptr() as *const raw::c_char;
-        if nodeid != 1 || strcmp_rs(name.to_raw(), c_name) != 0 {
+        let name_str = name.to_str().unwrap();
+        if nodeid != 1 || name_str != HELLO_NAME {
             reply.error(-(ENOENT as i32));
         } else {
             let out_nodeid = 2;

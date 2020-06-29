@@ -12,10 +12,8 @@ use bento::kernel;
 
 use kernel::errno::*;
 use kernel::fs::*;
-use kernel::kobj::*;
 use kernel::semaphore::*;
 use kernel::stat;
-use kernel::string::*;
 
 use crate::log::*;
 use crate::xv6fs_file::*;
@@ -25,6 +23,7 @@ use bento::println;
 use bento::DataBlock;
 
 use bento::std::os::unix::io::AsRawFd;
+use bento::std::ffi::OsStr;
 
 pub static DISK: Semaphore<Option<Disk>> = Semaphore::new(None);
 
@@ -97,7 +96,7 @@ pub fn balloc() -> Result<u32, Error> {
             let _guard = BALLOC_LOCK.write();
             let curr_data_block = b as u32 + bi as u32; // 'b' is block id and 'bi' is offset
             if curr_data_block >= fs_size {
-                return Err(Error::EIO);
+                break;
             }
 
             let m = 1 << (bi % 8);
@@ -216,7 +215,7 @@ pub fn ialloc(i_type: u16) -> Result<CachedInode, Error> {
 
             let mut dinode = Xv6fsInode::new();
             dinode.extract_from(inode_slice).map_err(|_| Error::EIO)?;
-            let mut allocated = false;
+            //let mut allocated = false;
             // Check if inode is free
             if dinode.inode_type == 0 {
                 dinode.major = 0;
@@ -228,12 +227,8 @@ pub fn ialloc(i_type: u16) -> Result<CachedInode, Error> {
                 dinode.inode_type = i_type;
                 dinode.nlink = 1;
                 dinode.dump_into(inode_slice).map_err(|_| Error::EIO)?;
-                allocated = true;
-            }
-
-            if allocated {
                 bh.mark_buffer_dirty();
-                log_write(iblock(block_inum, &SB.read()) as u32);
+                log_write(iblock(inum, &SB.read()) as u32);
                 return iget(inum as u64);
             }
         }
@@ -244,7 +239,8 @@ pub fn ialloc(i_type: u16) -> Result<CachedInode, Error> {
 pub fn iupdate(internals: &InodeInternal, inum: u32) -> Result<(), Error> {
     let disk_guard = DISK.read();
     let disk = disk_guard.as_ref().unwrap();
-    let mut bh = disk.bread(iblock(inum as usize, &SB.read()) as u64)?;
+    let iblock = iblock(inum as usize, &SB.read());
+    let mut bh = disk.bread(iblock as u64)?;
     let data_slice = bh.data_mut();
 
     // Get the specific inode offset
@@ -264,7 +260,7 @@ pub fn iupdate(internals: &InodeInternal, inum: u32) -> Result<(), Error> {
     disk_inode.dump_into(inode_slice).map_err(|_| Error::EIO)?;
 
     bh.mark_buffer_dirty();
-    log_write(iblock(inum as usize, &SB.read()) as u32);
+    log_write(iblock as u32);
     return Ok(());
 }
 
@@ -705,13 +701,9 @@ pub fn writei(
     return Ok(n);
 }
 
-pub fn namecmp(s: &CStr, t: &str) -> i32 {
-    return strcmp_rs(s.to_raw() as *const i8, t.as_ptr() as *const i8);
-}
-
 pub fn dirlookup(
     internals: &mut InodeInternal,
-    name: &CStr,
+    name: &OsStr,
     poff: &mut u64,
 ) -> Result<CachedInode, Error> {
     // Check if inode is directory
@@ -724,6 +716,13 @@ pub fn dirlookup(
     let num_blocks = match internals.size {
         0 => 0,
         _ => (internals.size as usize - 1) / BSIZE + 1,
+    };
+    let search_name = match name.to_str() {
+        Some(s) => s,
+        None => {
+            println!("failed to make str");
+            return Err(Error::ENOENT);
+        },
     };
 
     for block_idx in 0..num_blocks {
@@ -741,11 +740,12 @@ pub fn dirlookup(
             if de.inum == 0 {
                 continue;
             }
-            let name_str = match str::from_utf8(&de.name) {
+            let de_name = match str::from_utf8(&de.name) {
                 Ok(x) => x,
                 Err(_) => break,
             };
-            if namecmp(name, name_str) == 0 {
+            let de_name_trimmed = de_name.trim_end_matches('\0');
+            if de_name_trimmed == search_name {
                 *poff = (block_idx * BSIZE + de_idx * de_size) as u64;
                 return iget(de.inum as u64);
             }
@@ -758,7 +758,7 @@ pub fn dirlookup(
 // create subdirectory with 'name' under the directory pointed to by 'internals'
 pub fn dirlink(
     internals: &mut InodeInternal,
-    name: &CStr,
+    name: &OsStr,
     child_inum: u32,
     parent_inum: u32,
 ) -> Result<usize, Error> {
@@ -802,7 +802,8 @@ pub fn dirlink(
     let de_slice = de_vec.as_mut_slice();
     de.extract_from(de_slice).map_err(|_| Error::EIO)?;
 
-    let name_slice = name.to_bytes_with_nul();
+    //let name_slice = name.to_bytes_with_nul();
+    let name_slice = name.to_str().unwrap().as_bytes();
     if name_slice.len() > DIRSIZ as usize {
         return Err(Error::EIO);
     }

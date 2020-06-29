@@ -7,8 +7,10 @@ use crate::bindings::*;
 use crate::fuse::reply::*;
 use crate::fuse::request::*;
 
+use crate::std::ffi::OsStr;
+use crate::std::path::Path;
+
 use kernel::ffi::*;
-use kernel::kobj::*;
 use kernel::raw;
 use kernel::time::Timespec;
 
@@ -63,12 +65,13 @@ pub trait Filesystem {
     ///
     /// Arguments:
     /// * `req: &Request` - Request data structure.
+    /// * `devname: &OsStr` - Name of the backing device file.
     /// * `fc_info: &mut FuseConnInfo` - Connection information used to pass initialization
     /// arguments to Bento.
     fn init(
         &mut self,
         _req: &Request,
-        _devname: &CStr,
+        _devname: &OsStr,
         _fc_info: &mut FuseConnInfo,
     ) -> Result<(), i32> {
         return Err(-(ENOSYS as i32));
@@ -90,13 +93,13 @@ pub trait Filesystem {
     /// Arguments:
     /// * `req: &Request` - Request data structure.
     /// * `parent: u64` - The file system-provided inode number of the parent directory
-    /// * `name: CStr` - The name of the file to lookup.
+    /// * `name: &OsStr` - The name of the file to lookup.
     /// * `reply: ReplyEntry` - Output data structure for the entry data or error vaule.
     fn lookup(
         &mut self,
         _req: &Request,
         _parent: u64,
-        _name: CStr,
+        _name: &OsStr,
         reply: ReplyEntry,
     ) {
         reply.error(-(ENOSYS as i32));
@@ -198,7 +201,7 @@ pub trait Filesystem {
     /// Arguments:
     /// * `req: &Request` - Request data structure.
     /// * `parent: u64` - Filesystem-provided inode number of the parent directory.
-    /// * `name: CStr` - Name of the file to be created.
+    /// * `name: &OsStr` - Name of the file to be created.
     /// * `mode: u32` - File creation mode. Specifies both the file mode and the type of node.
     /// * `rdev: u32` - Device number. Used if file mode is `S_IFCHR` of `S_IFBLK`.
     /// * `reply: ReplyEntry` - Output data structure for the entry data or error value.
@@ -206,7 +209,7 @@ pub trait Filesystem {
         &mut self,
         _req: &Request,
         _parent: u64,
-        _name: CStr, //&OsStr
+        _name: &OsStr,
         _mode: u32,
         _rdev: u32,
         reply: ReplyEntry,
@@ -219,14 +222,14 @@ pub trait Filesystem {
     /// Arguments:
     /// * `req: &Request` - Request data structure.
     /// * `parent: u64` - Filesystem-provided inode number of the parent directory.
-    /// * `name: CStr` - Name of the directory to be created.
+    /// * `name: &OsStr` - Name of the directory to be created.
     /// * `mode: u32` - Mode of the directory to be created.
     /// * `reply: ReplyEntry` - Output data structure for the entry data or error value.
     fn mkdir(
         &mut self,
         _req: &Request,
         _parent: u64,
-        _name: CStr, //&OsStr
+        _name: &OsStr,
         _mode: u32,
         reply: ReplyEntry,
     ) {
@@ -242,13 +245,13 @@ pub trait Filesystem {
     /// Arguments:
     /// * `req: &Request` - Request data structure.
     /// * `parent: u64` - Filesystem-provided inode number of the parent directory.
-    /// * `name: CStr` - Name of the file to be removed.
+    /// * `name: &OsStr` - Name of the file to be removed.
     /// * `reply: ReplyEmpty` - Output data structure for a possible error value.
     fn unlink(
         &mut self,
         _req: &Request,
         _parent: u64,
-        _name: CStr, //&OsStr
+        _name: &OsStr,
         reply: ReplyEmpty,
     ) {
         return reply.error(-(ENOSYS as i32));
@@ -263,13 +266,13 @@ pub trait Filesystem {
     /// Arguments:
     /// * `req: &Request` - Request data structure.
     /// * `parent: u64` - Filesystem-provided inode number of the parent directory.
-    /// * `name: CStr` - Name of the file to be removed.
+    /// * `name: &OsStr` - Name of the file to be removed.
     /// * `reply: ReplyEmpty` - Output data structure for a possible error value.
     fn rmdir(
         &mut self,
         _req: &Request,
         _parent: u64,
-        _name: CStr, //&OsStr
+        _name: &OsStr,
         reply: ReplyEmpty,
     ) {
         return reply.error(-(ENOSYS as i32));
@@ -280,15 +283,15 @@ pub trait Filesystem {
     /// Arguments:
     /// * `req: &Request` - Request data structure.
     /// * `parent: u64` - Filesystem-provided inode number of the parent directory.
-    /// * `name: CStr` - Name of the file to be removed.
-    /// * `linkname: CStr` - The contents of the symbolic link.
+    /// * `name: &OsStr` - Name of the file to be removed.
+    /// * `linkname: &Path` - The contents of the symbolic link.
     /// * `reply: ReplyEntry` - Output data structure for the entry data or error value.
     fn symlink(
         &mut self,
         _req: &Request,
         _parent: u64,
-        _name: CStr, // &OsStr
-        _link: CStr, // & Path
+        _name: &OsStr,
+        _link: &Path,
         reply: ReplyEntry,
     ) {
         return reply.error(-(ENOSYS as i32));
@@ -312,17 +315,17 @@ pub trait Filesystem {
     /// Arguments:
     /// * `req: &Request` - Request data structure.
     /// * `parent: u64` - Filesystem-provided inode number of the parent directory.
-    /// * `name: CStr` - Name of the file to be removed.
+    /// * `name: &OsStr` - Name of the file to be removed.
     /// * `newparent: u64` - Filesystem-provided inode number of the new parent directory.
-    /// * `newname: CStr` - New name of the file.
+    /// * `newname: &OsStr` - New name of the file.
     /// * `reply: ReplyEmpty` - Output data structure for a possible error value.
     fn rename(
         &mut self,
         _req: &Request,
         _parent: u64,
-        _name: CStr, //&OsStr
+        _name: &OsStr,
         _newparent: u64,
-        _newname: CStr, //&OsStr,
+        _newname: &OsStr,
         reply: ReplyEmpty,
     ) {
         return reply.error(-(ENOSYS as i32));
@@ -334,14 +337,14 @@ pub trait Filesystem {
     /// * `req: &Request` - Request data structure.
     /// * `ino: u64` - Filesystem-provided inode number of the old node.
     /// * `newparent: u64` - Filesystem-provided inode number of the new parent directory.
-    /// * `newname: CStr` - New name of the file to create.
+    /// * `newname: &OsStr` - New name of the file to create.
     /// * `reply: ReplyEntry` - Output data structure for the entry data or error value.
     fn link(
         &mut self,
         _req: &Request,
         _ino: u64,
         _newparent: u64,
-        _newname: CStr, // &OsStr
+        _newname: &OsStr,
         reply: ReplyEntry,
     ) {
         return reply.error(-(ENOSYS as i32));
@@ -692,7 +695,7 @@ pub trait Filesystem {
     /// Arguments:
     /// * `req: &Request` - Request data structure.
     /// * `ino: u64` - Filesystem-provided inode number.
-    /// * `name: CStr` - Name of the extended attribute.
+    /// * `name: &OsStr` - Name of the extended attribute.
     /// * `value: &[u8]` - Value to set the attribute to.
     /// * `flags: u32` - Set extended attribute flags.
     /// * `position: u32` - Size of the extended attribute value.
@@ -701,7 +704,7 @@ pub trait Filesystem {
         &mut self,
         _req: &Request,
         _ino: u64,
-        _name: CStr, //&OsStr,
+        _name: &OsStr,
         _value: &[u8],
         _flags: u32,
         _position: u32,
@@ -725,14 +728,14 @@ pub trait Filesystem {
     /// Arguments:
     /// * `req: &Request` - Request data structure.
     /// * `ino: u64` - Filesystem-provided inode number.
-    /// * `name: CStr` - The name of the attribute.
+    /// * `name: &OsStr` - The name of the attribute.
     /// * `size: u32` - The size of the buffer to write xattr data into.
     /// * `reply: ReplyXattr` - Output data structure for the xattr data.
     fn getxattr(
         &mut self,
         _req: &Request,
         _ino: u64,
-        _name: CStr, //&OsStr,
+        _name: &OsStr,
         _size: u32,
         reply: ReplyXattr,
     ) {
@@ -776,13 +779,13 @@ pub trait Filesystem {
     /// Arguments:
     /// * `req: &Request` - Request data structure.
     /// * `ino: u64` - Filesystem-provided inode number.
-    /// * `name: CStr` - The name of the attribute to remove.
+    /// * `name: &OsStr` - The name of the attribute to remove.
     /// * `reply: ReplyEmpty` - Output data structure for a possible error value.
     fn removexattr(
         &mut self,
         _req: &Request,
         _ino: u64,
-        _name: CStr, //&OsStr,
+        _name: &OsStr,
         reply: ReplyEmpty,
     ) {
         return reply.error(-(ENOSYS as i32));
@@ -827,7 +830,7 @@ pub trait Filesystem {
     /// Arguments:
     /// * `req: &Request` - Request data structure.
     /// * `parent: u64` - Filesystem-provided inode number of the parent directory.
-    /// * `name: CStr` - The name of the new file.
+    /// * `name: &OsStr` - The name of the new file.
     /// * `mode: u32` - Create mode.
     /// * `flags: u32` - Open flags.
     /// * `reply: ReplyCreate` - Output data structure for entry and open data or error value.
@@ -835,7 +838,7 @@ pub trait Filesystem {
         &mut self,
         _req: &Request,
         _parent: u64,
-        _name: CStr, //&OsStr,
+        _name: &OsStr,
         _mode: u32,
         _flags: u32,
         reply: ReplyCreate,
