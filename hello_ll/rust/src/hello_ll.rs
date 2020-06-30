@@ -9,7 +9,6 @@ use bento::fuse::*;
 use bento::kernel;
 use kernel::fs::*;
 use kernel::fuse::*;
-use kernel::semaphore::*;
 use kernel::stat;
 use kernel::time::Timespec;
 
@@ -18,14 +17,20 @@ use kernel::time::Timespec;
 use bento::bindings::*;
 
 use bento::std::ffi::OsStr;
+use bento::std::sync::RwLock;
 
 pub const PAGE_SIZE: usize = 4096;
 
 static LEN: atomic::AtomicUsize = atomic::AtomicUsize::new(13);
 static HELLO_NAME: &str = "hello";
-pub static DISK: Semaphore<Option<Disk>> = Semaphore::new(None);
 
-pub struct HelloFS;
+pub static HELLO_FS: HelloFS = HelloFS {
+    disk: None
+};
+
+pub struct HelloFS {
+    disk: Option<RwLock<Disk>>
+}
 
 impl HelloFS {
     const NAME: &'static str = "hello_ll\0";
@@ -96,20 +101,22 @@ impl Filesystem for HelloFS {
         outarg.congestion_threshold = 0;
         outarg.time_gran = 1;
 
-        let mut mut_disk = DISK.write();
+        //let mut mut_disk = DISK.write();
         //let devname_str = str::from_utf8(devname.to_bytes_with_nul()).unwrap();
         let devname_str = devname.to_str().unwrap();
-        *mut_disk = Some(Disk::new(devname_str, 4096));
+        let disk = RwLock::new(Disk::new(devname_str, 4096));
+        self.disk = Some(disk);
+        //*mut_disk = Some(Disk::new(devname_str, 4096));
 
         return Ok(());
     }
 
-    fn statfs(&mut self, _req: &Request, _ino: u64, reply: ReplyStatfs) {
+    fn statfs(&self, _req: &Request, _ino: u64, reply: ReplyStatfs) {
         reply.statfs(0, 0, 0, 0, 0, 512, 255, 0);
     }
 
     fn open(
-        &mut self,
+        &self,
         _req: &Request,
         nodeid: u64,
         _flags: u32,
@@ -123,7 +130,7 @@ impl Filesystem for HelloFS {
     }
 
     fn opendir(
-        &mut self,
+        &self,
         _req: &Request,
         nodeid: u64,
         _flags: u32,
@@ -136,7 +143,7 @@ impl Filesystem for HelloFS {
         }
     }
 
-    fn getattr(&mut self, _req: &Request, nodeid: u64, reply: ReplyAttr) {
+    fn getattr(&self, _req: &Request, nodeid: u64, reply: ReplyAttr) {
         let attr_valid = Timespec::new(1, 999999999);
         let mut attr = fuse_attr::new();
         if HelloFS::hello_stat(nodeid, &mut attr) == -1 {
@@ -147,7 +154,7 @@ impl Filesystem for HelloFS {
     }
 
     fn lookup(
-        &mut self,
+        &self,
         _req: &Request,
         nodeid: u64,
         name: &OsStr,
@@ -170,7 +177,7 @@ impl Filesystem for HelloFS {
     }
 
     fn read(
-        &mut self,
+        &self,
         _req: &Request,
         nodeid: u64,
         _fh: u64,
@@ -184,8 +191,7 @@ impl Filesystem for HelloFS {
         }
         let copy_len = LEN.load(atomic::Ordering::SeqCst) - offset as usize;
 
-        let disk_guard = DISK.read();
-        let disk = disk_guard.as_ref().unwrap();
+        let disk = self.disk.as_ref().unwrap().read();
         let mut bh = match disk.bread(0) {
             Ok(x) => x,
             Err(x)=> {
@@ -205,7 +211,7 @@ impl Filesystem for HelloFS {
     }
 
     fn write(
-        &mut self,
+        &self,
         _req: &Request,
         nodeid: u64,
         _fh: u64,
@@ -221,8 +227,7 @@ impl Filesystem for HelloFS {
             return;
         }
 
-        let disk_guard = DISK.read();
-        let disk = disk_guard.as_ref().unwrap();
+        let disk = self.disk.as_ref().unwrap().read();
         let mut bh = match disk.bread(0) {
             Ok(x) => x,
             Err(x) => {
@@ -246,7 +251,7 @@ impl Filesystem for HelloFS {
     }
 
     fn readdir(
-        &mut self,
+        &self,
         _req: &Request,
         nodeid: u64,
         _fh: u64,
@@ -285,15 +290,14 @@ impl Filesystem for HelloFS {
     }
 
     fn fsync(
-        &mut self,
+        &self,
         _req: &Request,
         _ino: u64,
         _fh: u64,
         _datasync: bool,
         reply: ReplyEmpty,
     ) {
-        let disk_guard = DISK.read();
-        let disk = disk_guard.as_ref().unwrap();
+        let disk = self.disk.as_ref().unwrap().read();
         if let Err(x) = disk.sync_all() {
             reply.error(x as i32);
         } else {

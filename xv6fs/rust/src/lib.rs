@@ -9,20 +9,21 @@
 
 #[macro_use]
 extern crate alloc;
+extern crate arr_macro;
 extern crate bento;
+extern crate datablock;
+extern crate rlibc;
 
 use bento::c_str;
 use bento::fuse::*;
 use bento::println;
+use bento::std as std;
 
-extern crate arr_macro;
-extern crate rlibc;
-
-pub mod log;
-pub mod xv6fs_file;
-pub mod xv6fs_fs;
-pub mod xv6fs_ll;
-pub mod xv6fs_utils;
+mod log;
+mod xv6fs_file;
+mod xv6fs_fs;
+mod xv6fs_ll;
+mod xv6fs_utils;
 
 use xv6fs_ll::XV6FS;
 

@@ -6,7 +6,6 @@ pub mod fuse;
 pub mod kobj;
 pub mod mem;
 pub mod raw;
-pub mod semaphore;
 pub mod stat;
 pub mod string;
 pub mod sync;

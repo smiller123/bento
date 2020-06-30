@@ -96,7 +96,7 @@ pub trait Filesystem {
     /// * `name: &OsStr` - The name of the file to lookup.
     /// * `reply: ReplyEntry` - Output data structure for the entry data or error vaule.
     fn lookup(
-        &mut self,
+        &self,
         _req: &Request,
         _parent: u64,
         _name: &OsStr,
@@ -126,7 +126,7 @@ pub trait Filesystem {
     /// * `req: &Request` - Request data structure.
     /// * `ino: u64` - Filesystem-provided inode number of the inode to forget.
     /// * `nlookup: u64` - The number of lookups to forget.
-    fn forget(&mut self, _req: &Request, _ino: u64, _nlookup: u64) {}
+    fn forget(&self, _req: &Request, _ino: u64, _nlookup: u64) {}
 
     /// Get file attributes.
     ///
@@ -140,7 +140,7 @@ pub trait Filesystem {
     /// * `req: &Request` - Request data structure.
     /// * `ino: u64` - Filesystem-provided id of the inode.
     /// * `reply: ReplyAttr` - Output data structure for the attribute data or error value.
-    fn getattr(&mut self, _req: &Request, _ino: u64, reply: ReplyAttr) {
+    fn getattr(&self, _req: &Request, _ino: u64, reply: ReplyAttr) {
         reply.error(-(ENOSYS as i32));
     }
 
@@ -165,7 +165,7 @@ pub trait Filesystem {
     /// * `flags: Option<u32>` - Unused.
     /// * `reply: ReplyAttr` - Output data structure for the attribute data or error value.
     fn setattr(
-        &mut self,
+        &self,
         _req: &Request,
         _ino: u64,
         _mode: Option<u32>,
@@ -206,7 +206,7 @@ pub trait Filesystem {
     /// * `rdev: u32` - Device number. Used if file mode is `S_IFCHR` of `S_IFBLK`.
     /// * `reply: ReplyEntry` - Output data structure for the entry data or error value.
     fn mknod(
-        &mut self,
+        &self,
         _req: &Request,
         _parent: u64,
         _name: &OsStr,
@@ -226,7 +226,7 @@ pub trait Filesystem {
     /// * `mode: u32` - Mode of the directory to be created.
     /// * `reply: ReplyEntry` - Output data structure for the entry data or error value.
     fn mkdir(
-        &mut self,
+        &self,
         _req: &Request,
         _parent: u64,
         _name: &OsStr,
@@ -248,7 +248,7 @@ pub trait Filesystem {
     /// * `name: &OsStr` - Name of the file to be removed.
     /// * `reply: ReplyEmpty` - Output data structure for a possible error value.
     fn unlink(
-        &mut self,
+        &self,
         _req: &Request,
         _parent: u64,
         _name: &OsStr,
@@ -269,7 +269,7 @@ pub trait Filesystem {
     /// * `name: &OsStr` - Name of the file to be removed.
     /// * `reply: ReplyEmpty` - Output data structure for a possible error value.
     fn rmdir(
-        &mut self,
+        &self,
         _req: &Request,
         _parent: u64,
         _name: &OsStr,
@@ -287,7 +287,7 @@ pub trait Filesystem {
     /// * `linkname: &Path` - The contents of the symbolic link.
     /// * `reply: ReplyEntry` - Output data structure for the entry data or error value.
     fn symlink(
-        &mut self,
+        &self,
         _req: &Request,
         _parent: u64,
         _name: &OsStr,
@@ -320,7 +320,7 @@ pub trait Filesystem {
     /// * `newname: &OsStr` - New name of the file.
     /// * `reply: ReplyEmpty` - Output data structure for a possible error value.
     fn rename(
-        &mut self,
+        &self,
         _req: &Request,
         _parent: u64,
         _name: &OsStr,
@@ -340,7 +340,7 @@ pub trait Filesystem {
     /// * `newname: &OsStr` - New name of the file to create.
     /// * `reply: ReplyEntry` - Output data structure for the entry data or error value.
     fn link(
-        &mut self,
+        &self,
         _req: &Request,
         _ino: u64,
         _newparent: u64,
@@ -385,7 +385,7 @@ pub trait Filesystem {
     /// * `flags: u32` - Open flags.
     /// * `reply: ReplyOpen` - Output data structure for the opened file data or error value.
     fn open(
-        &mut self,
+        &self,
         _req: &Request,
         _ino: u64,
         _flags: u32,
@@ -410,7 +410,7 @@ pub trait Filesystem {
     /// * `size: u32` - Size of the data to read.
     /// * `reply: ReplyData` - Output data structure for the read data or error value.
     fn read(
-        &mut self,
+        &self,
         _req: &Request,
         _ino: u64,
         _fh: u64,
@@ -440,7 +440,7 @@ pub trait Filesystem {
     /// * `flags: u32` - Write flags.
     /// * `reply: ReplyWrite` - Output data structure for the write size or error value.
     fn write(
-        &mut self,
+        &self,
         _req: &Request,
         _ino: u64,
         _fh: u64,
@@ -483,7 +483,7 @@ pub trait Filesystem {
     /// * `lock_owner: u64` - Lock owner for removing locks on files.
     /// * `reply: ReplyEmpty` - Output data structure for a possible error value.
     fn flush(
-        &mut self,
+        &self,
         _req: &Request,
         _ino: u64,
         _fh: u64,
@@ -516,7 +516,7 @@ pub trait Filesystem {
     /// * `flush: bool` - Indicates if release should flush. Always false.
     /// * `reply: ReplyEmpty` - Output data structure for a possible error value.
     fn release(
-        &mut self,
+        &self,
         _req: &Request,
         _ino: u64,
         _fh: u64,
@@ -543,7 +543,7 @@ pub trait Filesystem {
     /// * `datasync: bool` - Indicates if data should be flushed as well as metadata.
     /// * `reply: ReplyEmpty` - Output data structure for a possible error value.
     fn fsync(
-        &mut self,
+        &self,
         _req: &Request,
         _ino: u64,
         _fh: u64,
@@ -570,7 +570,7 @@ pub trait Filesystem {
     /// * `flags: u32` - Open flags.
     /// * `reply: ReplyOpen` - Output data structure for the opened file data or error value.
     fn opendir(
-        &mut self,
+        &self,
         _req: &Request,
         _ino: u64,
         _flags: u32,
@@ -613,7 +613,7 @@ pub trait Filesystem {
     /// * `reply: ReplyDirectory` - Output data structure for the read directory information or
     /// error value.
     fn readdir(
-        &mut self,
+        &self,
         _req: &Request,
         _ino: u64,
         _fh: u64,
@@ -638,7 +638,7 @@ pub trait Filesystem {
     /// * `flags: u32` - Open flags.
     /// * `reply: ReplyEmpty` - Output data structure for a possible error value.
     fn releasedir(
-        &mut self,
+        &self,
         _req: &Request,
         _ino: u64,
         _fh: u64,
@@ -666,7 +666,7 @@ pub trait Filesystem {
     /// * `datasync: bool` - Indicates if data should be flushed as well as metadata.
     /// * `reply: ReplyEmpty` - Output data structure for a possible error value.
     fn fsyncdir(
-        &mut self,
+        &self,
         _req: &Request,
         _ino: u64,
         _fh: u64,
@@ -682,7 +682,7 @@ pub trait Filesystem {
     /// * `req: &Request` - Request data structure.
     /// * `ino: u64` - Filesystem-provided inode number, zero means "undefined".
     /// * `reply: ReplyStatfs` - Output data structure for file system stat data or error value.
-    fn statfs(&mut self, _req: &Request, _ino: u64, reply: ReplyStatfs) {
+    fn statfs(&self, _req: &Request, _ino: u64, reply: ReplyStatfs) {
         return reply.error(-(ENOSYS as i32));
     }
 
@@ -701,7 +701,7 @@ pub trait Filesystem {
     /// * `position: u32` - Size of the extended attribute value.
     /// * `reply: ReplyEmpty` - Output data structure for a possible error value.
     fn setxattr(
-        &mut self,
+        &self,
         _req: &Request,
         _ino: u64,
         _name: &OsStr,
@@ -732,7 +732,7 @@ pub trait Filesystem {
     /// * `size: u32` - The size of the buffer to write xattr data into.
     /// * `reply: ReplyXattr` - Output data structure for the xattr data.
     fn getxattr(
-        &mut self,
+        &self,
         _req: &Request,
         _ino: u64,
         _name: &OsStr,
@@ -761,7 +761,7 @@ pub trait Filesystem {
     /// * `size: u32` - The size of the buffer to write xattr data into.
     /// * `reply: ReplyXattr` - Output data structure for the xattr data.
     fn listxattr(
-        &mut self,
+        &self,
         _req: &Request,
         _ino: u64,
         _size: u32,
@@ -782,7 +782,7 @@ pub trait Filesystem {
     /// * `name: &OsStr` - The name of the attribute to remove.
     /// * `reply: ReplyEmpty` - Output data structure for a possible error value.
     fn removexattr(
-        &mut self,
+        &self,
         _req: &Request,
         _ino: u64,
         _name: &OsStr,
@@ -806,7 +806,7 @@ pub trait Filesystem {
     /// * `mask: u32` - Access mask.
     /// * `reply: ReplyEmpty` - Output data structure for a possible error value.
     fn access(
-        &mut self,
+        &self,
         _req: &Request,
         _ino: u64,
         _mask: u32,
@@ -835,7 +835,7 @@ pub trait Filesystem {
     /// * `flags: u32` - Open flags.
     /// * `reply: ReplyCreate` - Output data structure for entry and open data or error value.
     fn create(
-        &mut self,
+        &self,
         _req: &Request,
         _parent: u64,
         _name: &OsStr,
@@ -859,7 +859,7 @@ pub trait Filesystem {
     /// * `pid: u32` - FUSE file lock pid.
     /// * `reply: ReplyLock` - Output data structure for lock data or error value.
     fn getlk(
-        &mut self,
+        &self,
         _req: &Request,
         _ino: u64,
         _fh: u64,
@@ -894,7 +894,7 @@ pub trait Filesystem {
     /// * `sleep: bool` - Should the filesystem sleep.
     /// * `reply: ReplyEmpty` - Output data structure for a possible error value.
     fn setlk(
-        &mut self,
+        &self,
         _req: &Request,
         _ino: u64,
         _fh: u64,
@@ -925,7 +925,7 @@ pub trait Filesystem {
     /// * `idx: u64` - Block index.
     /// * `reply: ReplyBmap` - Output data structure for bmap data or error value.
     fn bmap(
-        &mut self,
+        &self,
         _req: &Request,
         _ino: u64,
         _blocksize: u32,

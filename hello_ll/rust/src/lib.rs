@@ -17,15 +17,15 @@ use bento::println;
 
 pub mod hello_ll;
 
-use hello_ll::HelloFS;
+use hello_ll::HELLO_FS;
 
 #[no_mangle]
 pub fn rust_main() {
     println!("Hello from Rust");
-    HelloFS.register();
+    HELLO_FS.register();
 }
 
 #[no_mangle]
 pub fn rust_exit() {
-    HelloFS.unregister();
+    HELLO_FS.unregister();
 }

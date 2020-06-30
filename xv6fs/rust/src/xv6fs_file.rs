@@ -1,17 +1,19 @@
-use crate::xv6fs_fs::*;
+use crate::std as std;
+
 use crate::xv6fs_utils::*;
+use crate::xv6fs_ll::*;
 
-use bento::kernel;
-use kernel::semaphore::*;
+use std::sync::RwLock;
 
-pub struct CachedInode {
+pub struct CachedInode<'a> {
     pub idx: usize,
     pub inum: u32,
+    pub fs: &'a Xv6FileSystem,
 }
 
-impl Drop for CachedInode {
+impl<'a> Drop for CachedInode<'a> {
     fn drop(&mut self) {
-        let _ = iput(self);
+        let _ = self.fs.iput(self);
     }
 }
 
@@ -19,16 +21,16 @@ pub struct Inode {
     pub dev: u32,
     pub inum: u32,
     pub nref: i32,
-    pub internals: Semaphore<InodeInternal>,
+    pub internals: RwLock<InodeInternal>,
 }
 
 impl Inode {
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Inode {
             dev: 0,
             inum: 0,
             nref: 0,
-            internals: Semaphore::new(InodeInternal::new()),
+            internals: RwLock::new(InodeInternal::new()),
         }
     }
 }
