@@ -3,6 +3,8 @@ pub mod request;
 
 use core::str;
 
+use crate::c_str;
+
 use crate::bindings::*;
 use crate::fuse::reply::*;
 use crate::fuse::request::*;
@@ -29,7 +31,7 @@ pub trait Filesystem {
     /// Get the name of the file system.
     ///
     /// This must be provided to mount the filesystem.
-    fn get_name(&self) -> &str;
+    fn get_name(&self) -> &'static str;
 
     /// Register the filesystem with Bento.
     ///

@@ -10,4 +10,3 @@ pub mod stat;
 pub mod string;
 pub mod sync;
 pub mod time;
-pub mod wait_queue;

@@ -5,6 +5,7 @@ use core::ptr::NonNull;
 
 use crate::kernel::kobj::*;
 use crate::kernel::sync::*;
+use crate::std::sys_common::poison::{LockResult, TryLockError, TryLockResult};
 
 /// A wrapper around the kernel semaphore.
 ///
@@ -115,20 +116,52 @@ impl<T: ?Sized> RwLock<T> {
     /// let mylock = RwLock::new(0);
     /// mylock.init();
     /// {
-    ///     let mut data = mylock.read();
+    ///     let mut data = mylock.read().unwrap();
     ///     // The lock is now locked and the data can be read
     ///     println!("{}", *data);
     ///     // The lock is dropped
     /// }
     /// ```
     #[inline]
-    pub fn read(&self) -> RwLockReadGuard<T> {
+    pub fn read(&self) -> LockResult<RwLockReadGuard<T>> {
         unsafe {
             let _ = down_read(&*self.lock.get());
         }
-        RwLockReadGuard {
+        Ok(RwLockReadGuard {
             lock: unsafe { NonNull::new_unchecked(self.lock.get()) },
             data: unsafe { NonNull::new_unchecked(self.data.get()) },
+        })
+    }
+
+    /// Tries to lock this semaphore with read access without
+    /// blocking. If the lock is already held by another thread, this
+    /// won't lock.
+    ///
+    /// Returns an RAII guard which will drop the read access of this lock
+    /// when dropped if the lock was successful. Otherwise, returns None.
+    ///
+    /// ```
+    /// use bento::std::sync::RwLock;
+    ///
+    /// let mylock = RwLock::new(0);
+    /// mylock.init();
+    /// {
+    ///     let mut data = mylock.try_read().unwrap();
+    ///     // The lock is now locked and the data can be written
+    ///     *data += 1;
+    ///     // The lock is dropped
+    /// }
+    /// ```
+    #[inline]
+    pub fn try_read(&self) -> TryLockResult<RwLockReadGuard<T>> {
+        let write_ret = unsafe { down_read_trylock(&*self.lock.get()) };
+        if write_ret == Ok(1) {
+            return Ok(RwLockReadGuard {
+                lock: unsafe { NonNull::new_unchecked(self.lock.get()) },
+                data: unsafe { NonNull::new_unchecked(self.data.get()) },
+            });
+        } else {
+            return Err(TryLockError::WouldBlock);
         }
     }
 
@@ -147,22 +180,22 @@ impl<T: ?Sized> RwLock<T> {
     /// let mylock = RwLock::new(0);
     /// mylock.init();
     /// {
-    ///     let mut data = mylock.write();
+    ///     let mut data = mylock.write().unwrap();
     ///     // The lock is now locked and the data can be written
     ///     *data += 1;
     ///     // The lock is dropped
     /// }
     /// ```
     #[inline]
-    pub fn write(&self) -> RwLockWriteGuard<T> {
+    pub fn write(&self) -> LockResult<RwLockWriteGuard<T>> {
         unsafe {
             let _ = down_write(&*self.lock.get());
         }
-        RwLockWriteGuard {
+        Ok(RwLockWriteGuard {
             lock: unsafe { NonNull::new_unchecked(self.lock.get()) },
             data: unsafe { NonNull::new_unchecked(self.data.get()) },
             _invariant: PhantomData,
-        }
+        })
     }
 
     /// Tries to lock this semaphore with exclusive write access without
@@ -178,23 +211,23 @@ impl<T: ?Sized> RwLock<T> {
     /// let mylock = RwLock::new(0);
     /// mylock.init();
     /// {
-    ///     let mut data = mylock.write();
+    ///     let mut data = mylock.try_write().unwrap();
     ///     // The lock is now locked and the data can be written
     ///     *data += 1;
     ///     // The lock is dropped
     /// }
     /// ```
     #[inline]
-    pub fn try_write(&self) -> Option<RwLockWriteGuard<T>> {
+    pub fn try_write(&self) -> TryLockResult<RwLockWriteGuard<T>> {
         let write_ret = unsafe { down_write_trylock(&*self.lock.get()) };
         if write_ret == Ok(1) {
-            return Some(RwLockWriteGuard {
+            return Ok(RwLockWriteGuard {
                 lock: unsafe { NonNull::new_unchecked(self.lock.get()) },
                 data: unsafe { NonNull::new_unchecked(self.data.get()) },
                 _invariant: PhantomData,
             });
         } else {
-            return None;
+            return Err(TryLockError::WouldBlock);
         }
     }
 
@@ -212,10 +245,10 @@ impl<T: ?Sized> RwLock<T> {
     /// *lock.get_mut() = 10;
     /// assert_eq!(*lock.read(), 10);
     /// ```
-    pub fn get_mut(&mut self) -> &mut T {
+    pub fn get_mut(&mut self) -> LockResult<&mut T> {
         // We know statically that there are no other references to `self`, so
         // there's no need to lock the inner lock.
-        unsafe { &mut *self.data.get() }
+        unsafe { Ok(&mut *self.data.get()) }
     }
 }
 

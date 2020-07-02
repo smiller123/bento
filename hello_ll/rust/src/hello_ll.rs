@@ -66,7 +66,7 @@ impl HelloFS {
 }
 
 impl Filesystem for HelloFS {
-    fn get_name(&self) -> &str {
+    fn get_name(&self) -> &'static str {
         Self::NAME
     }
 
@@ -191,7 +191,7 @@ impl Filesystem for HelloFS {
         }
         let copy_len = LEN.load(atomic::Ordering::SeqCst) - offset as usize;
 
-        let disk = self.disk.as_ref().unwrap().read();
+        let disk = self.disk.as_ref().unwrap().read().unwrap();
         let mut bh = match disk.bread(0) {
             Ok(x) => x,
             Err(x)=> {
@@ -227,7 +227,7 @@ impl Filesystem for HelloFS {
             return;
         }
 
-        let disk = self.disk.as_ref().unwrap().read();
+        let disk = self.disk.as_ref().unwrap().read().unwrap();
         let mut bh = match disk.bread(0) {
             Ok(x) => x,
             Err(x) => {
@@ -297,7 +297,7 @@ impl Filesystem for HelloFS {
         _datasync: bool,
         reply: ReplyEmpty,
     ) {
-        let disk = self.disk.as_ref().unwrap().read();
+        let disk = self.disk.as_ref().unwrap().read().unwrap();
         if let Err(x) = disk.sync_all() {
             reply.error(x as i32);
         } else {

@@ -76,6 +76,10 @@ void rs_wake_up(struct wait_queue_head* wq_head) {
     wake_up(wq_head);
 }
 
+void rs_wake_up_all(struct wait_queue_head* wq_head) {
+    wake_up_all(wq_head);
+}
+
 void rs_wait_event(struct wait_queue_head* wq_head, bool (condition)(void)) {
     wait_event(*wq_head, condition());
 }

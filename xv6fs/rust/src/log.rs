@@ -1,6 +1,7 @@
 use crate::std as std;
 
-use std::sync::RwLock;
+use std::sync::Mutex;
+use std::sync::Condvar;
 
 use core::mem;
 use core::sync::atomic::{AtomicBool, Ordering};
@@ -8,7 +9,6 @@ use datablock::DataBlock;
 
 use bento::kernel;
 use kernel::errno::*;
-use kernel::wait_queue::*;
 
 use bento::println;
 
@@ -42,20 +42,20 @@ pub struct Log {
 
 pub static BLOCKER: AtomicBool = AtomicBool::new(false);
 
-extern "C" fn wait_cont() -> bool {
+fn wait_cont(_l: &mut Log) -> bool {
     return BLOCKER.load(Ordering::SeqCst);
 }
 
 pub struct Xv6Log {
-    log_globl: RwLock<Log>,
-    wait_q: WaitQueue,
+    log_globl: Mutex<Log>,
+    wait_q: Condvar,
 }
 
 
 impl Xv6Log {
     pub fn new() -> Self {
         Self {
-            log_globl: RwLock::new(Log {
+            log_globl: Mutex::new(Log {
                 start: 0,
                 size: 0,
                 outstanding: 0,
@@ -65,14 +65,13 @@ impl Xv6Log {
                     block: [0; LOGSIZE],
                 },
             }),
-            wait_q: WaitQueue::new(),
+            wait_q: Condvar::new(),
         }
     }
 
     // xv6_sb is the xv6 filesystem superblock.
     pub fn initlog(&self, xv6_sb: &mut Xv6fsSB) -> Result<(), Error> {
-        self.wait_q.init();
-        let mut log = &mut self.log_globl.write();
+        let mut log = &mut self.log_globl.lock().unwrap();
         log.start = xv6_sb.logstart;
         log.size = xv6_sb.nlog;
         println!("initlog: logstart {}, nlog: {}", log.start, log.size);
@@ -83,11 +82,11 @@ impl Xv6Log {
     pub fn begin_op<'log>(&'log self) -> LogOpGuard<'log> {
         let mut waiting = false;
         loop {
+            let mut guard = self.log_globl.lock().unwrap();
             if waiting {
                 // Wait on condvar
-                self.wait_q.wait_event(wait_cont);
+                guard = self.wait_q.wait_while(guard, wait_cont).unwrap();
             }
-            let mut guard = self.log_globl.write();
             let log: &mut Log = &mut *guard;
             if log.lh.n as usize + (log.outstanding as usize + 1) * MAXOPBLOCKS > LOGSIZE {
                 BLOCKER.store(false, Ordering::SeqCst);
@@ -105,19 +104,19 @@ impl Xv6Log {
     }
 
     pub fn force_commit(&self) {
-        let mut guard = self.log_globl.write();
+        let mut guard = self.log_globl.lock().unwrap();
         let log: &mut Log = &mut *guard;
         log.committing = 1;
     
         let _com_out = self.commit(log);
         log.committing = 0;
         BLOCKER.store(true, Ordering::SeqCst);
-        self.wait_q.wake_up();
+        self.wait_q.notify_one();
     }
 
     // Only writes to buffer cache, does not persist; only install_trans will persist data.
     pub fn log_write(&self, blk_no: u32) {
-        let mut guard = self.log_globl.write();
+        let mut guard = self.log_globl.lock().unwrap();
         let log: &mut Log = &mut *guard;
         if log.lh.n as usize >= LOGSIZE || log.lh.n >= log.size {
             // TODO: panic
@@ -265,7 +264,7 @@ impl<'log> Drop for LogOpGuard<'log> {
     fn drop(&mut self) {
         let mut do_commit = 0;
         {
-            let mut guard = self.xv6_log.log_globl.write();
+            let mut guard = self.xv6_log.log_globl.lock().unwrap();
             let log: &mut Log = &mut *guard;
             log.outstanding -= 1;
             if log.committing != 0 {
@@ -278,14 +277,14 @@ impl<'log> Drop for LogOpGuard<'log> {
                 log.committing = 1;
             } else {
                 BLOCKER.store(true, Ordering::SeqCst);
-                self.xv6_log.wait_q.wake_up();
+                self.xv6_log.wait_q.notify_one();
             }
 
             if do_commit != 0 {
                 let _com_out = self.xv6_log.commit(log);
                 log.committing = 0;
                 BLOCKER.store(true, Ordering::SeqCst);
-                self.xv6_log.wait_q.wake_up();
+                self.xv6_log.wait_q.notify_one();
             }
         }
     }

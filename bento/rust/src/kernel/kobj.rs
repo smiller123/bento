@@ -39,10 +39,12 @@ def_kobj_immut_op!(RsRwSemaphore, down_read, down_read, ());
 def_kobj_immut_op!(RsRwSemaphore, up_read, up_read, ());
 def_kobj_immut_op!(RsRwSemaphore, down_write, down_write, ());
 def_kobj_immut_op!(RsRwSemaphore, down_write_trylock, down_write_trylock, i32);
+def_kobj_immut_op!(RsRwSemaphore, down_read_trylock, down_read_trylock, i32);
 def_kobj_immut_op!(RsRwSemaphore, up_write, up_write, ());
 def_kobj_op!(RsRwSemaphore, put, rs_put_semaphore, ());
 
 def_kobj_immut_op!(RsWaitQueueHead, wake_up, rs_wake_up, ());
+def_kobj_immut_op!(RsWaitQueueHead, wake_up_all, rs_wake_up_all, ());
 
 impl RsBlockDevice {
     pub fn new(name: &str) -> Self {

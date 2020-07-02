@@ -246,11 +246,10 @@ impl Xv6FileSystem {
     
         let icache = self.ilock_cache.as_ref().unwrap();
         for (idx, inode_lock) in icache.iter().enumerate() {
-            let inode_opt = inode_lock.try_write();
-            if inode_opt.is_none() {
-                continue;
-            }
-            let mut inode = inode_opt.ok_or(Error::EIO)?;
+            let mut inode = match inode_lock.try_write() {
+                Ok(x) => x,
+                Err(_) => continue,
+            };
             let disk = self.disk.as_ref().unwrap();
             let dev_id = disk.as_raw_fd();
             if inode.nref > 0 && inode.dev == dev_id as u32 && inode.inum == inum as u32 {
@@ -264,7 +263,7 @@ impl Xv6FileSystem {
             }
             if final_idx.is_none() && inode.nref == 0 {
                 {
-                    let mut new_inode_int = inode.internals.write();
+                    let mut new_inode_int = inode.internals.write().map_err(|_| {Error::EIO})?;
                     new_inode_int.valid = 0;
                 }
                 inode.dev = dev_id as u32;
@@ -290,9 +289,9 @@ impl Xv6FileSystem {
         inum: u32,
     ) -> Result<RwLockReadGuard<Inode>, Error> {
         let inode_outer_lock = icache.get(inode_idx).ok_or(Error::EIO)?;
-        let inode_outer = inode_outer_lock.read();
+        let inode_outer = inode_outer_lock.read().map_err(|_| { Error::EIO})?;
         {
-            let mut internals = inode_outer.internals.write();
+            let mut internals = inode_outer.internals.write().map_err(|_| {Error::EIO})?;
     
             if internals.valid == 0 {
                 let disk = self.disk.as_ref().unwrap();
@@ -331,12 +330,12 @@ impl Xv6FileSystem {
         let icache = self.ilock_cache.as_ref().unwrap();
         {
             let inode_guard = self.ilock(inode.idx, &icache, inode.inum)?;
-            let mut internals = inode_guard.internals.write();
+            let mut internals = inode_guard.internals.write().map_err(|_| {Error::EIO})?;
             if internals.valid != 0 && internals.nlink == 0 {
                 let r;
                 {
                     let dinode_lock = icache.get(inode.idx).ok_or(Error::EIO)?;
-                    let dinode = dinode_lock.read();
+                    let dinode = dinode_lock.read().map_err(|_| { Error::EIO })?;
                     r = dinode.nref;
                 }
                 if r == 1 {
@@ -349,7 +348,7 @@ impl Xv6FileSystem {
         }
     
         let dinode_lock = icache.get(inode.idx).ok_or(Error::EIO)?;
-        let mut dinode = dinode_lock.write();
+        let mut dinode = dinode_lock.write().map_err(|_| {Error::EIO})?;
         dinode.nref -= 1;
         return Ok(());
     }

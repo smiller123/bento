@@ -250,6 +250,7 @@ extern "C" {
     pub fn up_read(sem: *const raw::c_void);
     pub fn down_write(sem: *const raw::c_void);
     pub fn down_write_trylock(sem: *const raw::c_void) -> i32;
+    pub fn down_read_trylock(sem: *const raw::c_void) -> i32;
     pub fn up_write(sem: *const raw::c_void);
 
     // string
@@ -266,6 +267,7 @@ extern "C" {
     pub fn rs_get_wait_queue_head() -> *mut raw::c_void;
     pub fn rs_put_wait_queue_head(wq_head: *const raw::c_void);
     pub fn rs_wake_up(wq_head: *const raw::c_void);
+    pub fn rs_wake_up_all(wq_head: *const raw::c_void);
     pub fn rs_wait_event(wq_head: *const raw::c_void, condition: Condition);
     pub fn register_bento_fs(
         fs: *const raw::c_void,
