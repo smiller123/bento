@@ -11,7 +11,6 @@ use bento::libc;
 use bento::kernel;
 use kernel::fs::*;
 use kernel::fuse::*;
-use kernel::stat;
 use kernel::time::Timespec;
 
 //use bento::println;
@@ -37,33 +36,41 @@ pub struct HelloFS {
 impl HelloFS {
     const NAME: &'static str = "hello_ll\0";
 
-    fn hello_stat(ino: u64, stbuf: &mut fuse_attr) -> i32 {
-        stbuf.ino = ino;
-        stbuf.size = 0;
-        stbuf.blocks = 0;
-        stbuf.atime = 0;
-        stbuf.mtime = 0;
-        stbuf.ctime = 0;
-        stbuf.atimensec = 0;
-        stbuf.mtimensec = 0;
-        stbuf.ctimensec = 0;
-        stbuf.uid = 0;
-        stbuf.gid = 0;
-        stbuf.rdev = 0;
-        stbuf.blksize = 0;
-        match ino {
-            1 => {
-                stbuf.mode = (stat::S_IFDIR | 0777) as u32;
-                stbuf.nlink = 2;
-            }
-            2 => {
-                stbuf.mode = (stat::S_IFREG | 0777) as u32;
-                stbuf.nlink = 1;
-                stbuf.size = LEN.load(atomic::Ordering::SeqCst) as u64;
-            }
-            _ => return -1,
+    fn hello_stat(ino: u64) -> Result<FileAttr, i32> {
+        if ino != 1 && ino != 2 {
+            return Err(-1);
+        }
+        let nlink = match ino {
+            1 => 2,
+            2 => 1,
+            _ => 0,
         };
-        return 0;
+        let file_type = match ino {
+            1 => FileType::Directory,
+            2 => FileType::RegularFile,
+            _ => FileType::RegularFile,
+        };
+        let size = match ino {
+            1 => 0,
+            2 => LEN.load(atomic::Ordering::SeqCst) as u64,
+            _ => 0,
+        };
+        Ok(FileAttr {
+            ino: ino,
+            size: size,
+            blocks: 0,
+            atime: Timespec::new(0, 0),
+            mtime: Timespec::new(0, 0),
+            ctime: Timespec::new(0, 0),
+            crtime: Timespec::new(0, 0),
+            kind: file_type,
+            perm: 0o077,
+            nlink: nlink,
+            uid: 0,
+            gid: 0,
+            rdev: 0,
+            flags: 0,
+        })
     }
 }
 
@@ -144,11 +151,9 @@ impl Filesystem for HelloFS {
 
     fn getattr(&self, _req: &Request, nodeid: u64, reply: ReplyAttr) {
         let attr_valid = Timespec::new(1, 999999999);
-        let mut attr = fuse_attr::new();
-        if HelloFS::hello_stat(nodeid, &mut attr) == -1 {
-            reply.error(libc::ENOENT);
-        } else {
-            reply.attr(&attr_valid, &attr);
+        match HelloFS::hello_stat(nodeid) {
+            Ok(attr) => reply.attr(&attr_valid, &attr),
+            Err(_) => reply.error(libc::ENOENT),
         }
     }
 
@@ -166,11 +171,9 @@ impl Filesystem for HelloFS {
             let out_nodeid = 2;
             let generation = 0;
             let entry_valid = Timespec::new(1, 999999999);
-            let mut attr = fuse_attr::new();
-            if HelloFS::hello_stat(out_nodeid, &mut attr) == -1 {
-                reply.error(libc::ENOENT);
-            } else {
-                reply.entry(&entry_valid, &attr, generation);
+            match HelloFS::hello_stat(out_nodeid) {
+                Ok(attr) => reply.entry(&entry_valid, &attr, generation),
+                Err(_) => reply.error(libc::ENOENT),
             }
         }
     }

@@ -12,7 +12,9 @@ use bento::kernel;
 
 use bento::libc;
 
-use kernel::stat;
+use kernel::time::Timespec;
+
+use bento::fuse::{FileAttr,FileType};
 
 use crate::std as std;
 use crate::xv6fs_file::*;
@@ -524,32 +526,32 @@ impl Xv6FileSystem {
         return self.iupdate(&internals, inode.inum);
     }
     
-    pub fn stati(&self, ino: u64, stbuf: &mut fuse_attr, internals: &InodeInternal) -> Result<(), libc::c_int> {
-        stbuf.ino = ino;
+    pub fn stati(&self, ino: u64, internals: &InodeInternal) -> Result<FileAttr, libc::c_int> {
         if internals.inode_type == 0 {
             return Err(libc::ENOENT);
         }
-        let i_type = match internals.inode_type {
-            T_DIR => stat::S_IFDIR,
-            T_LNK => stat::S_IFLNK | stat::S_IRWXUGO,
-            _ => stat::S_IFREG,
+        let file_kind = match internals.inode_type {
+            T_DIR => FileType::Directory,
+            T_LNK => FileType::Symlink,
+            _ => FileType::RegularFile,
         };
-        stbuf.mode = 0o077 | i_type as u32;
-        stbuf.nlink = internals.nlink as u32;
-        stbuf.size = internals.size;
-        // Clear remaining fields.
-        stbuf.blocks = 0;
-        stbuf.atime = 0;
-        stbuf.mtime = 0;
-        stbuf.ctime = 0;
-        stbuf.atimensec = 0;
-        stbuf.mtimensec = 0;
-        stbuf.ctimensec = 0;
-        stbuf.uid = 0;
-        stbuf.gid = 0;
-        stbuf.rdev = 0;
-        stbuf.blksize = 0;
-        return Ok(());
+        let attr = FileAttr {
+            ino: ino,
+            size: internals.size,
+            blocks: 0,
+            atime: Timespec::new(0, 0),
+            mtime: Timespec::new(0, 0),
+            ctime: Timespec::new(0, 0),
+            crtime: Timespec::new(0, 0),
+            kind: file_kind,
+            perm: 0o077,
+            nlink: internals.nlink as u32,
+            uid: 0,
+            gid: 0,
+            rdev: 0,
+            flags: 0,
+        };
+        return Ok(attr);
     }
     
     pub fn readi(

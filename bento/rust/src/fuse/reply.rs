@@ -2,6 +2,8 @@ use crate::libc;
 
 use fuse::internal::*;
 
+use fuse::{FileAttr,FileType};
+
 use kernel::fuse::*;
 use kernel::mem::MemContainer;
 use kernel::raw;
@@ -66,30 +68,37 @@ pub struct ReplyEntryInternal<'a> {
 }
 
 impl<'a> ReplyEntryInternal<'a> {
-    pub fn entry(&mut self, ttl: &Timespec, attr: &fuse_attr, generation: u64) {
+    pub fn entry(&mut self, ttl: &Timespec, attr: &FileAttr, generation: u64) {
         if let Ok(rep) = &mut self.reply {
             rep.nodeid = attr.ino;
             rep.generation = generation;
             rep.entry_valid = ttl.sec as u64;
-            rep.attr_valid = ttl.sec as u64;
             rep.entry_valid_nsec = ttl.nsec as u32;
+
+            rep.attr_valid = ttl.sec as u64;
             rep.attr_valid_nsec = ttl.nsec as u32;
             rep.attr.ino = attr.ino;
             rep.attr.size = attr.size;
             rep.attr.blocks = attr.blocks;
-            rep.attr.atime = attr.atime;
-            rep.attr.mtime = attr.mtime;
-            rep.attr.ctime = attr.ctime;
-            rep.attr.atimensec = attr.atimensec;
-            rep.attr.mtimensec = attr.mtimensec;
-            rep.attr.ctimensec = attr.ctimensec;
-            rep.attr.mode = attr.mode;
+            rep.attr.atime = attr.atime.sec as u64;
+            rep.attr.mtime = attr.mtime.sec as u64;
+            rep.attr.ctime = attr.ctime.sec as u64;
+            rep.attr.atimensec = attr.atime.nsec as u32;
+            rep.attr.mtimensec = attr.mtime.nsec as u32;
+            rep.attr.ctimensec = attr.ctime.nsec as u32;
+            rep.attr.mode = match attr.kind {
+                FileType::NamedPipe => stat::S_IFIFO,
+                FileType::CharDevice => stat::S_IFCHR,
+                FileType::BlockDevice => stat::S_IFBLK,
+                FileType::Directory => stat::S_IFDIR,
+                FileType::RegularFile => stat::S_IFREG,
+                FileType::Symlink => stat::S_IFLNK,
+                FileType::Socket => stat::S_IFSOCK,
+            } as u32 | attr.perm as u32;
             rep.attr.nlink = attr.nlink;
             rep.attr.uid = attr.uid;
             rep.attr.gid = attr.gid;
             rep.attr.rdev = attr.rdev;
-            rep.attr.blksize = attr.blksize;
-            rep.attr.padding = attr.padding;
         }
     }
 
@@ -110,7 +119,7 @@ pub struct ReplyAttrInternal<'a> {
 }
 
 impl<'a> ReplyAttrInternal<'a> {
-    pub fn attr(&mut self, ttl: &Timespec, attr: &fuse_attr) {
+    pub fn attr(&mut self, ttl: &Timespec, attr: &FileAttr) {
         if let Ok(rep) = &mut self.reply {
             rep.attr_valid = ttl.sec as u64;
             rep.attr_valid_nsec = ttl.nsec as u32;
@@ -118,19 +127,25 @@ impl<'a> ReplyAttrInternal<'a> {
             rep.attr.ino = attr.ino;
             rep.attr.size = attr.size;
             rep.attr.blocks = attr.blocks;
-            rep.attr.atime = attr.atime;
-            rep.attr.mtime = attr.mtime;
-            rep.attr.ctime = attr.ctime;
-            rep.attr.atimensec = attr.atimensec;
-            rep.attr.mtimensec = attr.mtimensec;
-            rep.attr.ctimensec = attr.ctimensec;
-            rep.attr.mode = attr.mode;
+            rep.attr.atime = attr.atime.sec as u64;
+            rep.attr.mtime = attr.mtime.sec as u64;
+            rep.attr.ctime = attr.ctime.sec as u64;
+            rep.attr.atimensec = attr.atime.nsec as u32;
+            rep.attr.mtimensec = attr.mtime.nsec as u32;
+            rep.attr.ctimensec = attr.ctime.nsec as u32;
+            rep.attr.mode = match attr.kind {
+                FileType::NamedPipe => stat::S_IFIFO,
+                FileType::CharDevice => stat::S_IFCHR,
+                FileType::BlockDevice => stat::S_IFBLK,
+                FileType::Directory => stat::S_IFDIR,
+                FileType::RegularFile => stat::S_IFREG,
+                FileType::Symlink => stat::S_IFLNK,
+                FileType::Socket => stat::S_IFSOCK,
+            } as u32 | attr.perm as u32;
             rep.attr.nlink = attr.nlink;
             rep.attr.uid = attr.uid;
             rep.attr.gid = attr.gid;
             rep.attr.rdev = attr.rdev;
-            rep.attr.blksize = attr.blksize;
-            rep.attr.padding = attr.padding;
         }
     }
 
@@ -366,7 +381,7 @@ impl<'a> ReplyCreateInternal<'a> {
     pub fn created(
         &mut self,
         ttl: &Timespec,
-        attr: &fuse_attr,
+        attr: &FileAttr,
         generation: u64,
         fh: u64,
         flags: u32,
@@ -375,28 +390,36 @@ impl<'a> ReplyCreateInternal<'a> {
             rep_entry.nodeid = attr.ino;
             rep_entry.generation = generation;
             rep_entry.entry_valid = ttl.sec as u64;
-            rep_entry.attr_valid = ttl.sec as u64;
             rep_entry.entry_valid_nsec = ttl.nsec as u32;
+            rep_open.fh = fh;
+            rep_open.open_flags = flags;
+            rep_open.padding = 0;
+
+
+            rep_entry.attr_valid = ttl.sec as u64;
             rep_entry.attr_valid_nsec = ttl.nsec as u32;
             rep_entry.attr.ino = attr.ino;
             rep_entry.attr.size = attr.size;
             rep_entry.attr.blocks = attr.blocks;
-            rep_entry.attr.atime = attr.atime;
-            rep_entry.attr.mtime = attr.mtime;
-            rep_entry.attr.ctime = attr.ctime;
-            rep_entry.attr.atimensec = attr.atimensec;
-            rep_entry.attr.mtimensec = attr.mtimensec;
-            rep_entry.attr.ctimensec = attr.ctimensec;
-            rep_entry.attr.mode = attr.mode;
+            rep_entry.attr.atime = attr.atime.sec as u64;
+            rep_entry.attr.mtime = attr.mtime.sec as u64;
+            rep_entry.attr.ctime = attr.ctime.sec as u64;
+            rep_entry.attr.atimensec = attr.atime.nsec as u32;
+            rep_entry.attr.mtimensec = attr.mtime.nsec as u32;
+            rep_entry.attr.ctimensec = attr.ctime.nsec as u32;
+            rep_entry.attr.mode = match attr.kind {
+                FileType::NamedPipe => stat::S_IFIFO,
+                FileType::CharDevice => stat::S_IFCHR,
+                FileType::BlockDevice => stat::S_IFBLK,
+                FileType::Directory => stat::S_IFDIR,
+                FileType::RegularFile => stat::S_IFREG,
+                FileType::Symlink => stat::S_IFLNK,
+                FileType::Socket => stat::S_IFSOCK,
+            } as u32 | attr.perm as u32;
             rep_entry.attr.nlink = attr.nlink;
             rep_entry.attr.uid = attr.uid;
             rep_entry.attr.gid = attr.gid;
             rep_entry.attr.rdev = attr.rdev;
-            rep_entry.attr.blksize = attr.blksize;
-            rep_entry.attr.padding = attr.padding;
-            rep_open.fh = fh;
-            rep_open.open_flags = flags;
-            rep_open.padding = 0;
         }
     }
 

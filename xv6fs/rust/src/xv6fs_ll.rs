@@ -241,9 +241,8 @@ impl Filesystem for Xv6FileSystem {
             }
         };
         let attr_valid = Timespec::new(1, 999999999);
-        let mut attr = fuse_attr::new();
-        match self.stati(nodeid, &mut attr, &internals) {
-            Ok(()) => {
+        match self.stati(nodeid, &internals) {
+            Ok(attr) => {
                 reply.attr(&attr_valid, &attr);
             }
             Err(x) => {
@@ -295,9 +294,8 @@ impl Filesystem for Xv6FileSystem {
             }
         };
         let attr_valid = Timespec::new(1, 999999999);
-        let mut attr = fuse_attr::new();
-        match self.stati(ino, &mut attr, &internals) {
-            Ok(()) => reply.attr(&attr_valid, &attr),
+        match self.stati(ino, &internals) {
+            Ok(attr) => reply.attr(&attr_valid, &attr),
             Err(x) => reply.error(x),
         }
     }
@@ -359,9 +357,8 @@ impl Filesystem for Xv6FileSystem {
                 return;
             }
         };
-        let mut outarg_attr = fuse_attr::new();
-        match self.stati(outarg_nodeid, &mut outarg_attr, &child_internals) {
-            Ok(()) => {
+        match self.stati(outarg_nodeid, &child_internals) {
+            Ok(outarg_attr) => {
                 reply.entry(&attr_valid, &outarg_attr, outarg_generation);
             },
             Err(x) => {
@@ -616,9 +613,8 @@ impl Filesystem for Xv6FileSystem {
         let nodeid = child.inum as u64;
         let generation = 0;
         let attr_valid = Timespec::new(1, 999999999);
-        let mut attr = fuse_attr::new();
-        match self.stati(nodeid, &mut attr, &internals) {
-            Ok(()) => {
+        match self.stati(nodeid, &internals) {
+            Ok(attr) => {
                 reply.created(&attr_valid, &attr, generation, fh, open_flags);
             }
             Err(x) => {
@@ -664,9 +660,8 @@ impl Filesystem for Xv6FileSystem {
         let out_nodeid = child.inum as u64;
         let generation = 0;
         let attr_valid = Timespec::new(1, 999999999);
-        let mut attr = fuse_attr::new();
-        match self.stati(out_nodeid, &mut attr, &internals) {
-            Ok(()) => {
+        match self.stati(out_nodeid, &internals) {
+            Ok(attr) => {
                 reply.entry(&attr_valid, &attr, generation);
             }
             Err(x) => {
@@ -783,9 +778,8 @@ impl Filesystem for Xv6FileSystem {
         let out_nodeid = child.inum as u64;
         let generation = 0;
         let attr_valid = Timespec::new(1, 999999999);
-        let mut attr = fuse_attr::new();
-        match self.stati(out_nodeid, &mut attr, &internals) {
-            Ok(()) => reply.entry(&attr_valid, &attr, generation),
+        match self.stati(out_nodeid, &internals) {
+            Ok(attr) => reply.entry(&attr_valid, &attr, generation),
             Err(x) => {
                 reply.error(x);
             }
