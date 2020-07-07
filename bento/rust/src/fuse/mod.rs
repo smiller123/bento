@@ -1,13 +1,13 @@
+mod internal;
 pub mod reply;
 pub mod request;
 
 use core::str;
 
-use crate::c_str;
-
-use crate::bindings::*;
 use crate::fuse::reply::*;
 use crate::fuse::request::*;
+
+use libc::ENOSYS;
 
 use crate::std::ffi::OsStr;
 use crate::std::path::Path;
@@ -76,7 +76,7 @@ pub trait Filesystem {
         _devname: &OsStr,
         _fc_info: &mut FuseConnInfo,
     ) -> Result<(), i32> {
-        return Err(-(ENOSYS as i32));
+        return Err(ENOSYS);
     }
 
     /// Perform any necessary cleanup on the file system.
@@ -104,7 +104,7 @@ pub trait Filesystem {
         _name: &OsStr,
         reply: ReplyEntry,
     ) {
-        reply.error(-(ENOSYS as i32));
+        reply.error(ENOSYS);
     }
 
     /// Forget about an inode
@@ -143,7 +143,7 @@ pub trait Filesystem {
     /// * `ino: u64` - Filesystem-provided id of the inode.
     /// * `reply: ReplyAttr` - Output data structure for the attribute data or error value.
     fn getattr(&self, _req: &Request, _ino: u64, reply: ReplyAttr) {
-        reply.error(-(ENOSYS as i32));
+        reply.error(ENOSYS);
     }
 
     /// Set file attributes
@@ -183,7 +183,7 @@ pub trait Filesystem {
         _flags: Option<u32>,
         reply: ReplyAttr,
     ) {
-        reply.error(-(ENOSYS as i32));
+        reply.error(ENOSYS);
     }
 
     /// Read symbolic link.
@@ -193,7 +193,7 @@ pub trait Filesystem {
     /// * `ino: u64` - Filesystem-provided id of the inode.
     /// * `reply: ReplyData` - Output data structure for the read link data or error value.
     fn readlink(&self, _req: &Request, _ino: u64, reply: ReplyData) {
-        return reply.error(-(ENOSYS as i32));
+        return reply.error(ENOSYS);
     }
 
     /// Create file node
@@ -216,7 +216,7 @@ pub trait Filesystem {
         _rdev: u32,
         reply: ReplyEntry,
     ) {
-        return reply.error(-(ENOSYS as i32));
+        return reply.error(ENOSYS);
     }
 
     /// Create directory.
@@ -235,7 +235,7 @@ pub trait Filesystem {
         _mode: u32,
         reply: ReplyEntry,
     ) {
-        return reply.error(-(ENOSYS as i32));
+        return reply.error(ENOSYS);
     }
 
     /// Remove a file.
@@ -256,7 +256,7 @@ pub trait Filesystem {
         _name: &OsStr,
         reply: ReplyEmpty,
     ) {
-        return reply.error(-(ENOSYS as i32));
+        return reply.error(ENOSYS);
     }
 
     /// Remove a directory.
@@ -277,7 +277,7 @@ pub trait Filesystem {
         _name: &OsStr,
         reply: ReplyEmpty,
     ) {
-        return reply.error(-(ENOSYS as i32));
+        return reply.error(ENOSYS);
     }
 
     /// Create a symbolic link.
@@ -296,7 +296,7 @@ pub trait Filesystem {
         _link: &Path,
         reply: ReplyEntry,
     ) {
-        return reply.error(-(ENOSYS as i32));
+        return reply.error(ENOSYS);
     }
 
     /// Rename a file
@@ -330,7 +330,7 @@ pub trait Filesystem {
         _newname: &OsStr,
         reply: ReplyEmpty,
     ) {
-        return reply.error(-(ENOSYS as i32));
+        return reply.error(ENOSYS);
     }
 
     /// Create a hard link.
@@ -349,7 +349,7 @@ pub trait Filesystem {
         _newname: &OsStr,
         reply: ReplyEntry,
     ) {
-        return reply.error(-(ENOSYS as i32));
+        return reply.error(ENOSYS);
     }
 
     /// Open a file.
@@ -393,7 +393,7 @@ pub trait Filesystem {
         _flags: u32,
         reply: ReplyOpen,
     ) {
-        return reply.error(-(ENOSYS as i32));
+        return reply.error(ENOSYS);
     }
 
     /// Read data
@@ -420,7 +420,7 @@ pub trait Filesystem {
         _size: u32,
         reply: ReplyData,
     ) {
-        return reply.error(-(ENOSYS as i32));
+        return reply.error(ENOSYS);
     }
 
     /// Write data
@@ -451,7 +451,7 @@ pub trait Filesystem {
         _flags: u32,
         reply: ReplyWrite,
     ) {
-        return reply.error(-(ENOSYS as i32));
+        return reply.error(ENOSYS);
     }
 
     /// Flush method
@@ -492,7 +492,7 @@ pub trait Filesystem {
         _lock_owner: u64,
         reply: ReplyEmpty,
     ) {
-        return reply.error(-(ENOSYS as i32));
+        return reply.error(ENOSYS);
     }
 
     /// Release an open file
@@ -527,7 +527,7 @@ pub trait Filesystem {
         _flush: bool,
         reply: ReplyEmpty,
     ) {
-        return reply.error(-(ENOSYS as i32));
+        return reply.error(ENOSYS);
     }
 
     /// Synchronize file contents
@@ -552,7 +552,7 @@ pub trait Filesystem {
         _datasync: bool,
         reply: ReplyEmpty,
     ) {
-        return reply.error(-(ENOSYS as i32));
+        return reply.error(ENOSYS);
     }
 
     /// Open a directory.
@@ -578,7 +578,7 @@ pub trait Filesystem {
         _flags: u32,
         reply: ReplyOpen,
     ) {
-        return reply.error(-(ENOSYS as i32));
+        return reply.error(ENOSYS);
     }
 
     /// Read directory
@@ -622,7 +622,7 @@ pub trait Filesystem {
         _offset: i64,
         reply: ReplyDirectory,
     ) {
-        return reply.error(-(ENOSYS as i32));
+        return reply.error(ENOSYS);
     }
 
     /// Release an open directory
@@ -647,7 +647,7 @@ pub trait Filesystem {
         _flags: u32,
         reply: ReplyEmpty,
     ) {
-        return reply.error(-(ENOSYS as i32));
+        return reply.error(ENOSYS);
     }
 
     /// Synchronize directory contents
@@ -675,7 +675,7 @@ pub trait Filesystem {
         _datasync: bool,
         reply: ReplyEmpty,
     ) {
-        return reply.error(-(ENOSYS as i32));
+        return reply.error(ENOSYS);
     }
 
     /// Get filesystem statistics.
@@ -685,7 +685,7 @@ pub trait Filesystem {
     /// * `ino: u64` - Filesystem-provided inode number, zero means "undefined".
     /// * `reply: ReplyStatfs` - Output data structure for file system stat data or error value.
     fn statfs(&self, _req: &Request, _ino: u64, reply: ReplyStatfs) {
-        return reply.error(-(ENOSYS as i32));
+        return reply.error(ENOSYS);
     }
 
     /// Set an extended attribute
@@ -712,7 +712,7 @@ pub trait Filesystem {
         _position: u32,
         reply: ReplyEmpty,
     ) {
-        return reply.error(-(ENOSYS as i32));
+        return reply.error(ENOSYS);
     }
 
     /// Get an extended attribute
@@ -741,7 +741,7 @@ pub trait Filesystem {
         _size: u32,
         reply: ReplyXattr,
     ) {
-        return reply.error(-(ENOSYS as i32));
+        return reply.error(ENOSYS);
     }
 
     /// List extended attribute names
@@ -769,7 +769,7 @@ pub trait Filesystem {
         _size: u32,
         reply: ReplyXattr,
     ) {
-        return reply.error(-(ENOSYS as i32));
+        return reply.error(ENOSYS);
     }
 
     /// Remove an extended attribute
@@ -790,7 +790,7 @@ pub trait Filesystem {
         _name: &OsStr,
         reply: ReplyEmpty,
     ) {
-        return reply.error(-(ENOSYS as i32));
+        return reply.error(ENOSYS);
     }
 
     /// Check file access permissions
@@ -814,7 +814,7 @@ pub trait Filesystem {
         _mask: u32,
         reply: ReplyEmpty,
     ) {
-        return reply.error(-(ENOSYS as i32));
+        return reply.error(ENOSYS);
     }
 
     /// Create and open a file
@@ -845,7 +845,7 @@ pub trait Filesystem {
         _flags: u32,
         reply: ReplyCreate,
     ) {
-        return reply.error(-(ENOSYS as i32));
+        return reply.error(ENOSYS);
     }
 
     /// Test for a POSIX file lock.
@@ -872,7 +872,7 @@ pub trait Filesystem {
         _pid: u32,
         reply: ReplyLock,
     ) {
-        return reply.error(-(ENOSYS as i32));
+        return reply.error(ENOSYS);
     }
 
     /// Acquire, modify or release a POSIX file lock
@@ -908,7 +908,7 @@ pub trait Filesystem {
         _sleep: bool,
         reply: ReplyEmpty,
     ) {
-        return reply.error(-(ENOSYS as i32));
+        return reply.error(ENOSYS);
     }
 
     /// Map block index within file to block index within device
@@ -934,6 +934,6 @@ pub trait Filesystem {
         _idx: u64,
         reply: ReplyBmap,
     ) {
-        return reply.error(-(ENOSYS as i32));
+        return reply.error(ENOSYS);
     }
 }

@@ -1,5 +1,4 @@
 pub mod allocator;
-pub mod errno;
 pub mod ffi;
 pub mod fs;
 pub mod fuse;

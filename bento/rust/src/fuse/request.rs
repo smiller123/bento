@@ -1,6 +1,6 @@
 use core::str;
 
-use crate::bindings::*;
+use crate::libc;
 
 use crate::std::ffi::OsStr;
 use crate::std::path::Path;
@@ -11,7 +11,8 @@ use kernel::raw;
 use kernel::time::Timespec;
 
 use fuse::reply::*;
-use fuse::*;
+use fuse::Filesystem;
+use fuse::internal::*;
 
 #[repr(C)]
 pub struct bento_in_arg {
@@ -171,7 +172,7 @@ pub fn dispatch<T: Filesystem>(
             fs.lookup(&req, inarg.h.nodeid, name_str, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
-                Err(x) => *x as i32,
+                Err(x) => -*x,
             }
         }
         fuse_opcode_FUSE_FORGET => {
@@ -199,7 +200,7 @@ pub fn dispatch<T: Filesystem>(
             fs.getattr(&req, inarg.h.nodeid, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
-                Err(x) => *x as i32,
+                Err(x) => -*x,
             }
         }
         fuse_opcode_FUSE_SETATTR => {
@@ -266,7 +267,7 @@ pub fn dispatch<T: Filesystem>(
             );
             match reply.reply() {
                 Ok(_) => 0,
-                Err(x) => *x as i32,
+                Err(x) => -*x,
             }
         }
         fuse_opcode_FUSE_READLINK => {
@@ -287,7 +288,7 @@ pub fn dispatch<T: Filesystem>(
                     let buf_str = str::from_utf8(buf_slice).unwrap_or("");
                     buf_str.len() as i32
                 }
-                Err(x) => *x as i32,
+                Err(x) => -*x,
             }
         }
         fuse_opcode_FUSE_MKNOD => {
@@ -312,7 +313,7 @@ pub fn dispatch<T: Filesystem>(
             );
             match reply.reply() {
                 Ok(_) => 0,
-                Err(x) => *x as i32,
+                Err(x) => -*x,
             }
         }
         fuse_opcode_FUSE_MKDIR => {
@@ -330,7 +331,7 @@ pub fn dispatch<T: Filesystem>(
             fs.mkdir(&req, inarg.h.nodeid, name_str, mkdir_in.mode, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
-                Err(x) => *x as i32,
+                Err(x) => -*x,
             }
         }
         fuse_opcode_FUSE_UNLINK => {
@@ -341,12 +342,12 @@ pub fn dispatch<T: Filesystem>(
             let name = unsafe { CStr::from_raw(inarg.args[0].value as *const raw::c_char) };
             let name_str = OsStr::new(str::from_utf8(name.to_bytes_with_nul()).unwrap());
             let mut reply = ReplyEmptyInternal {
-                reply: Err(-(ENOSYS as i32)),
+                reply: Err(libc::ENOSYS),
             };
             fs.unlink(&req, inarg.h.nodeid, name_str, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
-                Err(x) => *x as i32,
+                Err(x) => -*x,
             }
         }
         fuse_opcode_FUSE_RMDIR => {
@@ -357,12 +358,12 @@ pub fn dispatch<T: Filesystem>(
             let name = unsafe { CStr::from_raw(inarg.args[0].value as *const raw::c_char) };
             let name_str = OsStr::new(str::from_utf8(name.to_bytes_with_nul()).unwrap());
             let mut reply = ReplyEmptyInternal {
-                reply: Err(-(ENOSYS as i32)),
+                reply: Err(libc::ENOSYS),
             };
             fs.rmdir(&req, inarg.h.nodeid, name_str, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
-                Err(x) => *x as i32,
+                Err(x) => -*x,
             }
         }
         fuse_opcode_FUSE_SYMLINK => {
@@ -382,7 +383,7 @@ pub fn dispatch<T: Filesystem>(
             fs.symlink(&req, inarg.h.nodeid, name_str, link_path, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
-                Err(x) => *x as i32,
+                Err(x) => -*x,
             }
         }
         fuse_opcode_FUSE_RENAME | fuse_opcode_FUSE_RENAME2 => {
@@ -396,7 +397,7 @@ pub fn dispatch<T: Filesystem>(
             let newname = unsafe { CStr::from_raw(inarg.args[2].value as *const raw::c_char) };
             let newname_str = OsStr::new(str::from_utf8(newname.to_bytes_with_nul()).unwrap());
             let mut reply = ReplyEmptyInternal {
-                reply: Err(-(ENOSYS as i32)),
+                reply: Err(libc::ENOSYS),
             };
             fs.rename(
                 &req,
@@ -408,7 +409,7 @@ pub fn dispatch<T: Filesystem>(
             );
             match reply.reply() {
                 Ok(_) => 0,
-                Err(x) => *x as i32,
+                Err(x) => -*x,
             }
         }
         fuse_opcode_FUSE_LINK => {
@@ -433,7 +434,7 @@ pub fn dispatch<T: Filesystem>(
             );
             match reply.reply() {
                 Ok(_) => 0,
-                Err(x) => *x as i32,
+                Err(x) => -*x,
             }
         }
         fuse_opcode_FUSE_OPEN => {
@@ -451,7 +452,7 @@ pub fn dispatch<T: Filesystem>(
             fs.open(&req, inarg.h.nodeid, open_in.flags, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
-                Err(x) => *x as i32,
+                Err(x) => -*x,
             }
         }
         fuse_opcode_FUSE_READ => {
@@ -476,7 +477,7 @@ pub fn dispatch<T: Filesystem>(
             );
             match reply.reply() {
                 Ok(buf) => buf.len() as i32,
-                Err(x) => *x as i32,
+                Err(x) => -*x,
             }
         }
         fuse_opcode_FUSE_WRITE => {
@@ -503,7 +504,7 @@ pub fn dispatch<T: Filesystem>(
             );
             match reply.reply() {
                 Ok(rep) => rep.size as i32,
-                Err(x) => *x as i32,
+                Err(x) => -*x,
             }
         }
         fuse_opcode_FUSE_FLUSH => {
@@ -514,7 +515,7 @@ pub fn dispatch<T: Filesystem>(
             let req = Request { h: &inarg.h };
             let flush_in = unsafe { &*(inarg.args[0].value as *const fuse_flush_in) };
             let mut reply = ReplyEmptyInternal {
-                reply: Err(-(ENOSYS as i32)),
+                reply: Err(libc::ENOSYS),
             };
             fs.flush(
                 &req,
@@ -525,7 +526,7 @@ pub fn dispatch<T: Filesystem>(
             );
             match reply.reply() {
                 Ok(_) => 0,
-                Err(x) => *x as i32,
+                Err(x) => -*x,
             }
         }
         fuse_opcode_FUSE_RELEASE => {
@@ -536,7 +537,7 @@ pub fn dispatch<T: Filesystem>(
             let req = Request { h: &inarg.h };
             let release_in = unsafe { &*(inarg.args[0].value as *const fuse_release_in) };
             let mut reply = ReplyEmptyInternal {
-                reply: Err(-(ENOSYS as i32)),
+                reply: Err(libc::ENOSYS),
             };
             fs.release(
                 &req,
@@ -549,7 +550,7 @@ pub fn dispatch<T: Filesystem>(
             );
             match reply.reply() {
                 Ok(_) => 0,
-                Err(x) => *x as i32,
+                Err(x) => -*x,
             }
         }
         fuse_opcode_FUSE_FSYNC => {
@@ -560,7 +561,7 @@ pub fn dispatch<T: Filesystem>(
             let req = Request { h: &inarg.h };
             let fsync_in = unsafe { &*(inarg.args[0].value as *const fuse_fsync_in) };
             let mut reply = ReplyEmptyInternal {
-                reply: Err(-(ENOSYS as i32)),
+                reply: Err(libc::ENOSYS),
             };
             let datasync = match fsync_in.fsync_flags {
                 1 => true,
@@ -569,7 +570,7 @@ pub fn dispatch<T: Filesystem>(
             fs.fsync(&req, inarg.h.nodeid, fsync_in.fh, datasync, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
-                Err(x) => *x as i32,
+                Err(x) => -*x,
             }
         }
         fuse_opcode_FUSE_OPENDIR => {
@@ -587,7 +588,7 @@ pub fn dispatch<T: Filesystem>(
             fs.opendir(&req, inarg.h.nodeid, open_in.flags, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
-                Err(x) => *x as i32,
+                Err(x) => -*x,
             }
         }
         fuse_opcode_FUSE_READDIR => {
@@ -615,7 +616,7 @@ pub fn dispatch<T: Filesystem>(
                     outarg.args[0].size = buf.len() as u32;
                     0
                 }
-                Err(x) => *x as i32,
+                Err(x) => -*x,
             }
         }
         fuse_opcode_FUSE_RELEASEDIR => {
@@ -626,7 +627,7 @@ pub fn dispatch<T: Filesystem>(
             let req = Request { h: &inarg.h };
             let release_in = unsafe { &*(inarg.args[0].value as *const fuse_release_in) };
             let mut reply = ReplyEmptyInternal {
-                reply: Err(-(ENOSYS as i32)),
+                reply: Err(libc::ENOSYS),
             };
             fs.releasedir(
                 &req,
@@ -637,7 +638,7 @@ pub fn dispatch<T: Filesystem>(
             );
             match reply.reply() {
                 Ok(_) => 0,
-                Err(x) => *x as i32,
+                Err(x) => -*x,
             }
         }
         fuse_opcode_FUSE_FSYNCDIR => {
@@ -648,7 +649,7 @@ pub fn dispatch<T: Filesystem>(
             let req = Request { h: &inarg.h };
             let fsync_in = unsafe { &*(inarg.args[0].value as *const fuse_fsync_in) };
             let mut reply = ReplyEmptyInternal {
-                reply: Err(-(ENOSYS as i32)),
+                reply: Err(libc::ENOSYS),
             };
             let datasync = match fsync_in.fsync_flags {
                 1 => true,
@@ -657,7 +658,7 @@ pub fn dispatch<T: Filesystem>(
             fs.fsyncdir(&req, inarg.h.nodeid, fsync_in.fh, datasync, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
-                Err(x) => *x as i32,
+                Err(x) => -*x,
             }
         }
         fuse_opcode_FUSE_STATFS => {
@@ -673,7 +674,7 @@ pub fn dispatch<T: Filesystem>(
             fs.statfs(&req, inarg.h.nodeid, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
-                Err(x) => *x as i32,
+                Err(x) => -*x,
             }
         }
         fuse_opcode_FUSE_SETXATTR => {
@@ -690,7 +691,7 @@ pub fn dispatch<T: Filesystem>(
                 unsafe { &mut *(inarg.args[2].value as *mut MemContainer<raw::c_uchar>) };
             let value = value_in.to_slice();
             let mut reply = ReplyEmptyInternal {
-                reply: Err(-(ENOSYS as i32)),
+                reply: Err(libc::ENOSYS),
             };
             fs.setxattr(
                 &req,
@@ -703,7 +704,7 @@ pub fn dispatch<T: Filesystem>(
             );
             match reply.reply() {
                 Ok(_) => 0,
-                Err(x) => *x as i32,
+                Err(x) => -*x,
             }
         }
         fuse_opcode_FUSE_GETXATTR => {
@@ -720,25 +721,25 @@ pub fn dispatch<T: Filesystem>(
                 let data_out =
                     unsafe { &mut *(outarg.args[0].value as *mut MemContainer<raw::c_uchar>) };
                 let mut reply = ReplyXattrInternal {
-                    reply_arg: Err(-(ENOSYS as i32)),
+                    reply_arg: Err(libc::ENOSYS),
                     reply_buf: Ok(data_out),
                 };
                 fs.getxattr(&req, inarg.h.nodeid, name_str, getxattr_in.size, &mut reply);
                 match reply.reply_buf() {
                     Ok(_) => 0,
-                    Err(x) => *x as i32,
+                    Err(x) => -*x,
                 }
             } else {
                 let getxattr_out =
                     unsafe { &mut *(outarg.args[0].value as *mut fuse_getxattr_out) };
                 let mut reply = ReplyXattrInternal {
                     reply_arg: Ok(getxattr_out),
-                    reply_buf: Err(-(ENOSYS as i32)),
+                    reply_buf: Err(libc::ENOSYS),
                 };
                 fs.getxattr(&req, inarg.h.nodeid, name_str, getxattr_in.size, &mut reply);
                 match reply.reply_arg() {
                     Ok(_) => 0,
-                    Err(x) => *x as i32,
+                    Err(x) => -*x,
                 }
             }
         }
@@ -754,25 +755,25 @@ pub fn dispatch<T: Filesystem>(
                 let data_out =
                     unsafe { &mut *(outarg.args[0].value as *mut MemContainer<raw::c_uchar>) };
                 let mut reply = ReplyXattrInternal {
-                    reply_arg: Err(-(ENOSYS as i32)),
+                    reply_arg: Err(libc::ENOSYS),
                     reply_buf: Ok(data_out),
                 };
                 fs.listxattr(&req, inarg.h.nodeid, getxattr_in.size, &mut reply);
                 match reply.reply_buf() {
                     Ok(_) => 0,
-                    Err(x) => *x as i32,
+                    Err(x) => -*x,
                 }
             } else {
                 let getxattr_out =
                     unsafe { &mut *(outarg.args[0].value as *mut fuse_getxattr_out) };
                 let mut reply = ReplyXattrInternal {
                     reply_arg: Ok(getxattr_out),
-                    reply_buf: Err(-(ENOSYS as i32)),
+                    reply_buf: Err(libc::ENOSYS),
                 };
                 fs.listxattr(&req, inarg.h.nodeid, getxattr_in.size, &mut reply);
                 match reply.reply_arg() {
                     Ok(_) => 0,
-                    Err(x) => *x as i32,
+                    Err(x) => -*x,
                 }
             }
         }
@@ -786,12 +787,12 @@ pub fn dispatch<T: Filesystem>(
             let name = unsafe { CStr::from_raw(inarg.args[0].value as *const raw::c_char) };
             let name_str = OsStr::new(str::from_utf8(name.to_bytes_with_nul()).unwrap());
             let mut reply = ReplyEmptyInternal {
-                reply: Err(-(ENOSYS as i32)),
+                reply: Err(libc::ENOSYS),
             };
             fs.removexattr(&req, inarg.h.nodeid, name_str, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
-                Err(x) => *x as i32,
+                Err(x) => -*x,
             }
         }
         fuse_opcode_FUSE_ACCESS => {
@@ -803,12 +804,12 @@ pub fn dispatch<T: Filesystem>(
 
             let access_in = unsafe { &*(inarg.args[0].value as *const fuse_access_in) };
             let mut reply = ReplyEmptyInternal {
-                reply: Err(-(ENOSYS as i32)),
+                reply: Err(libc::ENOSYS),
             };
             fs.access(&req, inarg.h.nodeid, access_in.mask, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
-                Err(x) => *x as i32,
+                Err(x) => -*x,
             }
         }
         fuse_opcode_FUSE_CREATE => {
@@ -835,7 +836,7 @@ pub fn dispatch<T: Filesystem>(
             );
             match reply.reply() {
                 Ok(_) => 0,
-                Err(x) => *x as i32,
+                Err(x) => -*x,
             }
         }
         fuse_opcode_FUSE_GETLK => {
@@ -862,7 +863,7 @@ pub fn dispatch<T: Filesystem>(
             );
             match reply.reply() {
                 Ok(_) => 0,
-                Err(x) => *x as i32,
+                Err(x) => -*x,
             }
         }
         fuse_opcode_FUSE_SETLK => {
@@ -873,7 +874,7 @@ pub fn dispatch<T: Filesystem>(
             let req = Request { h: &inarg.h };
             let setlk_in = unsafe { &*(inarg.args[0].value as *const fuse_lk_in) };
             let mut reply = ReplyEmptyInternal {
-                reply: Err(-(ENOSYS as i32)),
+                reply: Err(libc::ENOSYS),
             };
             fs.setlk(
                 &req,
@@ -889,7 +890,7 @@ pub fn dispatch<T: Filesystem>(
             );
             match reply.reply() {
                 Ok(_) => 0,
-                Err(x) => *x as i32,
+                Err(x) => -*x,
             }
         }
         fuse_opcode_FUSE_SETLKW => {
@@ -900,7 +901,7 @@ pub fn dispatch<T: Filesystem>(
             let req = Request { h: &inarg.h };
             let setlk_in = unsafe { &*(inarg.args[0].value as *const fuse_lk_in) };
             let mut reply = ReplyEmptyInternal {
-                reply: Err(-(ENOSYS as i32)),
+                reply: Err(libc::ENOSYS),
             };
             fs.setlk(
                 &req,
@@ -916,7 +917,7 @@ pub fn dispatch<T: Filesystem>(
             );
             match reply.reply() {
                 Ok(_) => 0,
-                Err(x) => *x as i32,
+                Err(x) => -*x,
             }
         }
         fuse_opcode_FUSE_BMAP => {
@@ -939,7 +940,7 @@ pub fn dispatch<T: Filesystem>(
             );
             match reply.reply() {
                 Ok(_) => 0,
-                Err(x) => *x as i32,
+                Err(x) => -*x,
             }
         }
         _ => {

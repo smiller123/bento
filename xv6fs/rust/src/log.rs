@@ -1,14 +1,13 @@
 use crate::std as std;
 
+use bento::libc;
+
 use std::sync::Mutex;
 use std::sync::Condvar;
 
 use core::mem;
 use core::sync::atomic::{AtomicBool, Ordering};
 use datablock::DataBlock;
-
-use bento::kernel;
-use kernel::errno::*;
 
 use bento::println;
 
@@ -70,7 +69,7 @@ impl Xv6Log {
     }
 
     // xv6_sb is the xv6 filesystem superblock.
-    pub fn initlog(&self, xv6_sb: &mut Xv6fsSB) -> Result<(), Error> {
+    pub fn initlog(&self, xv6_sb: &mut Xv6fsSB) -> Result<(), libc::c_int> {
         let mut log = &mut self.log_globl.lock().unwrap();
         log.start = xv6_sb.logstart;
         log.size = xv6_sb.nlog;
@@ -146,13 +145,13 @@ impl Xv6Log {
         }
     }
 
-    fn read_head(&self,log: &mut Log) -> Result<(), Error> {
+    fn read_head(&self,log: &mut Log) -> Result<(), libc::c_int> {
         let disk = XV6FS.disk.as_ref().unwrap();
         let bh = disk.bread(log.start as u64)?;
         let bh_slice = bh.data();
         let lh_slice = &bh_slice[0..mem::size_of::<logheader>()];
         let mut lh = logheader::new();
-        lh.extract_from(&lh_slice).map_err(|_| Error::EIO)?;
+        lh.extract_from(&lh_slice).map_err(|_| libc::EIO)?;
         log.lh.n = lh.n;
         for i in 0..(lh.n as usize) {
             lh.block
@@ -163,20 +162,20 @@ impl Xv6Log {
                         Some(())
                     })
                 })
-                .ok_or(Error::EIO)?;
+                .ok_or(libc::EIO)?;
         }
         
         Ok(())
     }
     
     // Transaction commits to log.
-    fn write_head(&self,log: &mut Log) -> Result<(), Error> {
+    fn write_head(&self,log: &mut Log) -> Result<(), libc::c_int> {
         let disk = XV6FS.disk.as_ref().unwrap();
         let mut bh = disk.bread(log.start as u64)?;
         let bh_slice = bh.data_mut();
         let lh_slice = &mut bh_slice[0..mem::size_of::<logheader>()];
         let mut lh = logheader::new();
-        lh.extract_from(lh_slice).map_err(|_| Error::EIO)?;
+        lh.extract_from(lh_slice).map_err(|_| libc::EIO)?;
         lh.n = log.lh.n;
         for i in 0..(lh.n as usize) {
             log.lh
@@ -188,18 +187,18 @@ impl Xv6Log {
                         Some(())
                     })
                 })
-                .ok_or(Error::EIO)?;
+                .ok_or(libc::EIO)?;
         }
-        lh.dump_into(lh_slice).map_err(|_| Error::EIO)?;
+        lh.dump_into(lh_slice).map_err(|_| libc::EIO)?;
         bh.mark_buffer_dirty();
         
         Ok(())
     }
     
-    pub fn install_trans(&self,log: &mut Log) -> Result<(), Error> {
+    pub fn install_trans(&self,log: &mut Log) -> Result<(), libc::c_int> {
         let disk = XV6FS.disk.as_ref().unwrap();
         for tail in 0..(log.lh.n as usize) {
-            log.lh.block.get(tail).map_or(Ok(()), |dst_blk_id| {
+            if let Some (dst_blk_id) = log.lh.block.get(tail) {
                 let src_blk_no: u64 = log.start as u64 + tail as u64 + 1;
                 let src_bh = disk.bread(src_blk_no)?;
                 let mut dst_bh = disk.bread(*dst_blk_id as u64)?;
@@ -208,23 +207,22 @@ impl Xv6Log {
                 dst_slice.copy_from_slice(src_slice);
                 dst_bh.mark_buffer_dirty();
                 dst_bh.sync_dirty_buffer();
-                Ok(())
-            })?;
+            };
         }
         
         Ok(())
     }
     
-    pub fn recover_from_log(&self, log: &mut Log) -> Result<(), Error> {
+    pub fn recover_from_log(&self, log: &mut Log) -> Result<(), libc::c_int> {
         self.read_head(log)?;
         self.install_trans(log)?;
         log.lh.n = 0;
         self.write_head(log)
     }
      
-    fn write_log(&self, log: &mut Log) -> Result<(), Error> {
+    fn write_log(&self, log: &mut Log) -> Result<(), libc::c_int> {
         for tail in 0..(log.lh.n as usize) {
-            log.lh.block.get(tail).map_or(Ok(()), |src_blk_no| {
+            if let Some (src_blk_no) = log.lh.block.get(tail) {
                 let disk = XV6FS.disk.as_ref().unwrap();
                 let dst_blk_no: u64 = log.start as u64 + tail as u64 + 1;
                 let src_bh = disk.bread(*src_blk_no as u64)?;
@@ -234,14 +232,13 @@ impl Xv6Log {
                 dst_slice.copy_from_slice(src_slice);
                 dst_bh.mark_buffer_dirty();
                 dst_bh.sync_dirty_buffer();
-                Ok(())
-            })?;
+            };
         }
         Ok(())
     }
      
     // Commits in-log transaction, persists data to disk.
-    fn commit(&self, log: &mut Log) -> Result<(), Error> {
+    fn commit(&self, log: &mut Log) -> Result<(), libc::c_int> {
         if log.lh.n > 0 {
             self.write_log(log)?;
             self.write_head(log)?;

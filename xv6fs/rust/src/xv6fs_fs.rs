@@ -10,7 +10,8 @@ use datablock::DataBlock;
 use bento::bindings::*;
 use bento::kernel;
 
-use kernel::errno::*;
+use bento::libc;
+
 use kernel::stat;
 
 use crate::std as std;
@@ -28,16 +29,16 @@ static LAST_BLOCK: AtomicUsize = AtomicUsize::new(0);
 
 impl Xv6FileSystem {
     // Read xv6 superblock from disk
-    fn readsb(&mut self) -> Result<(), Error> {
+    fn readsb(&mut self) -> Result<(), libc::c_int> {
         let sb = self.sb.as_mut().unwrap();
         let disk = self.disk.as_ref().unwrap();
         let bh = disk.bread(1)?;
         let b_slice = bh.data();
-        sb.extract_from(&b_slice[0..mem::size_of::<Xv6fsSB>()]).map_err(|_| Error::EIO)?;
+        sb.extract_from(&b_slice[0..mem::size_of::<Xv6fsSB>()]).map_err(|_| libc::EIO)?;
         return Ok(());
     }
 
-    fn bzero(&self, bno: usize) -> Result<(), Error> {
+    fn bzero(&self, bno: usize) -> Result<(), libc::c_int> {
         let log = self.log.as_ref().unwrap();
         let disk = self.disk.as_ref().unwrap();
         let mut bh = disk.bread(bno as u64)?;
@@ -55,7 +56,7 @@ impl Xv6FileSystem {
 
     // Allocate a block on disk, using a slightly different alloc strategy from xv6.
     // xv6 scans from 0th block and allocates the first available block, we scan from the latest used block since last boot.
-    fn balloc(&self) -> Result<u32, Error> {
+    fn balloc(&self) -> Result<u32, libc::c_int> {
         let log = self.log.as_ref().unwrap();
         let sb = self.sb.as_ref().unwrap();
         let fs_size = sb.size;
@@ -87,7 +88,7 @@ impl Xv6FileSystem {
                 }
 
                 let m = 1 << (bi % 8);
-                let byte_data = bitmap_slice.get_mut(bi / 8).ok_or(Error::EIO)?;
+                let byte_data = bitmap_slice.get_mut(bi / 8).ok_or(libc::EIO)?;
 
                 if *byte_data & m == 0 {
                     // found unallocated, bitmap bit is zero.
@@ -118,10 +119,10 @@ impl Xv6FileSystem {
                 first = false;
             }
         }
-        return Err(Error::EIO);
+        return Err(libc::EIO);
     }
 
-    fn bfree(&self, block_id: usize) -> Result<(), Error> {
+    fn bfree(&self, block_id: usize) -> Result<(), libc::c_int> {
         // Get block number
         let sb = self.sb.as_ref().unwrap();
         let block_num = bblock(block_id, &sb);
@@ -139,7 +140,7 @@ impl Xv6FileSystem {
 
         // Clear the bit
         let maybe_mut_byte = b_slice.get_mut(byte_id);
-        let mut_byte = maybe_mut_byte.ok_or(Error::EIO)?;
+        let mut_byte = maybe_mut_byte.ok_or(libc::EIO)?;
 
         *mut_byte &= !(1 << bit_in_byte);
 
@@ -169,7 +170,7 @@ impl Xv6FileSystem {
             );
     }
     
-    pub fn ialloc<'a>(&'a self, i_type: u16) -> Result<CachedInode<'a>, Error> {
+    pub fn ialloc<'a>(&'a self, i_type: u16) -> Result<CachedInode<'a>, libc::c_int> {
         let sb = self.sb.as_ref().unwrap();
         let num_inodes = sb.ninodes;
         let log = self.log.as_ref().unwrap();
@@ -190,7 +191,7 @@ impl Xv6FileSystem {
                     &mut data_slice[inode_offset..inode_offset + mem::size_of::<Xv6fsInode>()];
     
                 let mut dinode = Xv6fsInode::new();
-                dinode.extract_from(inode_slice).map_err(|_| Error::EIO)?;
+                dinode.extract_from(inode_slice).map_err(|_| libc::EIO)?;
                 //let mut allocated = false;
                 // Check if inode is free
                 if dinode.inode_type == 0 {
@@ -202,17 +203,17 @@ impl Xv6FileSystem {
                     }
                     dinode.inode_type = i_type;
                     dinode.nlink = 1;
-                    dinode.dump_into(inode_slice).map_err(|_| Error::EIO)?;
+                    dinode.dump_into(inode_slice).map_err(|_| libc::EIO)?;
                     bh.mark_buffer_dirty();
                     log.log_write(iblock(inum, &sb) as u32);
                     return self.iget(inum as u64);
                 }
             }
         }
-        return Err(Error::EIO);
+        return Err(libc::EIO);
     }
     
-    pub fn iupdate(&self, internals: &InodeInternal, inum: u32) -> Result<(), Error> {
+    pub fn iupdate(&self, internals: &InodeInternal, inum: u32) -> Result<(), libc::c_int> {
         let log = self.log.as_ref().unwrap();
         let disk = self.disk.as_ref().unwrap();
         let sb = self.sb.as_ref().unwrap();
@@ -227,21 +228,21 @@ impl Xv6FileSystem {
         let mut disk_inode = Xv6fsInode::new();
         disk_inode
             .extract_from(inode_slice)
-            .map_err(|_| Error::EIO)?;
+            .map_err(|_| libc::EIO)?;
         disk_inode.inode_type = internals.inode_type;
         disk_inode.major = internals.major;
         disk_inode.minor = internals.minor;
         disk_inode.nlink = internals.nlink;
         disk_inode.size = internals.size;
         disk_inode.addrs.copy_from_slice(&internals.addrs);
-        disk_inode.dump_into(inode_slice).map_err(|_| Error::EIO)?;
+        disk_inode.dump_into(inode_slice).map_err(|_| libc::EIO)?;
     
         bh.mark_buffer_dirty();
         log.log_write(iblock as u32);
         return Ok(());
     }
     
-    pub fn iget<'a>(&'a self, inum: u64) -> Result<CachedInode<'a>, Error> {
+    pub fn iget<'a>(&'a self, inum: u64) -> Result<CachedInode<'a>, libc::c_int> {
         let mut final_idx = None;
     
         let icache = self.ilock_cache.as_ref().unwrap();
@@ -263,7 +264,7 @@ impl Xv6FileSystem {
             }
             if final_idx.is_none() && inode.nref == 0 {
                 {
-                    let mut new_inode_int = inode.internals.write().map_err(|_| {Error::EIO})?;
+                    let mut new_inode_int = inode.internals.write().map_err(|_| {libc::EIO})?;
                     new_inode_int.valid = 0;
                 }
                 inode.dev = dev_id as u32;
@@ -273,7 +274,7 @@ impl Xv6FileSystem {
             }
         }
     
-        let new_inode_idx = final_idx.ok_or(Error::EIO)?;
+        let new_inode_idx = final_idx.ok_or(libc::EIO)?;
     
         let ret = Ok(CachedInode {
             idx: new_inode_idx,
@@ -287,11 +288,11 @@ impl Xv6FileSystem {
         inode_idx: usize,
         icache: &Vec<RwLock<Inode>>,
         inum: u32,
-    ) -> Result<RwLockReadGuard<Inode>, Error> {
-        let inode_outer_lock = icache.get(inode_idx).ok_or(Error::EIO)?;
-        let inode_outer = inode_outer_lock.read().map_err(|_| { Error::EIO})?;
+    ) -> Result<RwLockReadGuard<Inode>, libc::c_int> {
+        let inode_outer_lock = icache.get(inode_idx).ok_or(libc::EIO)?;
+        let inode_outer = inode_outer_lock.read().map_err(|_| { libc::EIO})?;
         {
-            let mut internals = inode_outer.internals.write().map_err(|_| {Error::EIO})?;
+            let mut internals = inode_outer.internals.write().map_err(|_| {libc::EIO})?;
     
             if internals.valid == 0 {
                 let disk = self.disk.as_ref().unwrap();
@@ -307,7 +308,7 @@ impl Xv6FileSystem {
                 let mut disk_inode = Xv6fsInode::new();
                 disk_inode
                     .extract_from(inode_slice)
-                    .map_err(|_| Error::EIO)?;
+                    .map_err(|_| libc::EIO)?;
     
                 internals.valid = 0;
                 internals.inode_type = disk_inode.inode_type;
@@ -318,7 +319,7 @@ impl Xv6FileSystem {
                 internals.addrs.copy_from_slice(&disk_inode.addrs);
                 internals.valid = 1;
                 if internals.inode_type == 0 {
-                    return Err(Error::EIO);
+                    return Err(libc::EIO);
                 }
                 
             }
@@ -326,16 +327,16 @@ impl Xv6FileSystem {
         return Ok(inode_outer);
     }
     
-    pub fn iput(&self, inode: &mut CachedInode) -> Result<(), Error> {
+    pub fn iput(&self, inode: &mut CachedInode) -> Result<(), libc::c_int> {
         let icache = self.ilock_cache.as_ref().unwrap();
         {
             let inode_guard = self.ilock(inode.idx, &icache, inode.inum)?;
-            let mut internals = inode_guard.internals.write().map_err(|_| {Error::EIO})?;
+            let mut internals = inode_guard.internals.write().map_err(|_| {libc::EIO})?;
             if internals.valid != 0 && internals.nlink == 0 {
                 let r;
                 {
-                    let dinode_lock = icache.get(inode.idx).ok_or(Error::EIO)?;
-                    let dinode = dinode_lock.read().map_err(|_| { Error::EIO })?;
+                    let dinode_lock = icache.get(inode.idx).ok_or(libc::EIO)?;
+                    let dinode = dinode_lock.read().map_err(|_| { libc::EIO })?;
                     r = dinode.nref;
                 }
                 if r == 1 {
@@ -347,17 +348,17 @@ impl Xv6FileSystem {
             }
         }
     
-        let dinode_lock = icache.get(inode.idx).ok_or(Error::EIO)?;
-        let mut dinode = dinode_lock.write().map_err(|_| {Error::EIO})?;
+        let dinode_lock = icache.get(inode.idx).ok_or(libc::EIO)?;
+        let mut dinode = dinode_lock.write().map_err(|_| {libc::EIO})?;
         dinode.nref -= 1;
         return Ok(());
     }
     
-    fn bmap(&self, inode: &mut InodeInternal, blk_idx: usize) -> Result<u32, Error> {
+    fn bmap(&self, inode: &mut InodeInternal, blk_idx: usize) -> Result<u32, libc::c_int> {
         let log = self.log.as_ref().unwrap();
         let mut idx = blk_idx;
         if idx < NDIRECT as usize {
-            let addr = inode.addrs.get_mut(idx).ok_or(Error::EIO)?;
+            let addr = inode.addrs.get_mut(idx).ok_or(libc::EIO)?;
             if *addr == 0 {
                 return self.balloc().map(|blk_id| {
                     *addr = blk_id;
@@ -370,7 +371,7 @@ impl Xv6FileSystem {
         idx -= NDIRECT as usize;
         if idx < NINDIRECT as usize {
             // indirect block
-            let ind_blk_id = inode.addrs.get_mut(NDIRECT as usize).ok_or(Error::EIO)?;
+            let ind_blk_id = inode.addrs.get_mut(NDIRECT as usize).ok_or(libc::EIO)?;
             if *ind_blk_id == 0 {
                 self.balloc().map(|blk_id| {
                     *ind_blk_id = blk_id;
@@ -407,7 +408,7 @@ impl Xv6FileSystem {
             let dind_blk_id = inode
                 .addrs
                 .get_mut(NDIRECT as usize + 1)
-                .ok_or(Error::EIO)?;
+                .ok_or(libc::EIO)?;
             if *dind_blk_id == 0 {
                 self.balloc().map(|blk_id| {
                     *dind_blk_id = blk_id;
@@ -453,12 +454,12 @@ impl Xv6FileSystem {
             return Ok(result_blk_id);
         }
     
-        return Err(Error::EIO);
+        return Err(libc::EIO);
     }
     
-    pub fn itrunc(&self, inode: &mut CachedInode, internals: &mut InodeInternal) -> Result<(), Error> {
+    pub fn itrunc(&self, inode: &mut CachedInode, internals: &mut InodeInternal) -> Result<(), libc::c_int> {
         for i in 0..NDIRECT as usize {
-            let addr = internals.addrs.get_mut(i).ok_or(Error::EIO)?;
+            let addr = internals.addrs.get_mut(i).ok_or(libc::EIO)?;
             if *addr != 0 {
                 self.bfree(*addr as usize)?;
                 *addr = 0;
@@ -469,7 +470,7 @@ impl Xv6FileSystem {
         let ind_blk_id = internals
             .addrs
             .get_mut(NDIRECT as usize)
-            .ok_or(Error::EIO)?;
+            .ok_or(libc::EIO)?;
         if *ind_blk_id != 0 {
             let bh = disk.bread(*ind_blk_id as u64)?;
             let b_data = bh.data();
@@ -488,7 +489,7 @@ impl Xv6FileSystem {
         let dind_blk_id = internals
             .addrs
             .get_mut(NDIRECT as usize + 1)
-            .ok_or(Error::EIO)?;
+            .ok_or(libc::EIO)?;
         if *dind_blk_id != 0 {
             let mut bh = disk.bread(*dind_blk_id as u64)?;
             let b_data = bh.data_mut();
@@ -523,10 +524,10 @@ impl Xv6FileSystem {
         return self.iupdate(&internals, inode.inum);
     }
     
-    pub fn stati(&self, ino: u64, stbuf: &mut fuse_attr, internals: &InodeInternal) -> Result<(), Error> {
+    pub fn stati(&self, ino: u64, stbuf: &mut fuse_attr, internals: &InodeInternal) -> Result<(), libc::c_int> {
         stbuf.ino = ino;
         if internals.inode_type == 0 {
-            return Err(Error::ENOENT);
+            return Err(libc::ENOENT);
         }
         let i_type = match internals.inode_type {
             T_DIR => stat::S_IFDIR,
@@ -557,12 +558,12 @@ impl Xv6FileSystem {
         _off: usize,
         _n: usize,
         internals: &mut InodeInternal,
-    ) -> Result<usize, Error> {
+    ) -> Result<usize, libc::c_int> {
         let mut n = _n;
         let mut off = _off;
         let i_size = internals.size as usize;
         if off > i_size || off + n < off {
-            return Err(Error::EIO);
+            return Err(libc::EIO);
         }
         if off + n > i_size {
             n = i_size - off;
@@ -597,15 +598,15 @@ impl Xv6FileSystem {
         n: usize,
         internals: &mut InodeInternal,
         inum: u32,
-    ) -> Result<usize, Error> {
+    ) -> Result<usize, libc::c_int> {
         let log = self.log.as_ref().unwrap();
         let mut off = _off;
         let i_size = internals.size as usize;
         if off + n < off {
-            return Err(Error::EIO);
+            return Err(libc::EIO);
         }
         if off + n > (MAXFILE as usize) * BSIZE {
-            return Err(Error::EIO);
+            return Err(libc::EIO);
         }
     
         let max_blocks = (MAXOPBLOCKS - 1 - 1 - 2) / 2;
@@ -626,7 +627,7 @@ impl Xv6FileSystem {
     
                 let m = min(off - start_off, BSIZE - start_off % BSIZE);
                 for i in start_off..start_off + m {
-                    let idx = b_data.get_mut(i % BSIZE).ok_or(Error::EIO)?;
+                    let idx = b_data.get_mut(i % BSIZE).ok_or(libc::EIO)?;
                     *idx = 0;
                 }
                 bh.mark_buffer_dirty();
@@ -678,10 +679,10 @@ impl Xv6FileSystem {
         internals: &mut InodeInternal,
         name: &OsStr,
         poff: &mut u64,
-    ) -> Result<CachedInode<'a>, Error> {
+    ) -> Result<CachedInode<'a>, libc::c_int> {
         // Check if inode is directory
         if internals.inode_type != T_DIR {
-            return Err(Error::ENOTDIR);
+            return Err(libc::ENOTDIR);
         }
         let de_size = mem::size_of::<Xv6fsDirent>();
         let mut de_arr_vec: Vec<u8> = vec![0; BSIZE];
@@ -693,8 +694,7 @@ impl Xv6FileSystem {
         let search_name = match name.to_str() {
             Some(s) => s,
             None => {
-                println!("failed to make str");
-                return Err(Error::ENOENT);
+                return Err(libc::ENOENT);
             },
         };
     
@@ -705,7 +705,7 @@ impl Xv6FileSystem {
             for de_idx in 0..BSIZE / de_size {
                 let mut de = Xv6fsDirent::new();
                 let de_slice = &mut de_arr_slice[de_idx * de_size..(de_idx + 1) * de_size];
-                de.extract_from(de_slice).map_err(|_| Error::EIO)?;
+                de.extract_from(de_slice).map_err(|_| libc::EIO)?;
     
                 if (block_idx * BSIZE + de_idx * de_size) as u64 >= internals.size {
                     break;
@@ -725,7 +725,7 @@ impl Xv6FileSystem {
             }
         }
     
-        return Err(Error::ENOENT);
+        return Err(libc::ENOENT);
     }
     
     // create subdirectory with 'name' under the directory pointed to by 'internals'
@@ -734,10 +734,10 @@ impl Xv6FileSystem {
         name: &OsStr,
         child_inum: u32,
         parent_inum: u32,
-    ) -> Result<usize, Error> {
+    ) -> Result<usize, libc::c_int> {
         // Check if inode is directory
         if internals.inode_type != T_DIR {
-            return Err(Error::ENOTDIR);
+            return Err(libc::ENOTDIR);
         }
     
         let de_size = mem::size_of::<Xv6fsDirent>();
@@ -758,7 +758,7 @@ impl Xv6FileSystem {
                 }
                 let mut de = Xv6fsDirent::new();
                 let de_slice = &mut de_arr_slice[de_idx * de_size..(de_idx + 1) * de_size];
-                de.extract_from(de_slice).map_err(|_| Error::EIO)?;
+                de.extract_from(de_slice).map_err(|_| libc::EIO)?;
                 if de.inum == 0 {
                     final_off = Some((block_idx * BSIZE + de_idx * de_size) as u64);
                     break;
@@ -773,11 +773,11 @@ impl Xv6FileSystem {
     
         let mut de = Xv6fsDirent::new();
         let de_slice = de_vec.as_mut_slice();
-        de.extract_from(de_slice).map_err(|_| Error::EIO)?;
+        de.extract_from(de_slice).map_err(|_| libc::EIO)?;
     
         let name_slice = name.to_str().unwrap().as_bytes();
         if name_slice.len() > DIRSIZ as usize {
-            return Err(Error::EIO);
+            return Err(libc::EIO);
         }
         for (idx, ch) in de.name.iter_mut().enumerate() {
             *ch = match name_slice.get(idx) {
@@ -787,7 +787,7 @@ impl Xv6FileSystem {
         }
     
         de.inum = child_inum as u32;
-        de.dump_into(de_slice).map_err(|_| Error::EIO)?;
+        de.dump_into(de_slice).map_err(|_| libc::EIO)?;
     
         if self.writei(
             de_slice,
@@ -797,7 +797,7 @@ impl Xv6FileSystem {
             parent_inum,
         )? != de_size
         {
-            return Err(Error::EIO);
+            return Err(libc::EIO);
         }
     
         return Ok(0);

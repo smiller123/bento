@@ -1,6 +1,7 @@
-use crate::bindings::*;
+use crate::libc;
 
-use kernel::errno;
+use fuse::internal::*;
+
 use kernel::fuse::*;
 use kernel::mem::MemContainer;
 use kernel::raw;
@@ -22,13 +23,13 @@ pub fn bento_add_direntry(
     nodeid: u64,
     mode: u16,
     off: u64,
-) -> Result<usize, errno::Error> {
+) -> Result<usize, libc::c_int> {
     let namelen = name.len();
     let entlen = FUSE_NAME_OFFSET + namelen;
     let entlen_padded = fuse_dirent_align(entlen);
 
     if entlen_padded > buf_slice.len() {
-        return Err(errno::Error::EOVERFLOW);
+        return Err(libc::EOVERFLOW);
     }
 
     let write_region = &mut buf_slice[FUSE_NAME_OFFSET..FUSE_NAME_OFFSET + name.len()];
@@ -40,27 +41,18 @@ pub fn bento_add_direntry(
         *byte_mut = 0;
     }
 
-    let mut dirent = fuse_dirent {
-        ino: 0,
-        off: 0,
-        namelen: 0,
-        type_: 0,
-        name: __IncompleteArrayField::new(),
-    };
-    dirent.ino = nodeid;
-    dirent.off = off;
-    dirent.namelen = namelen as u32;
-    dirent.type_ = (mode & stat::S_IFMT) as u32 >> 12;
-    let ino_bytes = dirent.ino.to_ne_bytes();
+    let ino_bytes = nodeid.to_ne_bytes();
     buf_slice[0..8].copy_from_slice(&ino_bytes);
 
-    let off_bytes = dirent.off.to_ne_bytes();
+    let off_bytes = off.to_ne_bytes();
     buf_slice[8..16].copy_from_slice(&off_bytes);
 
-    let namelen_bytes = dirent.namelen.to_ne_bytes();
+    let namelen32 = namelen as u32;
+    let namelen_bytes = namelen32.to_ne_bytes();
     buf_slice[16..20].copy_from_slice(&namelen_bytes);
 
-    let d_type_bytes = dirent.type_.to_ne_bytes();
+    let type_ = (mode & stat::S_IFMT) as u32 >> 12;
+    let d_type_bytes = type_.to_ne_bytes();
     buf_slice[20..24].copy_from_slice(&d_type_bytes);
 
     return Ok(entlen_padded);
@@ -264,7 +256,7 @@ impl<'a> ReplyDirectoryInternal<'a> {
                     self.length += len;
                     false
                 }
-                Err(errno::Error::EOVERFLOW) => true,
+                Err(libc::EOVERFLOW) => true,
                 _ => false,
             };
         }

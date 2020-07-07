@@ -6,6 +6,8 @@ use bento::fuse::reply::*;
 use bento::fuse::request::*;
 use bento::fuse::*;
 
+use bento::libc;
+
 use bento::kernel;
 use kernel::fs::*;
 use kernel::fuse::*;
@@ -101,12 +103,9 @@ impl Filesystem for HelloFS {
         outarg.congestion_threshold = 0;
         outarg.time_gran = 1;
 
-        //let mut mut_disk = DISK.write();
-        //let devname_str = str::from_utf8(devname.to_bytes_with_nul()).unwrap();
         let devname_str = devname.to_str().unwrap();
         let disk = RwLock::new(Disk::new(devname_str, 4096));
         self.disk = Some(disk);
-        //*mut_disk = Some(Disk::new(devname_str, 4096));
 
         return Ok(());
     }
@@ -123,7 +122,7 @@ impl Filesystem for HelloFS {
         reply: ReplyOpen,
     ) {
         if nodeid != 2 {
-            reply.error(-(EISDIR as i32));
+            reply.error(libc::EISDIR);
         } else {
             reply.opened(0, 0);
         }
@@ -137,7 +136,7 @@ impl Filesystem for HelloFS {
         reply: ReplyOpen,
     ) {
         if nodeid != 1 {
-            reply.error(-(EISDIR as i32));
+            reply.error(libc::EISDIR);
         } else {
             reply.opened(0, 0);
         }
@@ -147,7 +146,7 @@ impl Filesystem for HelloFS {
         let attr_valid = Timespec::new(1, 999999999);
         let mut attr = fuse_attr::new();
         if HelloFS::hello_stat(nodeid, &mut attr) == -1 {
-            reply.error(-(ENOENT as i32));
+            reply.error(libc::ENOENT);
         } else {
             reply.attr(&attr_valid, &attr);
         }
@@ -162,14 +161,14 @@ impl Filesystem for HelloFS {
     ) {
         let name_str = name.to_str().unwrap();
         if nodeid != 1 || name_str != HELLO_NAME {
-            reply.error(-(ENOENT as i32));
+            reply.error(libc::ENOENT);
         } else {
             let out_nodeid = 2;
             let generation = 0;
             let entry_valid = Timespec::new(1, 999999999);
             let mut attr = fuse_attr::new();
             if HelloFS::hello_stat(out_nodeid, &mut attr) == -1 {
-                reply.error(-(ENOENT as i32));
+                reply.error(libc::ENOENT);
             } else {
                 reply.entry(&entry_valid, &attr, generation);
             }
@@ -186,7 +185,7 @@ impl Filesystem for HelloFS {
         reply: ReplyData,
     ) {
         if nodeid != 2 {
-            reply.error(-(ENOENT as i32));
+            reply.error(libc::ENOENT);
             return;
         }
         let copy_len = LEN.load(atomic::Ordering::SeqCst) - offset as usize;
@@ -195,7 +194,7 @@ impl Filesystem for HelloFS {
         let mut bh = match disk.bread(0) {
             Ok(x) => x,
             Err(x)=> {
-                reply.error(x as i32);
+                reply.error(x);
                 return;
             }
         };
@@ -223,7 +222,7 @@ impl Filesystem for HelloFS {
         let total_len = data.len() + offset as usize;
 
         if nodeid != 2 {
-            reply.error(-(ENOENT as i32));
+            reply.error(libc::ENOENT);
             return;
         }
 
@@ -231,7 +230,7 @@ impl Filesystem for HelloFS {
         let mut bh = match disk.bread(0) {
             Ok(x) => x,
             Err(x) => {
-                reply.error(x as i32);
+                reply.error(x);
                 return;
             }
         };
@@ -259,7 +258,7 @@ impl Filesystem for HelloFS {
         reply: ReplyDirectory,
     ) {
         if nodeid != 1 {
-            reply.error(-(ENOTDIR as i32));
+            reply.error(libc::ENOTDIR);
             return;
         }
         let mut buf_off = 1;
@@ -299,7 +298,7 @@ impl Filesystem for HelloFS {
     ) {
         let disk = self.disk.as_ref().unwrap().read().unwrap();
         if let Err(x) = disk.sync_all() {
-            reply.error(x as i32);
+            reply.error(x);
         } else {
             reply.ok();
         }

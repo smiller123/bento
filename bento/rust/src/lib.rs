@@ -14,6 +14,8 @@ pub mod bindings;
 pub mod io;
 #[allow(non_upper_case_globals)]
 pub mod fuse;
+#[allow(non_camel_case_types)]
+pub mod libc;
 pub mod kernel;
 pub mod std;
 

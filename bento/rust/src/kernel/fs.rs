@@ -1,6 +1,5 @@
 use core::cmp::min;
 
-use kernel::errno::*;
 use kernel::ffi::*;
 use kernel::kobj::*;
 use kernel::raw::*;
@@ -8,6 +7,8 @@ use kernel::raw::*;
 use crate::std::os::unix::io::*;
 use crate::std::io;
 use crate::std::os::unix::fs::*;
+
+use crate::libc;
 
 use bindings::*;
 
@@ -90,15 +91,15 @@ impl BlockDevice {
         }
     }
 
-    pub fn sync_block(&self, sector: u64) -> Result<(), Error> {
+    pub fn sync_block(&self, sector: u64) -> Result<(), libc::c_int> {
         if let Some(mut bh) = self.bdev.bread(sector, self.bsize) {
             bh.sync_dirty_buffer();
         }
         Ok(())
     }
 
-    pub fn bread(&self, blockno: u64) -> Result<BufferHead, Error> {
-        self.bdev.bread(blockno, self.bsize).ok_or(Error::EIO)
+    pub fn bread(&self, blockno: u64) -> Result<BufferHead, libc::c_int> {
+        self.bdev.bread(blockno, self.bsize).ok_or(libc::EIO)
     }
 }
 
@@ -127,11 +128,11 @@ impl Disk {
         self.bdev.sync_data()
     }
 
-    pub fn sync_block(&self, sector: u64) -> Result<(), Error> {
+    pub fn sync_block(&self, sector: u64) -> Result<(), libc::c_int> {
         self.bdev.sync_block(sector)
     }
 
-    pub fn bread(&self, blockno: u64) -> Result<BufferHead, Error> {
+    pub fn bread(&self, blockno: u64) -> Result<BufferHead, libc::c_int> {
         self.bdev.bread(blockno)
     }
 }

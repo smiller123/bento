@@ -1,11 +1,12 @@
 use kernel;
-use kernel::errno::Error;
 use kernel::fs::*;
 use kernel::raw::*;
 
 use core::slice;
 
 use bindings::*;
+
+use crate::libc;
 
 // /// A wrapper around the kernel `super_block` type.
 def_kernel_obj_type!(RsSuperBlock);
@@ -143,7 +144,7 @@ impl CStr {
     /// Create a CStr from a `u8` slice.
     ///
     /// Will return an error if the byte array doesn't contain a null character.
-    pub fn from_bytes_with_nul(bytes: &[u8]) -> Result<CStr, Error> {
+    pub fn from_bytes_with_nul(bytes: &[u8]) -> Result<CStr, libc::c_int> {
         let mut nul_pos = None;
         for (iter, byte) in bytes.iter().enumerate() {
             if *byte == 0 {
@@ -153,13 +154,13 @@ impl CStr {
         }
         if let Some(nul_pos) = nul_pos {
             if nul_pos + 1 != bytes.len() {
-                return Err(Error::EIO);
+                return Err(libc::EIO);
             }
             Ok(CStr {
                 inner: bytes.as_ptr() as *const i8,
             })
         } else {
-            return Err(Error::EIO);
+            return Err(libc::EIO);
         }
     }
 }

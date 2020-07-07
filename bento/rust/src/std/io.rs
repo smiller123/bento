@@ -1,7 +1,8 @@
 use core::result;
 
-use crate::kernel::errno;
 use crate::std::sys;
+
+use crate::libc;
 
 pub type Result<T> = result::Result<T, Error>;
 
@@ -17,7 +18,7 @@ impl Error {
         }
     }
 
-    pub fn from_raw_os_error(code: errno::Error) -> Self {
+    pub fn from_raw_os_error(code: libc::c_int) -> Self {
         Self { repr: Repr::Os(code) }
     }
 
@@ -32,7 +33,7 @@ impl Error {
 
 #[derive(Debug)]
 enum Repr {
-    Os(errno::Error),
+    Os(libc::c_int),
     Simple(ErrorKind),
     Custom(Custom),
 }
