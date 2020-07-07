@@ -416,17 +416,14 @@ pub fn xv6fs_ll_readdir_rs(
             return -(EIO as i32);
         }
 
-        if de.inum == 0 {
-            continue;
-        }
+
 
         let buf_slice = buf.to_slice_mut();
         let curr_buf_slice = &mut buf_slice[buf_off..];
         let name_str = match str::from_utf8(&de.name) {
             Ok(x) => x,
-            Err(_) => return -(EIO as i32),
+            Err(_) => "",
         };
-        //let name_str = str_from_utf8(&de.name);
         let ent_len = match bento_add_direntry(
             curr_buf_slice,
             name_str,
@@ -665,6 +662,9 @@ fn dounlink(sb: &RsSuperBlock, nodeid: u64, name: &CStr) -> Result<usize, errno:
     if inode_internals.inode_type == T_DIR {
         match isdirempty(sb, &mut inode_internals) {
             Ok(true) => {}
+            Ok(false) => {
+                return Err(errno::Error::ENOTEMPTY);
+            },
             _ => {
                 return Err(errno::Error::EIO);
             }
