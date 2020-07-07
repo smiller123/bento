@@ -11,7 +11,7 @@ use bento::libc;
 use bento::kernel;
 use kernel::fs::*;
 use kernel::fuse::*;
-use kernel::time::Timespec;
+use bento::time::Timespec;
 
 //use bento::println;
 

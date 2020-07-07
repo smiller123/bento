@@ -10,7 +10,7 @@ use bento::libc;
 use bento::kernel;
 use kernel::fs::Disk;
 use kernel::fuse::*;
-use kernel::time::*;
+use bento::time::*;
 
 use bento::bindings::*;
 //use bento::println;

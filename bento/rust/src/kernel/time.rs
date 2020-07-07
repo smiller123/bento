@@ -27,18 +27,3 @@ pub fn diff_ns(lhs: &Timespec64, rhs: &Timespec64) -> i64 {
 pub fn getnstimeofday64_rs(ts: &mut Timespec64) {
     unsafe { getnstimeofday64(ts as *mut Timespec64 as *mut c_void) }
 }
-
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
-pub struct Timespec {
-    pub sec: i64,
-    pub nsec: i32,
-}
-
-impl Timespec {
-    pub const fn new(sec: i64, nsec: i32) -> Self {
-        Self {
-            sec: sec,
-            nsec: nsec,
-        }
-    }
-}

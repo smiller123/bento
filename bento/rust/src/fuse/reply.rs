@@ -8,7 +8,7 @@ use kernel::fuse::*;
 use kernel::mem::MemContainer;
 use kernel::raw;
 use kernel::stat;
-use kernel::time::Timespec;
+use crate::time::Timespec;
 
 /// Add a directory entry to the buffer
 ///

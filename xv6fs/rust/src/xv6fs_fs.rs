@@ -8,11 +8,10 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 use datablock::DataBlock;
 
 use bento::bindings::*;
-use bento::kernel;
 
 use bento::libc;
 
-use kernel::time::Timespec;
+use bento::time::Timespec;
 
 use bento::fuse::{FileAttr,FileType};
 

@@ -14,7 +14,7 @@ use crate::std::path::Path;
 
 use kernel::ffi::*;
 use kernel::raw;
-use kernel::time::Timespec;
+use crate::time::Timespec;
 
 pub const BENTO_KERNEL_VERSION: u32 = 1;
 pub const BENTO_KERNEL_MINOR_VERSION: u32 = 0;

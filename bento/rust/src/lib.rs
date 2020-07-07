@@ -18,6 +18,7 @@ pub mod fuse;
 pub mod libc;
 pub mod kernel;
 pub mod std;
+pub mod time;
 
 extern crate datablock;
 extern crate rlibc;

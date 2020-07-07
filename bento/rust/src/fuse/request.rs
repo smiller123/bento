@@ -8,7 +8,7 @@ use crate::std::path::Path;
 use kernel::kobj::*;
 use kernel::mem::*;
 use kernel::raw;
-use kernel::time::Timespec;
+use crate::time::Timespec;
 
 use fuse::reply::*;
 use fuse::Filesystem;
