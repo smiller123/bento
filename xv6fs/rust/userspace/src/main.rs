@@ -21,6 +21,7 @@ pub mod xv6fs_file;
 pub mod xv6fs_fs;
 pub mod xv6fs_log;
 pub mod xv6fs_utils;
+#[macro_use]
 pub mod bento_utils;
 
 use alloc::sync::Arc;
@@ -29,7 +30,13 @@ use std::env;
 use std::ffi::OsStr;
 use xv6fs_ll::Xv6FileSystem;
 use xv6fs_utils::BSIZE;
-use bento_utils::Disk;
+
+use fuse::*;
+use bento_utils::*;
+use time::Timespec;
+use std::path::Path;
+
+impl_filesystem!(Xv6FileSystem);
 
 fn main() {
     env_logger::init();
@@ -47,7 +54,12 @@ fn main() {
     };
 
     let mountpoint = env::args_os().nth(2).unwrap();
-    let opts_arr = ["-o", fsname_arg, "-o", "blkdev"];
+    let mut opts_arr = vec!["-o", fsname_arg];
+    if let Some(arg) = env::args_os().nth(3) {
+        if arg.to_str().unwrap() == "blkdev" {
+            opts_arr.append(&mut vec!["-o", "blkdev"]);
+        }
+    }
     let options = opts_arr.iter().map(OsStr::new).collect::<Vec<&OsStr>>();
 
     fuse::mount(fs, &mountpoint, &options).unwrap();

@@ -1,7 +1,12 @@
+#[cfg(not(feature = "user"))]
 use crate::bento_utils;
+#[cfg(not(feature = "user"))]
 use crate::fuse;
+#[cfg(not(feature = "user"))]
 use crate::libc;
+#[cfg(not(feature = "user"))]
 use crate::std;
+#[cfg(not(feature = "user"))]
 use crate::time;
 
 use alloc::sync::Arc;

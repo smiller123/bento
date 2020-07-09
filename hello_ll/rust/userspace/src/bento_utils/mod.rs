@@ -958,360 +958,364 @@ pub trait BentoFilesystem {
     }
 }
 
-impl<T: BentoFilesystem> Filesystem for T {
-    fn init(
-        &mut self,
-        req: &Request,
-    ) -> Result<(), libc::c_int> {
-        let mut fc_info = FuseConnInfo::new();
-        self.bento_init(req, OsStr::new(""), &mut fc_info)
-    }
-
-    fn destroy(&mut self, req: &Request) {
-        self.bento_destroy(req);
-    }
-
-    fn lookup(
-        &mut self,
-        req: &Request,
-        parent: u64,
-        name: &OsStr,
-        reply: ReplyEntry,
-    ) {
-        self.bento_lookup(req, parent, name, reply)
-    }
-
-    fn forget(&mut self, req: &Request, ino: u64, nlookup: u64) {
-        self.bento_forget(req, ino, nlookup)
-    }
-
-    fn getattr(&mut self, req: &Request, ino: u64, reply: ReplyAttr) {
-        self.bento_getattr(req, ino, reply)
-    }
-
-    fn setattr(
-        &mut self,
-        req: &Request,
-        ino: u64,
-        mode: Option<u32>,
-        uid: Option<u32>,
-        gid: Option<u32>,
-        size: Option<u64>,
-        atime: Option<Timespec>,
-        mtime: Option<Timespec>,
-        fh: Option<u64>,
-        crtime: Option<Timespec>,
-        chgtime: Option<Timespec>,
-        bkuptime: Option<Timespec>,
-        flags: Option<u32>,
-        reply: ReplyAttr,
-    ) {
-        self.bento_setattr(req, ino, mode, uid, gid, size, atime, mtime, fh, crtime, chgtime, bkuptime, flags, reply)
-    }
-
-    fn readlink(&mut self, req: &Request, ino: u64, reply: ReplyData) {
-        self.bento_readlink(req, ino, reply)
-    }
-
-    fn mknod(
-        &mut self,
-        req: &Request,
-        parent: u64,
-        name: &OsStr,
-        mode: u32,
-        rdev: u32,
-        reply: ReplyEntry,
-    ) {
-        self.bento_mknod(req, parent, name, mode, rdev, reply)
-    }
-
-    fn mkdir(
-        &mut self,
-        req: &Request,
-        parent: u64,
-        name: &OsStr,
-        mode: u32,
-        reply: ReplyEntry,
-    ) {
-        self.bento_mkdir(req, parent, name, mode, reply)
-    }
-
-    fn unlink(
-        &mut self,
-        req: &Request,
-        parent: u64,
-        name: &OsStr,
-        reply: ReplyEmpty,
-    ) {
-        self.bento_unlink(req, parent, name, reply)
-    }
-
-    fn rmdir(
-        &mut self,
-        req: &Request,
-        parent: u64,
-        name: &OsStr,
-        reply: ReplyEmpty,
-    ) {
-        self.bento_rmdir(req, parent, name, reply)
-    }
-
-    fn symlink(
-        &mut self,
-        req: &Request,
-        parent: u64,
-        name: &OsStr,
-        link: &Path,
-        reply: ReplyEntry,
-    ) {
-        self.bento_symlink(req, parent, name, link, reply)
-    }
-
-    fn rename(
-        &mut self,
-        req: &Request,
-        parent: u64,
-        name: &OsStr,
-        newparent: u64,
-        newname: &OsStr,
-        reply: ReplyEmpty,
-    ) {
-        self.bento_rename(req, parent, name, newparent, newname, reply)
-    }
-
-    fn link(
-        &mut self,
-        req: &Request,
-        ino: u64,
-        newparent: u64,
-        newname: &OsStr,
-        reply: ReplyEntry,
-    ) {
-        self.bento_link(req, ino, newparent, newname, reply)
-    }
-
-    fn open(
-        &mut self,
-        req: &Request,
-        ino: u64,
-        flags: u32,
-        reply: ReplyOpen,
-    ) {
-        self.bento_open(req, ino, flags, reply)
-    }
-
-    fn read(
-        &mut self,
-        req: &Request,
-        ino: u64,
-        fh: u64,
-        offset: i64,
-        size: u32,
-        reply: ReplyData,
-    ) {
-        self.bento_read(req, ino, fh,offset, size, reply)
-    }
-
-    fn write(
-        &mut self,
-        req: &Request,
-        ino: u64,
-        fh: u64,
-        offset: i64,
-        data: &[u8],
-        flags: u32,
-        reply: ReplyWrite,
-    ) {
-        self.bento_write(req, ino, fh, offset, data, flags, reply)
-    }
-
-    fn flush(
-        &mut self,
-        req: &Request,
-        ino: u64,
-        fh: u64,
-        lock_owner: u64,
-        reply: ReplyEmpty,
-    ) {
-        self.bento_flush(req, ino, fh, lock_owner, reply)
-    }
-
-    fn release(
-        &mut self,
-        req: &Request,
-        ino: u64,
-        fh: u64,
-        flags: u32,
-        lock_owner: u64,
-        flush: bool,
-        reply: ReplyEmpty,
-    ) {
-        self.bento_release(req, ino, fh, flags, lock_owner, flush, reply)
-    }
-
-    fn fsync(
-        &mut self,
-        req: &Request,
-        ino: u64,
-        fh: u64,
-        datasync: bool,
-        reply: ReplyEmpty,
-    ) {
-        self.bento_fsync(req, ino, fh, datasync, reply)
-    }
-
-    fn opendir(
-        &mut self,
-        req: &Request,
-        ino: u64,
-        flags: u32,
-        reply: ReplyOpen,
-    ) {
-        self.bento_opendir(req, ino, flags, reply)
-    }
-
-    fn readdir(
-        &mut self,
-        req: &Request,
-        ino: u64,
-        fh: u64,
-        offset: i64,
-        reply: ReplyDirectory,
-    ) {
-        self.bento_readdir(req, ino, fh, offset, reply)
-    }
-
-    fn releasedir(
-        &mut self,
-        req: &Request,
-        ino: u64,
-        fh: u64,
-        flags: u32,
-        reply: ReplyEmpty,
-    ) {
-        self.bento_releasedir(req, ino, fh, flags, reply)
-    }
-
-    fn fsyncdir(
-        &mut self,
-        req: &Request,
-        ino: u64,
-        fh: u64,
-        datasync: bool,
-        reply: ReplyEmpty,
-    ) {
-        self.bento_fsyncdir(req, ino, fh, datasync, reply)
-    }
-
-    fn statfs(&mut self, req: &Request, ino: u64, reply: ReplyStatfs) {
-        self.bento_statfs(req, ino, reply)
-    }
-
-    fn setxattr(
-        &mut self,
-        req: &Request,
-        ino: u64,
-        name: &OsStr,
-        value: &[u8],
-        flags: u32,
-        position: u32,
-        reply: ReplyEmpty,
-    ) {
-        self.bento_setxattr(req, ino, name, value, flags, position, reply)
-    }
-
-    fn getxattr(
-        &mut self,
-        req: &Request,
-        ino: u64,
-        name: &OsStr,
-        size: u32,
-        reply: ReplyXattr,
-    ) {
-        self.bento_getxattr(req, ino, name, size, reply)
-    }
-
-    fn listxattr(
-        &mut self,
-        req: &Request,
-        ino: u64,
-        size: u32,
-        reply: ReplyXattr,
-    ) {
-        self.bento_listxattr(req, ino, size, reply)
-    }
-
-    fn removexattr(
-        &mut self,
-        req: &Request,
-        ino: u64,
-        name: &OsStr,
-        reply: ReplyEmpty,
-    ) {
-        self.bento_removexattr(req, ino, name, reply)
-    }
-
-    fn access(
-        &mut self,
-        req: &Request,
-        ino: u64,
-        mask: u32,
-        reply: ReplyEmpty,
-    ) {
-        self.bento_access(req, ino, mask, reply)
-    }
-
-    fn create(
-        &mut self,
-        req: &Request,
-        parent: u64,
-        name: &OsStr,
-        mode: u32,
-        flags: u32,
-        reply: ReplyCreate,
-    ) {
-        self.bento_create(req, parent, name, mode, flags, reply)
-    }
-
-    fn getlk(
-        &mut self,
-        req: &Request,
-        ino: u64,
-        fh: u64,
-        lock_owner: u64,
-        start: u64,
-        end: u64,
-        typ: u32,
-        pid: u32,
-        reply: ReplyLock,
-    ) {
-        self.bento_getlk(req, ino, fh, lock_owner, start, end, typ, pid, reply)
-    }
-
-    fn setlk(
-        &mut self,
-        req: &Request,
-        ino: u64,
-        fh: u64,
-        lock_owner: u64,
-        start: u64,
-        end: u64,
-        typ: u32,
-        pid: u32,
-        sleep: bool,
-        reply: ReplyEmpty,
-    ) {
-        self.bento_setlk(req, ino, fh, lock_owner, start, end, typ, pid, sleep, reply)
-    }
-
-    fn bmap(
-        &mut self,
-        req: &Request,
-        ino: u64,
-        blocksize: u32,
-        idx: u64,
-        reply: ReplyBmap,
-    ) {
-        self.bento_bmap(req, ino, blocksize, idx, reply)
+macro_rules! impl_filesystem {
+    ($name:ty) => {
+        impl Filesystem for $name {
+            fn init(
+                &mut self,
+                req: &Request,
+            ) -> Result<(), libc::c_int> {
+                let mut fc_info = FuseConnInfo::new();
+                self.bento_init(req, OsStr::new(""), &mut fc_info)
+            }
+        
+            fn destroy(&mut self, req: &Request) {
+                self.bento_destroy(req);
+            }
+        
+            fn lookup(
+                &mut self,
+                req: &Request,
+                parent: u64,
+                name: &OsStr,
+                reply: ReplyEntry,
+            ) {
+                self.bento_lookup(req, parent, name, reply)
+            }
+        
+            fn forget(&mut self, req: &Request, ino: u64, nlookup: u64) {
+                self.bento_forget(req, ino, nlookup)
+            }
+        
+            fn getattr(&mut self, req: &Request, ino: u64, reply: ReplyAttr) {
+                self.bento_getattr(req, ino, reply)
+            }
+        
+            fn setattr(
+                &mut self,
+                req: &Request,
+                ino: u64,
+                mode: Option<u32>,
+                uid: Option<u32>,
+                gid: Option<u32>,
+                size: Option<u64>,
+                atime: Option<Timespec>,
+                mtime: Option<Timespec>,
+                fh: Option<u64>,
+                crtime: Option<Timespec>,
+                chgtime: Option<Timespec>,
+                bkuptime: Option<Timespec>,
+                flags: Option<u32>,
+                reply: ReplyAttr,
+            ) {
+                self.bento_setattr(req, ino, mode, uid, gid, size, atime, mtime, fh, crtime, chgtime, bkuptime, flags, reply)
+            }
+        
+            fn readlink(&mut self, req: &Request, ino: u64, reply: ReplyData) {
+                self.bento_readlink(req, ino, reply)
+            }
+        
+            fn mknod(
+                &mut self,
+                req: &Request,
+                parent: u64,
+                name: &OsStr,
+                mode: u32,
+                rdev: u32,
+                reply: ReplyEntry,
+            ) {
+                self.bento_mknod(req, parent, name, mode, rdev, reply)
+            }
+        
+            fn mkdir(
+                &mut self,
+                req: &Request,
+                parent: u64,
+                name: &OsStr,
+                mode: u32,
+                reply: ReplyEntry,
+            ) {
+                self.bento_mkdir(req, parent, name, mode, reply)
+            }
+        
+            fn unlink(
+                &mut self,
+                req: &Request,
+                parent: u64,
+                name: &OsStr,
+                reply: ReplyEmpty,
+            ) {
+                self.bento_unlink(req, parent, name, reply)
+            }
+        
+            fn rmdir(
+                &mut self,
+                req: &Request,
+                parent: u64,
+                name: &OsStr,
+                reply: ReplyEmpty,
+            ) {
+                self.bento_rmdir(req, parent, name, reply)
+            }
+        
+            fn symlink(
+                &mut self,
+                req: &Request,
+                parent: u64,
+                name: &OsStr,
+                link: &Path,
+                reply: ReplyEntry,
+            ) {
+                self.bento_symlink(req, parent, name, link, reply)
+            }
+        
+            fn rename(
+                &mut self,
+                req: &Request,
+                parent: u64,
+                name: &OsStr,
+                newparent: u64,
+                newname: &OsStr,
+                reply: ReplyEmpty,
+            ) {
+                self.bento_rename(req, parent, name, newparent, newname, reply)
+            }
+        
+            fn link(
+                &mut self,
+                req: &Request,
+                ino: u64,
+                newparent: u64,
+                newname: &OsStr,
+                reply: ReplyEntry,
+            ) {
+                self.bento_link(req, ino, newparent, newname, reply)
+            }
+        
+            fn open(
+                &mut self,
+                req: &Request,
+                ino: u64,
+                flags: u32,
+                reply: ReplyOpen,
+            ) {
+                self.bento_open(req, ino, flags, reply)
+            }
+        
+            fn read(
+                &mut self,
+                req: &Request,
+                ino: u64,
+                fh: u64,
+                offset: i64,
+                size: u32,
+                reply: ReplyData,
+            ) {
+                self.bento_read(req, ino, fh,offset, size, reply)
+            }
+        
+            fn write(
+                &mut self,
+                req: &Request,
+                ino: u64,
+                fh: u64,
+                offset: i64,
+                data: &[u8],
+                flags: u32,
+                reply: ReplyWrite,
+            ) {
+                self.bento_write(req, ino, fh, offset, data, flags, reply)
+            }
+        
+            fn flush(
+                &mut self,
+                req: &Request,
+                ino: u64,
+                fh: u64,
+                lock_owner: u64,
+                reply: ReplyEmpty,
+            ) {
+                self.bento_flush(req, ino, fh, lock_owner, reply)
+            }
+        
+            fn release(
+                &mut self,
+                req: &Request,
+                ino: u64,
+                fh: u64,
+                flags: u32,
+                lock_owner: u64,
+                flush: bool,
+                reply: ReplyEmpty,
+            ) {
+                self.bento_release(req, ino, fh, flags, lock_owner, flush, reply)
+            }
+        
+            fn fsync(
+                &mut self,
+                req: &Request,
+                ino: u64,
+                fh: u64,
+                datasync: bool,
+                reply: ReplyEmpty,
+            ) {
+                self.bento_fsync(req, ino, fh, datasync, reply)
+            }
+        
+            fn opendir(
+                &mut self,
+                req: &Request,
+                ino: u64,
+                flags: u32,
+                reply: ReplyOpen,
+            ) {
+                self.bento_opendir(req, ino, flags, reply)
+            }
+        
+            fn readdir(
+                &mut self,
+                req: &Request,
+                ino: u64,
+                fh: u64,
+                offset: i64,
+                reply: ReplyDirectory,
+            ) {
+                self.bento_readdir(req, ino, fh, offset, reply)
+            }
+        
+            fn releasedir(
+                &mut self,
+                req: &Request,
+                ino: u64,
+                fh: u64,
+                flags: u32,
+                reply: ReplyEmpty,
+            ) {
+                self.bento_releasedir(req, ino, fh, flags, reply)
+            }
+        
+            fn fsyncdir(
+                &mut self,
+                req: &Request,
+                ino: u64,
+                fh: u64,
+                datasync: bool,
+                reply: ReplyEmpty,
+            ) {
+                self.bento_fsyncdir(req, ino, fh, datasync, reply)
+            }
+        
+            fn statfs(&mut self, req: &Request, ino: u64, reply: ReplyStatfs) {
+                self.bento_statfs(req, ino, reply)
+            }
+        
+            fn setxattr(
+                &mut self,
+                req: &Request,
+                ino: u64,
+                name: &OsStr,
+                value: &[u8],
+                flags: u32,
+                position: u32,
+                reply: ReplyEmpty,
+            ) {
+                self.bento_setxattr(req, ino, name, value, flags, position, reply)
+            }
+        
+            fn getxattr(
+                &mut self,
+                req: &Request,
+                ino: u64,
+                name: &OsStr,
+                size: u32,
+                reply: ReplyXattr,
+            ) {
+                self.bento_getxattr(req, ino, name, size, reply)
+            }
+        
+            fn listxattr(
+                &mut self,
+                req: &Request,
+                ino: u64,
+                size: u32,
+                reply: ReplyXattr,
+            ) {
+                self.bento_listxattr(req, ino, size, reply)
+            }
+        
+            fn removexattr(
+                &mut self,
+                req: &Request,
+                ino: u64,
+                name: &OsStr,
+                reply: ReplyEmpty,
+            ) {
+                self.bento_removexattr(req, ino, name, reply)
+            }
+        
+            fn access(
+                &mut self,
+                req: &Request,
+                ino: u64,
+                mask: u32,
+                reply: ReplyEmpty,
+            ) {
+                self.bento_access(req, ino, mask, reply)
+            }
+        
+            fn create(
+                &mut self,
+                req: &Request,
+                parent: u64,
+                name: &OsStr,
+                mode: u32,
+                flags: u32,
+                reply: ReplyCreate,
+            ) {
+                self.bento_create(req, parent, name, mode, flags, reply)
+            }
+        
+            fn getlk(
+                &mut self,
+                req: &Request,
+                ino: u64,
+                fh: u64,
+                lock_owner: u64,
+                start: u64,
+                end: u64,
+                typ: u32,
+                pid: u32,
+                reply: ReplyLock,
+            ) {
+                self.bento_getlk(req, ino, fh, lock_owner, start, end, typ, pid, reply)
+            }
+        
+            fn setlk(
+                &mut self,
+                req: &Request,
+                ino: u64,
+                fh: u64,
+                lock_owner: u64,
+                start: u64,
+                end: u64,
+                typ: u32,
+                pid: u32,
+                sleep: bool,
+                reply: ReplyEmpty,
+            ) {
+                self.bento_setlk(req, ino, fh, lock_owner, start, end, typ, pid, sleep, reply)
+            }
+        
+            fn bmap(
+                &mut self,
+                req: &Request,
+                ino: u64,
+                blocksize: u32,
+                idx: u64,
+                reply: ReplyBmap,
+            ) {
+                self.bento_bmap(req, ino, blocksize, idx, reply)
+            }
+        }
     }
 }

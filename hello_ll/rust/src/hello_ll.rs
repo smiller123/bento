@@ -1,7 +1,12 @@
+#[cfg(not(feature="user"))]
 use crate::bento_utils;
+#[cfg(not(feature="user"))]
 use crate::fuse;
+#[cfg(not(feature="user"))]
 use crate::libc;
+#[cfg(not(feature="user"))]
 use crate::std;
+#[cfg(not(feature="user"))]
 use crate::time;
 
 use alloc::vec::Vec;
@@ -25,12 +30,8 @@ pub const PAGE_SIZE: usize = 4096;
 static LEN: atomic::AtomicUsize = atomic::AtomicUsize::new(13);
 static HELLO_NAME: &str = "hello";
 
-pub static HELLO_FS: HelloFS = HelloFS {
-    disk: None
-};
-
 pub struct HelloFS {
-    disk: Option<RwLock<Disk>>
+    pub disk: Option<RwLock<Disk>>
 }
 
 impl HelloFS {
@@ -98,9 +99,11 @@ impl BentoFilesystem for HelloFS {
         outarg.congestion_threshold = 0;
         outarg.time_gran = 1;
 
-        let devname_str = devname.to_str().unwrap();
-        let disk = RwLock::new(Disk::new(devname_str, 4096));
-        self.disk = Some(disk);
+        if self.disk.is_none() {
+            let devname_str = devname.to_str().unwrap();
+            let disk = RwLock::new(Disk::new(devname_str, 4096));
+            self.disk = Some(disk);
+        }
 
         return Ok(());
     }

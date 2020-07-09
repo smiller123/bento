@@ -19,8 +19,12 @@ use bento::time;
 
 pub mod hello_ll;
 
-use hello_ll::HELLO_FS;
+use hello_ll::HelloFS;
 use bento_utils::BentoFilesystem;
+
+pub static HELLO_FS: HelloFS = HelloFS {
+    disk: None
+};
 
 #[no_mangle]
 pub fn rust_main() {

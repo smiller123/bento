@@ -1,5 +1,5 @@
 [package]
-name = "user_xv6fs"
+name = "user_hello"
 version = "0.1.0"
 build = "build.rs"
 authors = ["Danyang Zhuo <danyangz@cs.washington.edu>",
@@ -9,10 +9,14 @@ authors = ["Danyang Zhuo <danyangz@cs.washington.edu>",
 [build-dependencies]
 pkg-config = "0.3"
 
+[features]
+user = []
+
 [dependencies]
-datablock = { path = "../../datablock-rs/datablock" }
+datablock = { path = "../../../datablock-rs/datablock" }
 libc = "0.2.5"
 arr_macro = "0.1.0"
+fuse = "0.3.1"
 env_logger = "0.7.1"
 thread-scoped = "1.0.2"
 time = "0.1"

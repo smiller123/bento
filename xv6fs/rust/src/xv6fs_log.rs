@@ -1,6 +1,10 @@
+#[cfg(not(feature = "user"))]
 use crate::libc;
+#[cfg(not(feature = "user"))]
 use crate::std;
+#[cfg(not(feature = "user"))]
 use crate::println;
+#[cfg(not(feature = "user"))]
 use crate::bento_utils;
 
 use alloc::sync::Arc;

@@ -1,4 +1,5 @@
-use crate::std as std;
+#[cfg(not(feature = "user"))]
+use crate::std;
 
 use crate::xv6fs_utils::*;
 use crate::xv6fs_ll::*;
