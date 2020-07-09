@@ -33,7 +33,7 @@ test_user_hello:
     - git submodule update --init --recursive
     - (cd hello_ll/rust && make userspace)
     - sudo mkdir -p /mnt/hello
-    - sudo hello_ll/rust/userspace/target/release/user_hello hello_ll/hello /mnt/hello
+    - sudo hello_ll/rust/userspace/target/release/user_hello hello_ll/hello /mnt/hello &
     - sudo cat /mnt/hello/hello
     - sudo fusermount -u /mnt/hello
 
@@ -58,7 +58,7 @@ test_user_xv6fs:
   script:
     - (cd xv6fs/rust && make userspace)
     - sudo mkdir -p /mnt/xv6fs
-    - sudo xv6fs/rust/userspace/target/release/user_xv6fs /home/test/fs.img /mnt/xv6fs
+    - sudo xv6fs/rust/userspace/target/release/user_xv6fs /home/test/fs.img /mnt/xv6fs &
     - echo 0 | sudo tee /proc/sys/kernel/randomize_va_space
     - sudo filebench -f /home/test/fileserver.f
     - sudo fusermount -u /mnt/xv6fs
