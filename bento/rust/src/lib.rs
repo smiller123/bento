@@ -9,6 +9,7 @@
 
 extern crate alloc;
 
+pub mod bento_utils;
 pub mod bindings;
 #[macro_use]
 pub mod io;

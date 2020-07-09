@@ -10,14 +10,17 @@
 #[macro_use]
 extern crate alloc;
 
-use bento;
-use bento::c_str;
-use bento::fuse::*;
+use bento::bento_utils;
+use bento::fuse;
+use bento::libc;
 use bento::println;
+use bento::std;
+use bento::time;
 
 pub mod hello_ll;
 
 use hello_ll::HELLO_FS;
+use bento_utils::BentoFilesystem;
 
 #[no_mangle]
 pub fn rust_main() {

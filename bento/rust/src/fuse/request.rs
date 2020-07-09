@@ -11,7 +11,7 @@ use kernel::raw;
 use crate::time::Timespec;
 
 use fuse::reply::*;
-use fuse::Filesystem;
+use crate::bento_utils::BentoFilesystem;
 use fuse::internal::*;
 
 #[repr(C)]
@@ -124,8 +124,8 @@ struct bento_init_in {
     devname: CStr,
 }
 
-pub fn dispatch<T: Filesystem>(
-    fs: &mut T,
+pub fn dispatch<T: BentoFilesystem>(
+    fs: &'static mut T,
     opcode: fuse_opcode,
     inarg: &bento_in,
     outarg: &mut bento_out,
@@ -143,7 +143,7 @@ pub fn dispatch<T: Filesystem>(
             let mut fc_info = FuseConnInfo::from_init_in(&init_in);
             let devname_str = str::from_utf8(init_in.devname.to_bytes_with_nul()).unwrap();
             let devname = OsStr::new(devname_str);
-            match fs.init(&req, devname, &mut fc_info) {
+            match fs.bento_init(&req, devname, &mut fc_info) {
                 Ok(()) => {
                     fc_info.to_init_out(init_out);
                     0
@@ -153,10 +153,8 @@ pub fn dispatch<T: Filesystem>(
         }
         fuse_opcode_FUSE_DESTROY => {
             let req = Request { h: &inarg.h };
-            match fs.destroy(&req) {
-                Ok(()) => 0,
-                Err(x) => x as i32,
-            }
+            fs.bento_destroy(&req);
+            0
         }
         fuse_opcode_FUSE_LOOKUP => {
             if inarg.numargs != 1 || outarg.numargs != 1 {
@@ -169,7 +167,7 @@ pub fn dispatch<T: Filesystem>(
                 reply: Ok(entry_out),
             };
             let name_str = OsStr::new(str::from_utf8(name.to_bytes_with_nul()).unwrap());
-            fs.lookup(&req, inarg.h.nodeid, name_str, &mut reply);
+            fs.bento_lookup(&req, inarg.h.nodeid, name_str, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
                 Err(x) => -*x,
@@ -182,7 +180,7 @@ pub fn dispatch<T: Filesystem>(
             let req = Request { h: &inarg.h };
             let forget_in = unsafe { &*(inarg.args[0].value as *const fuse_forget_in) };
 
-            fs.forget(&req, inarg.h.nodeid, forget_in.nlookup);
+            fs.bento_forget(&req, inarg.h.nodeid, forget_in.nlookup);
             0
         }
         fuse_opcode_FUSE_GETATTR => {
@@ -197,7 +195,7 @@ pub fn dispatch<T: Filesystem>(
             let mut reply = ReplyAttrInternal {
                 reply: Ok(getattr_out),
             };
-            fs.getattr(&req, inarg.h.nodeid, &mut reply);
+            fs.bento_getattr(&req, inarg.h.nodeid, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
                 Err(x) => -*x,
@@ -249,7 +247,7 @@ pub fn dispatch<T: Filesystem>(
                 0 => None,
                 _ => Some(setattr_in.fh),
             };
-            fs.setattr(
+            fs.bento_setattr(
                 &req,
                 inarg.h.nodeid,
                 mode,
@@ -281,7 +279,7 @@ pub fn dispatch<T: Filesystem>(
             let mut reply = ReplyDataInternal {
                 reply: Ok(data_out),
             };
-            fs.readlink(&req, inarg.h.nodeid, &mut reply);
+            fs.bento_readlink(&req, inarg.h.nodeid, &mut reply);
             match reply.reply() {
                 Ok(buf) => {
                     let buf_slice = buf.to_slice();
@@ -303,7 +301,7 @@ pub fn dispatch<T: Filesystem>(
             let mut reply = ReplyEntryInternal {
                 reply: Ok(entry_out),
             };
-            fs.mknod(
+            fs.bento_mknod(
                 &req,
                 inarg.h.nodeid,
                 name_str,
@@ -328,7 +326,7 @@ pub fn dispatch<T: Filesystem>(
             let mut reply = ReplyEntryInternal {
                 reply: Ok(entry_out),
             };
-            fs.mkdir(&req, inarg.h.nodeid, name_str, mkdir_in.mode, &mut reply);
+            fs.bento_mkdir(&req, inarg.h.nodeid, name_str, mkdir_in.mode, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
                 Err(x) => -*x,
@@ -344,7 +342,7 @@ pub fn dispatch<T: Filesystem>(
             let mut reply = ReplyEmptyInternal {
                 reply: Err(libc::ENOSYS),
             };
-            fs.unlink(&req, inarg.h.nodeid, name_str, &mut reply);
+            fs.bento_unlink(&req, inarg.h.nodeid, name_str, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
                 Err(x) => -*x,
@@ -360,7 +358,7 @@ pub fn dispatch<T: Filesystem>(
             let mut reply = ReplyEmptyInternal {
                 reply: Err(libc::ENOSYS),
             };
-            fs.rmdir(&req, inarg.h.nodeid, name_str, &mut reply);
+            fs.bento_rmdir(&req, inarg.h.nodeid, name_str, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
                 Err(x) => -*x,
@@ -380,7 +378,7 @@ pub fn dispatch<T: Filesystem>(
             let mut reply = ReplyEntryInternal {
                 reply: Ok(entry_out),
             };
-            fs.symlink(&req, inarg.h.nodeid, name_str, link_path, &mut reply);
+            fs.bento_symlink(&req, inarg.h.nodeid, name_str, link_path, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
                 Err(x) => -*x,
@@ -399,7 +397,7 @@ pub fn dispatch<T: Filesystem>(
             let mut reply = ReplyEmptyInternal {
                 reply: Err(libc::ENOSYS),
             };
-            fs.rename(
+            fs.bento_rename(
                 &req,
                 inarg.h.nodeid,
                 oldname_str,
@@ -425,7 +423,7 @@ pub fn dispatch<T: Filesystem>(
             let mut reply = ReplyEntryInternal {
                 reply: Ok(entry_out),
             };
-            fs.link(
+            fs.bento_link(
                 &req,
                 link_in.oldnodeid,
                 inarg.h.nodeid,
@@ -449,7 +447,7 @@ pub fn dispatch<T: Filesystem>(
             let mut reply = ReplyOpenInternal {
                 reply: Ok(open_out),
             };
-            fs.open(&req, inarg.h.nodeid, open_in.flags, &mut reply);
+            fs.bento_open(&req, inarg.h.nodeid, open_in.flags, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
                 Err(x) => -*x,
@@ -467,7 +465,7 @@ pub fn dispatch<T: Filesystem>(
             let mut reply = ReplyDataInternal {
                 reply: Ok(data_out),
             };
-            fs.read(
+            fs.bento_read(
                 &req,
                 inarg.h.nodeid,
                 read_in.fh,
@@ -493,7 +491,7 @@ pub fn dispatch<T: Filesystem>(
             let mut reply = ReplyWriteInternal {
                 reply: Ok(write_out),
             };
-            fs.write(
+            fs.bento_write(
                 &req,
                 inarg.h.nodeid,
                 write_in.fh,
@@ -517,7 +515,7 @@ pub fn dispatch<T: Filesystem>(
             let mut reply = ReplyEmptyInternal {
                 reply: Err(libc::ENOSYS),
             };
-            fs.flush(
+            fs.bento_flush(
                 &req,
                 inarg.h.nodeid,
                 flush_in.fh,
@@ -539,7 +537,7 @@ pub fn dispatch<T: Filesystem>(
             let mut reply = ReplyEmptyInternal {
                 reply: Err(libc::ENOSYS),
             };
-            fs.release(
+            fs.bento_release(
                 &req,
                 inarg.h.nodeid,
                 release_in.fh,
@@ -567,7 +565,7 @@ pub fn dispatch<T: Filesystem>(
                 1 => true,
                 _ => false,
             };
-            fs.fsync(&req, inarg.h.nodeid, fsync_in.fh, datasync, &mut reply);
+            fs.bento_fsync(&req, inarg.h.nodeid, fsync_in.fh, datasync, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
                 Err(x) => -*x,
@@ -585,7 +583,7 @@ pub fn dispatch<T: Filesystem>(
             let mut reply = ReplyOpenInternal {
                 reply: Ok(open_out),
             };
-            fs.opendir(&req, inarg.h.nodeid, open_in.flags, &mut reply);
+            fs.bento_opendir(&req, inarg.h.nodeid, open_in.flags, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
                 Err(x) => -*x,
@@ -604,7 +602,7 @@ pub fn dispatch<T: Filesystem>(
                 reply: Ok(data_out),
                 length: 0,
             };
-            fs.readdir(
+            fs.bento_readdir(
                 &req,
                 inarg.h.nodeid,
                 read_in.fh,
@@ -629,7 +627,7 @@ pub fn dispatch<T: Filesystem>(
             let mut reply = ReplyEmptyInternal {
                 reply: Err(libc::ENOSYS),
             };
-            fs.releasedir(
+            fs.bento_releasedir(
                 &req,
                 inarg.h.nodeid,
                 release_in.fh,
@@ -655,7 +653,7 @@ pub fn dispatch<T: Filesystem>(
                 1 => true,
                 _ => false,
             };
-            fs.fsyncdir(&req, inarg.h.nodeid, fsync_in.fh, datasync, &mut reply);
+            fs.bento_fsyncdir(&req, inarg.h.nodeid, fsync_in.fh, datasync, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
                 Err(x) => -*x,
@@ -671,7 +669,7 @@ pub fn dispatch<T: Filesystem>(
             let mut reply = ReplyStatfsInternal {
                 reply: Ok(statfs_out),
             };
-            fs.statfs(&req, inarg.h.nodeid, &mut reply);
+            fs.bento_statfs(&req, inarg.h.nodeid, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
                 Err(x) => -*x,
@@ -693,7 +691,7 @@ pub fn dispatch<T: Filesystem>(
             let mut reply = ReplyEmptyInternal {
                 reply: Err(libc::ENOSYS),
             };
-            fs.setxattr(
+            fs.bento_setxattr(
                 &req,
                 inarg.h.nodeid,
                 name_str,
@@ -724,7 +722,7 @@ pub fn dispatch<T: Filesystem>(
                     reply_arg: Err(libc::ENOSYS),
                     reply_buf: Ok(data_out),
                 };
-                fs.getxattr(&req, inarg.h.nodeid, name_str, getxattr_in.size, &mut reply);
+                fs.bento_getxattr(&req, inarg.h.nodeid, name_str, getxattr_in.size, &mut reply);
                 match reply.reply_buf() {
                     Ok(_) => 0,
                     Err(x) => -*x,
@@ -736,7 +734,7 @@ pub fn dispatch<T: Filesystem>(
                     reply_arg: Ok(getxattr_out),
                     reply_buf: Err(libc::ENOSYS),
                 };
-                fs.getxattr(&req, inarg.h.nodeid, name_str, getxattr_in.size, &mut reply);
+                fs.bento_getxattr(&req, inarg.h.nodeid, name_str, getxattr_in.size, &mut reply);
                 match reply.reply_arg() {
                     Ok(_) => 0,
                     Err(x) => -*x,
@@ -758,7 +756,7 @@ pub fn dispatch<T: Filesystem>(
                     reply_arg: Err(libc::ENOSYS),
                     reply_buf: Ok(data_out),
                 };
-                fs.listxattr(&req, inarg.h.nodeid, getxattr_in.size, &mut reply);
+                fs.bento_listxattr(&req, inarg.h.nodeid, getxattr_in.size, &mut reply);
                 match reply.reply_buf() {
                     Ok(_) => 0,
                     Err(x) => -*x,
@@ -770,7 +768,7 @@ pub fn dispatch<T: Filesystem>(
                     reply_arg: Ok(getxattr_out),
                     reply_buf: Err(libc::ENOSYS),
                 };
-                fs.listxattr(&req, inarg.h.nodeid, getxattr_in.size, &mut reply);
+                fs.bento_listxattr(&req, inarg.h.nodeid, getxattr_in.size, &mut reply);
                 match reply.reply_arg() {
                     Ok(_) => 0,
                     Err(x) => -*x,
@@ -789,7 +787,7 @@ pub fn dispatch<T: Filesystem>(
             let mut reply = ReplyEmptyInternal {
                 reply: Err(libc::ENOSYS),
             };
-            fs.removexattr(&req, inarg.h.nodeid, name_str, &mut reply);
+            fs.bento_removexattr(&req, inarg.h.nodeid, name_str, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
                 Err(x) => -*x,
@@ -806,7 +804,7 @@ pub fn dispatch<T: Filesystem>(
             let mut reply = ReplyEmptyInternal {
                 reply: Err(libc::ENOSYS),
             };
-            fs.access(&req, inarg.h.nodeid, access_in.mask, &mut reply);
+            fs.bento_access(&req, inarg.h.nodeid, access_in.mask, &mut reply);
             match reply.reply() {
                 Ok(_) => 0,
                 Err(x) => -*x,
@@ -826,7 +824,7 @@ pub fn dispatch<T: Filesystem>(
             let mut reply = ReplyCreateInternal {
                 reply: Ok((entry_out, open_out)),
             };
-            fs.create(
+            fs.bento_create(
                 &req,
                 inarg.h.nodeid,
                 name_str,
@@ -850,7 +848,7 @@ pub fn dispatch<T: Filesystem>(
             let mut reply = ReplyLockInternal {
                 reply: Ok(getlk_out),
             };
-            fs.getlk(
+            fs.bento_getlk(
                 &req,
                 inarg.h.nodeid,
                 getlk_in.fh,
@@ -876,7 +874,7 @@ pub fn dispatch<T: Filesystem>(
             let mut reply = ReplyEmptyInternal {
                 reply: Err(libc::ENOSYS),
             };
-            fs.setlk(
+            fs.bento_setlk(
                 &req,
                 inarg.h.nodeid,
                 setlk_in.fh,
@@ -903,7 +901,7 @@ pub fn dispatch<T: Filesystem>(
             let mut reply = ReplyEmptyInternal {
                 reply: Err(libc::ENOSYS),
             };
-            fs.setlk(
+            fs.bento_setlk(
                 &req,
                 inarg.h.nodeid,
                 setlk_in.fh,
@@ -931,7 +929,7 @@ pub fn dispatch<T: Filesystem>(
             let mut reply = ReplyBmapInternal {
                 reply: Ok(bmap_out),
             };
-            fs.bmap(
+            fs.bento_bmap(
                 &req,
                 inarg.h.nodeid,
                 bmap_in.blocksize,

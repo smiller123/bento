@@ -14,20 +14,33 @@ extern crate bento;
 extern crate datablock;
 extern crate rlibc;
 
-use bento::c_str;
-use bento::fuse::*;
+use bento::fuse;
+use bento::libc;
 use bento::println;
-use bento::std as std;
+use bento::std;
+use bento::time;
+use bento::bento_utils;
 
-mod log;
+mod xv6fs_log;
 mod xv6fs_file;
 mod xv6fs_fs;
 mod xv6fs_ll;
 mod xv6fs_utils;
 
-use xv6fs_ll::XV6FS;
+use bento_utils::BentoFilesystem;
+use xv6fs_ll::Xv6FileSystem;
 
-pub static FS_NAME: &'static str = c_str!("xv6fs_ll");
+pub static FS_NAME: &'static str = "xv6fs_ll\0";
+
+pub static XV6FS: Xv6FileSystem = Xv6FileSystem {
+    log: None,
+    sb: None,
+    disk: None,
+    ilock_cache: None,
+    ialloc_lock: None,
+    balloc_lock: None,
+};
+
 
 #[no_mangle]
 pub fn rust_main() {

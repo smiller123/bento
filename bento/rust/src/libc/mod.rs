@@ -138,3 +138,23 @@ pub const EOWNERDEAD: c_int = 130;
 pub const ENOTRECOVERABLE: c_int = 131;
 pub const EHWPOISON: c_int = 133;
 pub const ERFKILL: c_int = 132;
+
+pub const O_DIRECT: c_int = 0x4000;
+pub const O_DIRECTORY: c_int = 0x10000;
+pub const O_NOFOLLOW: c_int = 0x20000;
+
+pub const O_APPEND: c_int = 1024;
+pub const O_CREAT: c_int = 64;
+pub const O_EXCL: c_int = 128;
+pub const O_NOCTTY: c_int = 256;
+pub const O_NONBLOCK: c_int = 2048;
+pub const O_SYNC: c_int = 1052672;
+pub const O_RSYNC: c_int = 1052672;
+pub const O_DSYNC: c_int = 4096;
+pub const O_FSYNC: c_int = 0x101000;
+pub const O_NOATIME: c_int = 0o1000000;
+pub const O_PATH: c_int = 0o10000000;
+pub const O_TMPFILE: c_int = 0o20000000 | O_DIRECTORY;
+
+pub const O_TRUNC: c_int = 512;
+

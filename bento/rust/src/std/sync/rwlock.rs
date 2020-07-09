@@ -1,7 +1,5 @@
 use core::cell::UnsafeCell;
-use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
-use core::ptr::NonNull;
 
 use crate::kernel::kobj::*;
 use crate::kernel::sync::*;
@@ -51,21 +49,15 @@ pub struct RwLock<T: ?Sized> {
 ///
 /// When the guard falls out of scope it will decrement the read count,
 /// potentially releasing the lock.
-#[derive(Debug)]
-pub struct RwLockReadGuard<T: ?Sized> {
-    lock: NonNull<Option<RsRwSemaphore>>,
-    data: NonNull<T>,
+pub struct RwLockReadGuard<'a, T: ?Sized> {
+    lock: &'a RwLock<T>,
 }
 
 /// A guard to which the protected data can be written
 ///
 /// When the guard falls out of scope it will release the lock.
-#[derive(Debug)]
 pub struct RwLockWriteGuard<'a, T: 'a + ?Sized> {
-    lock: NonNull<Option<RsRwSemaphore>>,
-    data: NonNull<T>,
-    #[doc(hidden)]
-    _invariant: PhantomData<&'a mut T>,
+    lock: &'a RwLock<T>,
 }
 
 // Same unsafe impls as `std::sync::RwLock`
@@ -123,13 +115,12 @@ impl<T: ?Sized> RwLock<T> {
     /// }
     /// ```
     #[inline]
-    pub fn read(&self) -> LockResult<RwLockReadGuard<T>> {
+    pub fn read(&self) -> LockResult<RwLockReadGuard<'_, T>> {
         unsafe {
             let _ = down_read(&*self.lock.get());
         }
         Ok(RwLockReadGuard {
-            lock: unsafe { NonNull::new_unchecked(self.lock.get()) },
-            data: unsafe { NonNull::new_unchecked(self.data.get()) },
+            lock: self,
         })
     }
 
@@ -153,12 +144,11 @@ impl<T: ?Sized> RwLock<T> {
     /// }
     /// ```
     #[inline]
-    pub fn try_read(&self) -> TryLockResult<RwLockReadGuard<T>> {
+    pub fn try_read(&self) -> TryLockResult<RwLockReadGuard<'_, T>> {
         let write_ret = unsafe { down_read_trylock(&*self.lock.get()) };
         if write_ret == Ok(1) {
             return Ok(RwLockReadGuard {
-                lock: unsafe { NonNull::new_unchecked(self.lock.get()) },
-                data: unsafe { NonNull::new_unchecked(self.data.get()) },
+                lock: self,
             });
         } else {
             return Err(TryLockError::WouldBlock);
@@ -187,14 +177,12 @@ impl<T: ?Sized> RwLock<T> {
     /// }
     /// ```
     #[inline]
-    pub fn write(&self) -> LockResult<RwLockWriteGuard<T>> {
+    pub fn write(&self) -> LockResult<RwLockWriteGuard<'_, T>> {
         unsafe {
             let _ = down_write(&*self.lock.get());
         }
         Ok(RwLockWriteGuard {
-            lock: unsafe { NonNull::new_unchecked(self.lock.get()) },
-            data: unsafe { NonNull::new_unchecked(self.data.get()) },
-            _invariant: PhantomData,
+            lock: self,
         })
     }
 
@@ -218,13 +206,11 @@ impl<T: ?Sized> RwLock<T> {
     /// }
     /// ```
     #[inline]
-    pub fn try_write(&self) -> TryLockResult<RwLockWriteGuard<T>> {
+    pub fn try_write(&self) -> TryLockResult<RwLockWriteGuard<'_, T>> {
         let write_ret = unsafe { down_write_trylock(&*self.lock.get()) };
         if write_ret == Ok(1) {
             return Ok(RwLockWriteGuard {
-                lock: unsafe { NonNull::new_unchecked(self.lock.get()) },
-                data: unsafe { NonNull::new_unchecked(self.data.get()) },
-                _invariant: PhantomData,
+                lock: self,
             });
         } else {
             return Err(TryLockError::WouldBlock);
@@ -252,40 +238,40 @@ impl<T: ?Sized> RwLock<T> {
     }
 }
 
-impl<T: ?Sized> Deref for RwLockReadGuard<T> {
+impl<T: ?Sized> Deref for RwLockReadGuard<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &T {
-        unsafe { self.data.as_ref() }
+        unsafe { &*self.lock.data.get() }
     }
 }
 
-impl<'rw, T: ?Sized> Deref for RwLockWriteGuard<'rw, T> {
+impl<T: ?Sized> Deref for RwLockWriteGuard<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &T {
-        unsafe { self.data.as_ref() }
+        unsafe { &*self.lock.data.get() }
     }
 }
 
-impl<'rw, T: ?Sized> DerefMut for RwLockWriteGuard<'rw, T> {
+impl<T: ?Sized> DerefMut for RwLockWriteGuard<'_, T> {
     fn deref_mut(&mut self) -> &mut T {
-        unsafe { self.data.as_mut() }
+        unsafe { &mut *self.lock.data.get() }
     }
 }
 
-impl<T: ?Sized> Drop for RwLockReadGuard<T> {
+impl<T: ?Sized> Drop for RwLockReadGuard<'_,T> {
     fn drop(&mut self) {
         unsafe {
-            let _ = up_read(self.lock.as_ref());
+            let _ = up_read(&*self.lock.lock.get());
         }
     }
 }
 
-impl<'rw, T: ?Sized> Drop for RwLockWriteGuard<'rw, T> {
+impl<T: ?Sized> Drop for RwLockWriteGuard<'_, T> {
     fn drop(&mut self) {
         unsafe {
-            let _ = up_write(self.lock.as_ref());
+            let _ = up_write(&*self.lock.lock.get());
         }
     }
 }

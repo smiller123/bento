@@ -1,24 +1,24 @@
+use crate::bento_utils;
+use crate::fuse;
+use crate::libc;
+use crate::std;
+use crate::time;
+
 use alloc::vec::Vec;
+
+use bento_utils::*;
+
 use core::sync::atomic;
 use core::str;
 
-use bento::fuse::reply::*;
-use bento::fuse::request::*;
-use bento::fuse::*;
+use fuse::*;
 
-use bento::libc;
+//use crate::println;
 
-use bento::kernel;
-use kernel::fs::*;
-use kernel::fuse::*;
-use bento::time::Timespec;
+use std::ffi::OsStr;
+use std::sync::RwLock;
 
-//use bento::println;
-
-use bento::bindings::*;
-
-use bento::std::ffi::OsStr;
-use bento::std::sync::RwLock;
+use time::Timespec;
 
 pub const PAGE_SIZE: usize = 4096;
 
@@ -74,12 +74,12 @@ impl HelloFS {
     }
 }
 
-impl Filesystem for HelloFS {
+impl BentoFilesystem for HelloFS {
     fn get_name(&self) -> &'static str {
         Self::NAME
     }
 
-    fn init(
+    fn bento_init(
         &mut self,
         _req: &Request,
         devname: &OsStr,
@@ -88,24 +88,12 @@ impl Filesystem for HelloFS {
         outarg.proto_major = BENTO_KERNEL_VERSION;
         outarg.proto_minor = BENTO_KERNEL_MINOR_VERSION;
 
-        let mut bufsize = FUSE_MAX_MAX_PAGES * PAGE_SIZE as u32 + FUSE_BUFFER_HEADER_SIZE;
-        let mut max_write = u32::MAX;
         let mut max_readahead = u32::MAX;
-
-        if bufsize < FUSE_MIN_READ_BUFFER {
-            bufsize = FUSE_MIN_READ_BUFFER;
-        }
-
-        if max_write > bufsize - FUSE_BUFFER_HEADER_SIZE {
-            max_write = bufsize - FUSE_BUFFER_HEADER_SIZE;
-        }
-
         if outarg.max_readahead < max_readahead {
             max_readahead = outarg.max_readahead;
         }
 
         outarg.max_readahead = max_readahead;
-        outarg.max_write = max_write;
         outarg.max_background = 0;
         outarg.congestion_threshold = 0;
         outarg.time_gran = 1;
@@ -117,11 +105,11 @@ impl Filesystem for HelloFS {
         return Ok(());
     }
 
-    fn statfs(&self, _req: &Request, _ino: u64, reply: ReplyStatfs) {
+    fn bento_statfs(&self, _req: &Request, _ino: u64, reply: ReplyStatfs) {
         reply.statfs(0, 0, 0, 0, 0, 512, 255, 0);
     }
 
-    fn open(
+    fn bento_open(
         &self,
         _req: &Request,
         nodeid: u64,
@@ -135,7 +123,7 @@ impl Filesystem for HelloFS {
         }
     }
 
-    fn opendir(
+    fn bento_opendir(
         &self,
         _req: &Request,
         nodeid: u64,
@@ -149,7 +137,7 @@ impl Filesystem for HelloFS {
         }
     }
 
-    fn getattr(&self, _req: &Request, nodeid: u64, reply: ReplyAttr) {
+    fn bento_getattr(&self, _req: &Request, nodeid: u64, reply: ReplyAttr) {
         let attr_valid = Timespec::new(1, 999999999);
         match HelloFS::hello_stat(nodeid) {
             Ok(attr) => reply.attr(&attr_valid, &attr),
@@ -157,7 +145,7 @@ impl Filesystem for HelloFS {
         }
     }
 
-    fn lookup(
+    fn bento_lookup(
         &self,
         _req: &Request,
         nodeid: u64,
@@ -178,7 +166,7 @@ impl Filesystem for HelloFS {
         }
     }
 
-    fn read(
+    fn bento_read(
         &self,
         _req: &Request,
         nodeid: u64,
@@ -212,7 +200,7 @@ impl Filesystem for HelloFS {
         reply.data(&buf_slice);
     }
 
-    fn write(
+    fn bento_write(
         &self,
         _req: &Request,
         nodeid: u64,
@@ -252,13 +240,14 @@ impl Filesystem for HelloFS {
         reply.written(data.len() as u32);
     }
 
-    fn readdir(
+    #[allow(unused_mut)]
+    fn bento_readdir(
         &self,
         _req: &Request,
         nodeid: u64,
         _fh: u64,
         offset: i64,
-        reply: ReplyDirectory,
+        mut reply: ReplyDirectory,
     ) {
         if nodeid != 1 {
             reply.error(libc::ENOTDIR);
@@ -267,7 +256,7 @@ impl Filesystem for HelloFS {
         let mut buf_off = 1;
         let mut inarg_offset = offset;
         if inarg_offset < 1 {
-            if reply.add(1 as u64, buf_off, 0, ".") {
+            if reply.add(1 as u64, buf_off, FileType::Directory, ".") {
                 reply.ok();
                 return;
             };
@@ -275,7 +264,7 @@ impl Filesystem for HelloFS {
         inarg_offset -= 1;
         buf_off += 1;
         if inarg_offset < 1 {
-            if reply.add(2 as u64, buf_off, 0, HELLO_NAME) {
+            if reply.add(2 as u64, buf_off, FileType::RegularFile, HELLO_NAME) {
                 reply.ok();
                 return;
             };
@@ -283,7 +272,7 @@ impl Filesystem for HelloFS {
         inarg_offset -= 1;
         buf_off += 1;
         if inarg_offset < 1 {
-            if reply.add(1 as u64, buf_off, 0, "..") {
+            if reply.add(1 as u64, buf_off, FileType::Directory, "..") {
                 reply.ok();
                 return;
             };
@@ -291,7 +280,7 @@ impl Filesystem for HelloFS {
         reply.ok();
     }
 
-    fn fsync(
+    fn bento_fsync(
         &self,
         _req: &Request,
         _ino: u64,

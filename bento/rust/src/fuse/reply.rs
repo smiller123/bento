@@ -262,11 +262,20 @@ pub struct ReplyDirectoryInternal<'a> {
 }
 
 impl<'a> ReplyDirectoryInternal<'a> {
-    pub fn add(&mut self, ino: u64, offset: i64, kind: u16, /*FileType */ name: &str) -> bool {
+    pub fn add(&mut self, ino: u64, offset: i64, kind: FileType, name: &str) -> bool {
         if let Ok(rep) = &mut self.reply {
             let buf = rep.to_slice_mut();
             let buf_slice = &mut buf[self.length..];
-            return match bento_add_direntry(buf_slice, name, ino, kind, offset as u64) {
+            let file_kind = match kind {
+                FileType::NamedPipe => stat::S_IFIFO,
+                FileType::CharDevice => stat::S_IFCHR,
+                FileType::BlockDevice => stat::S_IFBLK,
+                FileType::Directory => stat::S_IFDIR,
+                FileType::RegularFile => stat::S_IFREG,
+                FileType::Symlink => stat::S_IFLNK,
+                FileType::Socket => stat::S_IFSOCK,
+            };
+            return match bento_add_direntry(buf_slice, name, ino, file_kind, offset as u64) {
                 Ok(len) => {
                     self.length += len;
                     false
@@ -292,6 +301,46 @@ impl<'a> ReplyDirectoryInternal<'a> {
         return &self.reply;
     }
 }
+//impl<'a> ReplyDirectory<'a,'_> {
+//    pub fn add(&mut self, ino: u64, offset: i64, kind: FileType, name: &str) -> bool {
+//        if let Ok(rep) = &mut self.reply {
+//            let buf = rep.to_slice_mut();
+//            let buf_slice = &mut buf[self.length..];
+//            let file_kind = match kind {
+//                FileType::NamedPipe => stat::S_IFIFO,
+//                FileType::CharDevice => stat::S_IFCHR,
+//                FileType::BlockDevice => stat::S_IFBLK,
+//                FileType::Directory => stat::S_IFDIR,
+//                FileType::RegularFile => stat::S_IFREG,
+//                FileType::Symlink => stat::S_IFLNK,
+//                FileType::Socket => stat::S_IFSOCK,
+//            };
+//            return match bento_add_direntry(buf_slice, name, ino, file_kind, offset as u64) {
+//                Ok(len) => {
+//                    self.length += len;
+//                    false
+//                }
+//                Err(libc::EOVERFLOW) => true,
+//                _ => false,
+//            };
+//        }
+//        return false;
+//    }
+//
+//    pub fn ok(&mut self) {
+//        if let Ok(rep) = &mut self.reply {
+//            rep.truncate(self.length);
+//        }
+//    }
+//
+//    pub fn error(&mut self, err: i32) {
+//        self.reply = Err(err);
+//    }
+//
+//    pub fn reply(&self) -> &Result<&mut MemContainer<raw::c_uchar>, i32> {
+//        return &self.reply;
+//    }
+//}
 
 pub type ReplyStatfs<'a, 'b> = &'a mut ReplyStatfsInternal<'b>;
 
