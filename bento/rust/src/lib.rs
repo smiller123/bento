@@ -14,11 +14,19 @@
 #![feature(panic_info_message)]
 #![no_std]
 
+extern crate alloc;
+
+pub mod bento_utils;
 pub mod bindings;
 #[macro_use]
 pub mod io;
-pub mod bentofs;
+#[allow(non_upper_case_globals)]
+pub mod fuse;
+#[allow(non_camel_case_types)]
+pub mod libc;
 pub mod kernel;
+pub mod std;
+pub mod time;
 
 extern crate datablock;
 extern crate rlibc;

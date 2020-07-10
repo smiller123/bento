@@ -8,6 +8,14 @@
 #include <linux/buffer_head.h>
 #include <linux/slab.h>
 #include <linux/delay.h>
+#include <linux/fs.h>
+#include <linux/backing-dev.h>
+#include <linux/module.h>
+
+struct block_device *
+get_bdev_helper(const char* dev_name, fmode_t mode) {
+	return lookup_bdev(dev_name, mode);
+}
 
 void
 rs_dump_super_block(struct super_block* sb) {
@@ -30,10 +38,23 @@ rs_sb_bread(void *ptr, sector_t block)
     return __bread_gfp(sb->s_bdev, block, sb->s_blocksize, __GFP_MOVABLE);
 }
 
+struct buffer_head *
+bread_helper(void *ptr, sector_t block, unsigned size)
+{
+	struct block_device *bdev = (struct block_device *)ptr;
+	return __bread_gfp(bdev, block, size, __GFP_MOVABLE);
+}
+
 struct block_device*
 rs_super_block_get_s_bdev(struct super_block *sb)
 {
     return sb->s_bdev;
+}
+
+dev_t
+rs_block_device_get_bd_dev(struct block_device *bdev)
+{
+	return bdev->bd_dev;
 }
 
 void*
@@ -60,6 +81,10 @@ void rs_put_wait_queue_head(struct wait_queue_head* wq_head) {
 
 void rs_wake_up(struct wait_queue_head* wq_head) {
     wake_up(wq_head);
+}
+
+void rs_wake_up_all(struct wait_queue_head* wq_head) {
+    wake_up_all(wq_head);
 }
 
 void rs_wait_event(struct wait_queue_head* wq_head, bool (condition)(void)) {

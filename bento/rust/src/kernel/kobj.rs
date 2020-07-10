@@ -6,11 +6,14 @@
  */
 
 use kernel;
-use kernel::errno::Error;
-use kernel::mem;
+use kernel::fs::*;
 use kernel::raw::*;
 
 use core::slice;
+
+use bindings::*;
+
+use crate::libc;
 
 // /// A wrapper around the kernel `super_block` type.
 def_kernel_obj_type!(RsSuperBlock);
@@ -18,7 +21,7 @@ def_kernel_obj_type!(RsSuperBlock);
 // ///
 // /// Acquired by using `sb_bread_rust`. Since each bread must be accompanied by an associated brelse
 // /// to release the buffer, this calls `brelse` on `drop`.
-def_kernel_obj_type!(RsBufferHead);
+def_kernel_obj_type!(BufferHead);
 // /// A wrapper around the kernel `semaphore` type.
 def_kernel_obj_type!(RsRwSemaphore);
 // /// A wrapper around the kernel `wait_queue_head` type.
@@ -26,28 +29,62 @@ def_kernel_obj_type!(RsWaitQueueHead);
 // /// A wrapper around the kernel `block_device` type.
 def_kernel_obj_type!(RsBlockDevice);
 
-def_kernel_val_getter!(RsBufferHead, b_data, buffer_head, *const c_void);
-def_kernel_val_getter!(RsBufferHead, b_size, buffer_head, c_size_t);
+def_kernel_val_getter!(BufferHead, b_data, buffer_head, *const c_void);
+def_kernel_val_getter!(BufferHead, b_size, buffer_head, c_size_t);
 
 use kernel::ffi::*;
 
 def_kernel_obj_getter!(RsSuperBlock, s_bdev, super_block, RsBlockDevice);
 def_kobj_op!(RsSuperBlock, dump, rs_dump_super_block, ());
 
-def_kobj_op!(RsBufferHead, brelse, __brelse, ());
-def_kobj_op!(RsBufferHead, mark_buffer_dirty, mark_buffer_dirty, ());
-def_kobj_op!(RsBufferHead, sync_dirty_buffer, sync_dirty_buffer, i32);
+def_kernel_val_getter!(RsBlockDevice, bd_dev, block_device, u32);
+
+def_kobj_op!(BufferHead, brelse, __brelse, ());
+def_kobj_op!(BufferHead, mark_buffer_dirty, mark_buffer_dirty, ());
+def_kobj_op!(BufferHead, sync_dirty_buffer, sync_dirty_buffer, i32);
 
 def_kobj_immut_op!(RsRwSemaphore, down_read, down_read, ());
 def_kobj_immut_op!(RsRwSemaphore, up_read, up_read, ());
 def_kobj_immut_op!(RsRwSemaphore, down_write, down_write, ());
 def_kobj_immut_op!(RsRwSemaphore, down_write_trylock, down_write_trylock, i32);
+def_kobj_immut_op!(RsRwSemaphore, down_read_trylock, down_read_trylock, i32);
 def_kobj_immut_op!(RsRwSemaphore, up_write, up_write, ());
 def_kobj_op!(RsRwSemaphore, put, rs_put_semaphore, ());
 
 def_kobj_immut_op!(RsWaitQueueHead, wake_up, rs_wake_up, ());
+def_kobj_immut_op!(RsWaitQueueHead, wake_up_all, rs_wake_up_all, ());
 
-impl Drop for RsBufferHead {
+impl RsBlockDevice {
+    pub fn new(name: &str) -> Self {
+        unsafe {
+            //Self::from_raw(get_bdev_helper(name.as_ptr() as *const c_char, FMODE_READ | FMODE_WRITE | FMODE_EXCL))
+            Self::from_raw(lookup_bdev(name.as_ptr() as *const c_char, FMODE_READ | FMODE_WRITE | FMODE_EXCL))
+        }
+    }
+    pub fn bread(&self, blockno: u64, size: u32) -> Option<BufferHead> {
+        let bh = unsafe {
+            bread_helper(self.get_raw() as *const c_void, blockno, size)
+        };
+        if bh.is_null() {
+            return None;
+        } else {
+            unsafe {
+                return Some(BufferHead::from_raw(bh as *const c_void));
+            }
+        }
+    }
+
+    pub fn put(&self) {
+        unsafe {
+            blkdev_put(self.get_raw(), 0x80);
+        }
+    }
+}
+
+unsafe impl Send for RsBlockDevice {}
+unsafe impl Sync for RsBlockDevice {}
+
+impl Drop for BufferHead {
     fn drop(&mut self) {
         self.brelse();
     }
@@ -89,6 +126,10 @@ impl CStr {
         self.inner
     }
 
+    pub unsafe fn from_raw(inner: *const c_char) -> Self {
+        Self { inner: inner }
+    }
+
     /// Calculate the length of the CStr.
     pub fn len(&self) -> usize {
         let mut i = 0;
@@ -110,7 +151,7 @@ impl CStr {
     /// Create a CStr from a `u8` slice.
     ///
     /// Will return an error if the byte array doesn't contain a null character.
-    pub fn from_bytes_with_nul(bytes: &[u8]) -> Result<CStr, Error> {
+    pub fn from_bytes_with_nul(bytes: &[u8]) -> Result<CStr, libc::c_int> {
         let mut nul_pos = None;
         for (iter, byte) in bytes.iter().enumerate() {
             if *byte == 0 {
@@ -120,38 +161,29 @@ impl CStr {
         }
         if let Some(nul_pos) = nul_pos {
             if nul_pos + 1 != bytes.len() {
-                return Err(Error::EIO);
+                return Err(libc::EIO);
             }
             Ok(CStr {
                 inner: bytes.as_ptr() as *const i8,
             })
         } else {
-            return Err(Error::EIO);
+            return Err(libc::EIO);
         }
     }
 }
 
-impl RsBufferHead {
-    /// Return the associated data as a `kernel::MemContainer<c_uchar>`.
-    pub fn get_buffer_data(&self) -> mem::MemContainer<c_uchar> {
+impl BufferHead {
+    /// Return the associated data as a `u8` slice.
+    pub fn data(&self) -> &[u8] {
         let b_data = self.b_data();
         let size = self.b_size();
         unsafe {
-            return mem::MemContainer::new_from_raw(b_data as *mut c_uchar, size as usize);
+            return slice::from_raw_parts::<c_uchar>(b_data as *mut u8, size as usize);
         }
     }
 
-    /// Return the associated data as a `c_uchar` slice.
-    pub fn get_data(&self) -> &[c_uchar] {
-        let b_data = self.b_data();
-        let size = self.b_size();
-        unsafe {
-            return slice::from_raw_parts::<c_uchar>(b_data as *mut c_uchar, size as usize);
-        }
-    }
-
-    /// Return the associated data as a mutable `c_uchar` slice.
-    pub fn get_mut_data(&mut self) -> &mut [c_uchar] {
+    /// Return the associated data as a mutable `u8` slice.
+    pub fn data_mut(&mut self) -> &mut [u8] {
         let b_data = self.b_data();
         let size = self.b_size();
         unsafe {

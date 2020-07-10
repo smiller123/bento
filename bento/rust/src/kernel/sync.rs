@@ -61,6 +61,14 @@ pub fn down_write_trylock(semaphore: &Option<RsRwSemaphore>) -> Result<i32, i32>
     Ok(0)
 }
 
+pub fn down_read_trylock(semaphore: &Option<RsRwSemaphore>) -> Result<i32, i32> {
+    if let Some(sem) = semaphore {
+        let ret = sem.down_read_trylock();
+        return Ok(ret);
+    }
+    Ok(0)
+}
+
 pub fn up_write(semaphore: &Option<RsRwSemaphore>) -> Result<(), i32> {
     if let Some(sem) = semaphore {
         sem.up_write();

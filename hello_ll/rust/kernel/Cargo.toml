@@ -1,5 +1,5 @@
 [package]
-name = "xv6fs"
+name = "hello_ll"
 version = "0.1.0"
 authors = ["Danyang Zhuo <danyangz@cs.washington.edu>",
            "Kaiyuan Zhang <kaiyuanz@cs.washington.edu>",
@@ -10,6 +10,7 @@ edition = "2018"
 crate-type = ["staticlib"]
 
 [dependencies]
-bento = {path = "../../bento/rust" }
+bento = {path = "../../../bento/rust" }
 rlibc = "1.0"
 arr_macro = "0.1.0"
+

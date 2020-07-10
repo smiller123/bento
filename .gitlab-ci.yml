@@ -9,8 +9,8 @@ build:
   script:
     - git submodule update --init --recursive
     - (cd bentofs && make)
-    - (cd hello_ll/rust && make)
-    - (cd xv6fs/rust && make)
+    - (cd hello_ll/rust && make all)
+    - (cd xv6fs/rust && make all)
 
 test_hello:
   stage: test
@@ -19,13 +19,24 @@ test_hello:
     - (cd bentofs && make)
     - (cd hello_ll/rust && make)
     - sudo insmod bentofs/bentofs.ko
-    - sudo insmod hello_ll/rust/hello_ll.ko
-    - sudo mkdir /mnt/hello
+    - sudo insmod hello_ll/rust/kernel/hello_ll.ko
+    - sudo mkdir -p /mnt/hello
     - sudo mount -t bentoblk -o fd=10,rootmode=40000,user_id=0,group_id=0,blksize=4096,name=hello_ll -o loop hello_ll/hello /mnt/hello
     - sudo cat /mnt/hello/hello
     - sudo umount /mnt/hello
     - sudo rmmod hello_ll
     - sudo rmmod bentofs
+
+test_user_hello:
+  stage: test
+  script:
+    - git submodule update --init --recursive
+    - (cd hello_ll/rust && make userspace)
+    - sudo mkdir -p /mnt/hello
+    - sudo hello_ll/rust/userspace/target/release/user_hello hello_ll/hello /mnt/hello &
+    - sleep 1
+    - sudo cat /mnt/hello/hello
+    - sudo fusermount -u /mnt/hello
 
 test_xv6fs:
   stage: test
@@ -35,7 +46,7 @@ test_xv6fs:
     - (cd xv6fs/rust && make)
     - (cd xv6fs/mkfs && gcc mkfs.c && ./a.out fs.img)
     - sudo insmod bentofs/bentofs.ko
-    - sudo insmod xv6fs/rust/xv6fs.ko
+    - sudo insmod xv6fs/rust/kernel/xv6fs.ko
     - sudo mkdir -p /mnt/xv6fs
     - sudo mount -t bentoblk -o fd=10,rootmode=40000,user_id=0,group_id=0,blksize=4096,name=xv6fs_ll -o loop xv6fs/mkfs/fs.img /mnt/xv6fs
     - echo 0 | sudo tee /proc/sys/kernel/randomize_va_space
@@ -43,3 +54,15 @@ test_xv6fs:
     - sudo umount /mnt/xv6fs
     - sudo rmmod xv6fs
     - sudo rmmod bentofs
+
+test_user_xv6fs:
+  stage: test
+  script:
+    - git submodule update --init --recursive
+    - (cd xv6fs/rust && make userspace)
+    - sudo mkdir -p /mnt/xv6fs
+    - sudo xv6fs/rust/userspace/target/release/user_xv6fs /home/test/fs.img /mnt/xv6fs &
+    - sleep 1
+    - echo 0 | sudo tee /proc/sys/kernel/randomize_va_space
+    - sudo filebench -f /home/test/fileserver.f
+    - sudo fusermount -u /mnt/xv6fs

@@ -1,13 +1,13 @@
-obj-m := hello_ll.o
-hello_ll-objs := src/module.o hello_ll.rust.o
+obj-m := xv6fs.o
+xv6fs-objs := src/module.o xv6fs.rust.o
 
 EXTRA_LDFLAGS += --gc-sections --entry=init_module --undefined=cleanup_module
 
-KBUILD_EXTRA_SYMBOLS = $(src)/../../bentofs/Module.symvers
+KBUILD_EXTRA_SYMBOLS = $(src)/../../../bentofs/Module.symvers
 
 CARGO ?= cargo
 
-$(src)/target/x86_64-linux-kernel/release/libhello_ll.a: $(src)/Cargo.toml $(wildcard $(src)/src/*.rs)
+$(src)/target/x86_64-linux-kernel/release/libxv6fs.a: $(src)/Cargo.toml $(wildcard $(src)/src/*.rs)
 	cd $(src); env -u MAKE -u MAKEFLAGS $(CARGO) build -Z build-std=core,alloc --release --target=x86_64-linux-kernel
 
 %.rust.o: target/x86_64-linux-kernel/release/lib%.a

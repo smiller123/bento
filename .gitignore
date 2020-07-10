@@ -16,3 +16,4 @@ modules.order
 dummy.c
 dummy.mod.c
 Module.symvers
+Cargo.lock

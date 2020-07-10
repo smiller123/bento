@@ -81,6 +81,7 @@ pub fn memset_rust(s: &mut MemContainer<c_uchar>, c: u8, _n: c_size_t) -> Result
 /// This data structure is much like a slice, and in the future, we may move to using slices in
 /// place of MemContainer where possible.
 #[repr(C)]
+#[derive(Debug)]
 pub struct MemContainer<T> {
     ptr: *mut T,
     len: usize,

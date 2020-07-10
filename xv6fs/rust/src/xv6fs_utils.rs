@@ -7,14 +7,14 @@
  *                      Massachusetts Institute of Technology
  */
 
-use bento::DataBlock;
 use core::mem;
+use datablock::DataBlock;
 
-pub const PAGE_SIZE: usize = 4096;
 pub const BSIZE: usize = 4096;
 
 pub const T_DIR: u16 = 1;
 pub const T_FILE: u16 = 2;
+#[allow(dead_code)]
 pub const T_DEV: u16 = 3;
 pub const T_LNK: u16 = 4;
 
@@ -25,6 +25,7 @@ pub const NDINDIRECT: u32 = NINDIRECT * NINDIRECT;
 pub const MAXFILE: u32 = NDIRECT + NINDIRECT + NDINDIRECT;
 
 pub const IPB: usize = BSIZE / mem::size_of::<Xv6fsInode>();
+#[allow(dead_code)]
 pub const DPB: usize = BSIZE / mem::size_of::<Xv6fsDirent>();
 
 pub const BPB: usize = BSIZE * 8;
@@ -43,7 +44,7 @@ pub fn bblock(b: usize, sb: &Xv6fsSB) -> usize {
 }
 
 #[repr(C)]
-#[derive(DataBlock)]
+#[derive(DataBlock, Copy, Clone)]
 pub struct Xv6fsInode {
     pub inode_type: u16,
     pub major: u16,
