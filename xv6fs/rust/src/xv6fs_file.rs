@@ -10,7 +10,6 @@
 #[cfg(not(feature = "user"))]
 use crate::std;
 
-use crate::xv6fs_fs::*;
 use crate::xv6fs_utils::*;
 use crate::xv6fs_ll::*;
 
