@@ -17,6 +17,6 @@ userspace:
 clean:
 	$(MAKE) -C $(KDIR) M=$(CURDIR)/kernel clean
 	(cd kernel; cargo clean)
-	rm kernel/src/xv6*.rs
+	rm -f kernel/src/xv6*.rs
 	(cd userspace; cargo clean)
-	rm userspace/src/xv6*.rs
+	rm -f userspace/src/xv6*.rs

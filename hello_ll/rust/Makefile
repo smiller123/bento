@@ -17,6 +17,6 @@ userspace:
 clean:
 	$(MAKE) -C $(KDIR) M=$(CURDIR)/kernel clean
 	(cd kernel; cargo clean)
-	rm kernel/src/hello_ll.rs
+	rm -f kernel/src/hello_ll.rs
 	(cd userspace; cargo clean)
-	rm userspace/src/hello_ll.rs
+	rm -f userspace/src/hello_ll.rs
