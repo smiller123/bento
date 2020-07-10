@@ -60,8 +60,9 @@ test_user_xv6fs:
   script:
     - git submodule update --init --recursive
     - (cd xv6fs/rust && make userspace)
+    - (cd xv6fs/mkfs && gcc mkfs.c && ./a.out fs.img)
     - sudo mkdir -p /mnt/xv6fs
-    - sudo xv6fs/rust/userspace/target/release/user_xv6fs /home/test/fs.img /mnt/xv6fs &
+    - sudo xv6fs/rust/userspace/target/release/user_xv6fs xv6fs/mkfs/fs.img /mnt/xv6fs &
     - sleep 1
     - echo 0 | sudo tee /proc/sys/kernel/randomize_va_space
     - sudo filebench -f /home/test/fileserver.f
