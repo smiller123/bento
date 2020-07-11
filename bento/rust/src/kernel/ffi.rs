@@ -260,6 +260,13 @@ extern "C" {
     pub fn down_read_trylock(sem: *const raw::c_void) -> i32;
     pub fn up_write(sem: *const raw::c_void);
 
+    // journal
+    pub fn rs_jbd2_journal_init_dev(bdev: *const raw::c_void, fs_dev: *const raw::c_void, 
+        start: u64, len: i32, bsize: i32) -> *const raw::c_void;
+    pub fn rs_jbd2_journal_start(journal: *const raw::c_void, nblocks: i32) -> *const raw::c_void;
+    pub fn rs_jbd2_journal_stop(handle: *const raw::c_void) -> i32;
+    pub fn rs_jbd2_journal_get_write_access(handle: *const raw::c_void, bh: *const raw::c_void) -> i32;
+
     // string
     pub fn strnlen(s: *const raw::c_char, max_len: u64) -> u64;
     pub fn strcmp(s1: *const raw::c_char, s2: *const raw::c_char) -> i32;

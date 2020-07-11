@@ -11,6 +11,7 @@
 #include <linux/fs.h>
 #include <linux/backing-dev.h>
 #include <linux/module.h>
+#include <linux/jbd2.h>
 
 struct block_device *
 get_bdev_helper(const char* dev_name, fmode_t mode) {
@@ -103,4 +104,25 @@ void rs_put_semaphore(struct rw_semaphore *sem) {
 
 void rs_ndelay(unsigned long x) {
     ndelay(x);
+}
+
+// TODO journal
+journal_t* rs_jbd2_journal_init_dev(struct block_device *bdev, 
+                                    struct block_device *fs_dev, 
+                                    unsigned long long start, 
+                                    int len, 
+                                    int bsize) {
+    return jbd2_journal_init_dev(bdev, fs_dev, start, len, bsize);
+}
+
+handle_t *rs_jbd2_journal_start(journal_t * journal, int nblocks) {
+    return jbd2_journal_start(journal, nblocks);
+}
+
+int rs_jbd2_journal_stop(handle_t * handle) {
+    return jbd2_journal_stop(handle);
+}
+
+int rs_jbd2_journal_get_write_access(handle_t * handle, struct buffer_head * bh) {
+    return jbd2_journal_get_write_access(handle, bh);
 }
