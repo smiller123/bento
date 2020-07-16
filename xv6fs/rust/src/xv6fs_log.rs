@@ -21,6 +21,10 @@ use datablock::DataBlock;
 
 use crate::xv6fs_utils::*;
 
+// only write log to metadata/data region when blocks_in_use > COMMIT_AT
+pub const COMMIT_AT: u32 = 0;
+
+
 #[repr(C)]
 #[derive(DataBlock)]
 pub struct logheader {
@@ -43,6 +47,7 @@ pub struct Log {
     size: u32,
     outstanding: u32,
     committing: u32,
+    blocks_in_use: u32,
     lh: logheader,
 }
 
@@ -67,6 +72,7 @@ impl Xv6Log {
                 size: 0,
                 outstanding: 0,
                 committing: 0,
+                blocks_in_use: 0,
                 lh: logheader {
                     n: 0,
                     block: [0; LOGSIZE],
@@ -87,7 +93,7 @@ impl Xv6Log {
     }
 
     // Begin of a tx, must call begin_op in a filesystem syscall
-    pub fn begin_op<'log>(&'log self) -> LogOpGuard<'log> {
+    pub fn begin_op<'log>(&'log self, nblocks: u32) -> LogOpGuard<'log> {
         let mut waiting = false;
         loop {
             let mut guard = self.log_globl.lock().unwrap();
@@ -96,12 +102,14 @@ impl Xv6Log {
                 guard = self.wait_q.wait_while(guard, wait_cont).unwrap();
             }
             let log: &mut Log = &mut *guard;
-            if log.lh.n as usize + (log.outstanding as usize + 1) * MAXOPBLOCKS > LOGSIZE {
+            if log.blocks_in_use + nblocks > (LOGSIZE as u32) {
                 BLOCKER.store(false, Ordering::SeqCst);
                 waiting = true;
                 continue;
             } else {
                 log.outstanding += 1;
+                log.blocks_in_use += nblocks;
+                println!("begin op: size {}", nblocks);
                 break;
             }
         }
@@ -151,6 +159,11 @@ impl Xv6Log {
         b.map(|r| *r = blk_no);
         if i == log.lh.n as usize {
             log.lh.n += 1;
+            if log.lh.n > log.blocks_in_use {
+                // TODO: panic
+                println!("log_write: panic: too big transaction: {} allocated", log.blocks_in_use);
+                loop {}
+            }
         }
     }
 
@@ -248,6 +261,8 @@ impl Xv6Log {
      
     // Commits in-log transaction, persists data to disk.
     fn commit(&self, log: &mut Log) -> Result<(), libc::c_int> {
+        println!("committed op: allocated: {}, used: {}", log.blocks_in_use, log.lh.n);
+        log.blocks_in_use = 0;
         if log.lh.n > 0 {
             self.write_log(log)?;
             self.write_head(log)?;
@@ -278,7 +293,7 @@ impl Drop for LogOpGuard<'_> {
                 loop {}
             }
 
-            if log.outstanding == 0 {
+            if log.outstanding == 0 && log.blocks_in_use >= COMMIT_AT {
                 do_commit = 1;
                 log.committing = 1;
             } else {

@@ -33,7 +33,7 @@ pub const BPB: usize = BSIZE * 8;
 pub const NINODE: usize = 300;
 
 pub const MAXOPBLOCKS: usize = 32;
-pub const LOGSIZE: usize = MAXOPBLOCKS * 3;
+pub const LOGSIZE: usize = MAXOPBLOCKS * 4;
 
 pub fn iblock(i: usize, sb: &Xv6fsSB) -> usize {
     i / IPB + sb.inodestart as usize
