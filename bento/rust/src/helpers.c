@@ -106,6 +106,19 @@ void rs_ndelay(unsigned long x) {
     ndelay(x);
 }
 
+void print_bdev(struct block_device *bdev) {
+    printk(KERN_INFO "bd_dev: %u\n", bdev->bd_dev);
+    printk(KERN_INFO "bd_openers: %i\n", bdev->bd_openers);
+    printk(KERN_INFO "bd_inode: %p\n", bdev->bd_inode);
+    printk(KERN_INFO "bd_super: %p\n", bdev->bd_super);
+    //printk("****  super block\n");
+    //rs_dump_super_block(bdev->bd_super);
+    printk(KERN_INFO "bd_block_size: %u\n", bdev->bd_block_size);
+    /*printk(KERN_INFO "hi\n");
+    printk(KERN_INFO "hi\n");
+    printk(KERN_INFO "hi\n");*/
+}
+
 // TODO journal
 journal_t* rs_jbd2_journal_init_dev(struct block_device *bdev, 
                                     struct block_device *fs_dev, 
@@ -113,6 +126,14 @@ journal_t* rs_jbd2_journal_init_dev(struct block_device *bdev,
                                     int len, 
                                     int bsize) {
     return jbd2_journal_init_dev(bdev, fs_dev, start, len, bsize);
+}
+
+int rs_jbd2_journal_load(journal_t *journal) {
+    return jbd2_journal_load(journal);
+}
+
+int rs_jbd2_journal_destroy(journal_t *journal) {
+    return jbd2_journal_destroy(journal);
 }
 
 handle_t *rs_jbd2_journal_start(journal_t * journal, int nblocks) {
@@ -125,4 +146,12 @@ int rs_jbd2_journal_stop(handle_t * handle) {
 
 int rs_jbd2_journal_get_write_access(handle_t * handle, struct buffer_head * bh) {
     return jbd2_journal_get_write_access(handle, bh);
+}
+
+int rs_jbd2_journal_dirty_metadata (handle_t *handle, struct buffer_head *bh) {
+    jbd2_journal_dirty_metadata(handle, bh);
+}
+
+int rs_jbd2_journal_force_commit(journal_t *journal) {
+    return jbd2_journal_force_commit(journal);
 }

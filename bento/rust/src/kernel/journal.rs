@@ -4,7 +4,7 @@
       Anderson, Ang Chen, University of Washington
  *
  */
-
+/*
 use core::cell::UnsafeCell;
 
 use kernel::ffi::*;
@@ -87,3 +87,4 @@ impl Drop for Handle {
         }
     }
 }
+*/

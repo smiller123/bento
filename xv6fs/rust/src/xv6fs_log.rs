@@ -60,6 +60,7 @@ pub struct Xv6Log {
 
 
 impl Xv6Log {
+    #[allow(dead_code)]
     pub fn new(disk: Arc<Disk>) -> Self {
         Self {
             log_globl: Mutex::new(Log {
@@ -78,6 +79,7 @@ impl Xv6Log {
     }
 
     // xv6_sb is the xv6 filesystem superblock.
+    #[allow(dead_code)]
     pub fn initlog(&self, xv6_sb: &mut Xv6fsSB) -> Result<(), libc::c_int> {
         let mut log = &mut self.log_globl.lock().unwrap();
         log.start = xv6_sb.logstart;
@@ -87,6 +89,7 @@ impl Xv6Log {
     }
 
     // Begin of a tx, must call begin_op in a filesystem syscall
+    #[allow(dead_code)]
     pub fn begin_op<'log>(&'log self) -> LogOpGuard<'log> {
         let mut waiting = false;
         loop {
@@ -111,6 +114,7 @@ impl Xv6Log {
         }
     }
 
+    #[allow(dead_code)]
     pub fn force_commit(&self) {
         let mut guard = self.log_globl.lock().unwrap();
         let log: &mut Log = &mut *guard;
@@ -123,6 +127,7 @@ impl Xv6Log {
     }
 
     // Only writes to buffer cache, does not persist; only install_trans will persist data.
+    #[allow(dead_code)]
     pub fn log_write(&self, blk_no: u32) {
         let mut guard = self.log_globl.lock().unwrap();
         let log: &mut Log = &mut *guard;

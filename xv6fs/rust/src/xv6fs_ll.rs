@@ -25,7 +25,6 @@ use core::mem;
 use core::str;
 
 use bento_utils::BentoFilesystem;
-use bento_utils::Disk;
 
 use datablock::DataBlock;
 
@@ -35,6 +34,8 @@ use fuse::consts::*;
 
 use fuse::*;
 
+use bento::kernel::fs::*;
+
 //use println;
 
 use std::ffi::OsStr;
@@ -43,12 +44,12 @@ use std::sync::RwLock;
 
 use time::*;
 
-use crate::xv6fs_log::*;
+//use crate::xv6fs_log::*;
 use crate::xv6fs_file::*;
 use crate::xv6fs_utils::*;
 
 pub struct Xv6FileSystem {
-    pub log: Option<Xv6Log>,
+    pub log: Option<Journal>,
     pub sb: Option<Xv6fsSB>,
     pub disk: Option<Arc<Disk>>,
     pub ilock_cache: Option<Vec<RwLock<Inode>>>,
@@ -75,6 +76,7 @@ impl BentoFilesystem for Xv6FileSystem {
         if fc_info.max_readahead < max_readahead {
             max_readahead = fc_info.max_readahead;
         }
+
         if self.disk.is_none() {
             let devname_str = devname.to_str().unwrap();
             let disk = Disk::new(devname_str, BSIZE as u64);
@@ -151,9 +153,9 @@ impl BentoFilesystem for Xv6FileSystem {
         }
 
         if flags & libc::O_TRUNC as u32 != 0 {
-            let _guard = log.begin_op();
+            let handle = log.begin_op(MAXOPBLOCKS as u32);
             internals.size = 0;
-            if let Err(x) = self.iupdate(&internals, inode.inum) {
+            if let Err(x) = self.iupdate(&internals, inode.inum, &handle) {
                 reply.error(x);
                 return;
             }
@@ -257,7 +259,7 @@ impl BentoFilesystem for Xv6FileSystem {
         reply: ReplyAttr,
     ) {
         let log = self.log.as_ref().unwrap();
-        let _guard = log.begin_op();
+        let _handle = log.begin_op(MAXOPBLOCKS as u32); // TODO check size
         let inode = match self.iget(ino) {
             Ok(x) => x,
             Err(x) => {
@@ -429,7 +431,7 @@ impl BentoFilesystem for Xv6FileSystem {
         let mut file_off = 0;
         while i < n {
             let log = self.log.as_ref().unwrap();
-            let _guard = log.begin_op();
+            let handle = log.begin_op(MAXOPBLOCKS as u32);
             let inode = match self.iget(nodeid) {
                 Ok(x) => x,
                 Err(x) => {
@@ -465,7 +467,7 @@ impl BentoFilesystem for Xv6FileSystem {
                 n1 = max;
             }
             let data_region = &data[file_off..];
-            let r = match self.writei(data_region, off, n1, &mut internals, inode.inum) {
+            let r = match self.writei(data_region, off, n1, &mut internals, inode.inum, &handle) {
                 Ok(x) => x,
                 Err(x) => {
                     reply.error(x);
@@ -614,8 +616,8 @@ impl BentoFilesystem for Xv6FileSystem {
     ) {
         // Check if the file already exists
         let log = self.log.as_ref().unwrap();
-        let _guard = log.begin_op();
-        let child = match self.create_internal(parent, T_FILE, name) {
+        let handle = log.begin_op(MAXOPBLOCKS as u32);
+        let child = match self.create_internal(parent, T_FILE, name, &handle) {
             Ok(x) => x,
             Err(x) => {
                 reply.error(x);
@@ -663,8 +665,8 @@ impl BentoFilesystem for Xv6FileSystem {
         reply: ReplyEntry,
     ) {
         let log = self.log.as_ref().unwrap();
-        let _guard = log.begin_op();
-        let child = match self.create_internal(parent, T_DIR, &name) {
+        let handle = log.begin_op(MAXOPBLOCKS as u32);
+        let child = match self.create_internal(parent, T_DIR, &name, &handle) {
             Ok(x) => x,
             Err(x) => {
                 reply.error(x);
@@ -710,8 +712,8 @@ impl BentoFilesystem for Xv6FileSystem {
         reply: ReplyEmpty,
     ) {
         let log = self.log.as_ref().unwrap();
-        let _guard = log.begin_op();
-        match self.dounlink(parent, name) {
+        let handle = log.begin_op(MAXOPBLOCKS as u32);
+        match self.dounlink(parent, name, &handle) {
             Ok(_) => reply.ok(),
             Err(x) => reply.error(x),
         }
@@ -725,8 +727,8 @@ impl BentoFilesystem for Xv6FileSystem {
         reply: ReplyEmpty,
     ) {
         let log = self.log.as_ref().unwrap();
-        let _guard = log.begin_op();
-        match self.dounlink(parent, name) {
+        let handle = log.begin_op(MAXOPBLOCKS as u32);
+        match self.dounlink(parent, name, &handle) {
             Ok(_) => reply.ok(),
             Err(x) => reply.error(x),
         }
@@ -754,9 +756,9 @@ impl BentoFilesystem for Xv6FileSystem {
         reply: ReplyEntry,
     ) {
         let log = self.log.as_ref().unwrap();
-        let _guard = log.begin_op();
+        let handle = log.begin_op(MAXOPBLOCKS as u32);
         // Create new file
-        let child = match self.create_internal(nodeid, T_LNK, name) {
+        let child = match self.create_internal(nodeid, T_LNK, name, &handle) {
             Ok(x) => x,
             Err(x) => {
                 reply.error(x);
@@ -791,6 +793,7 @@ impl BentoFilesystem for Xv6FileSystem {
             mem::size_of::<u32>(),
             &mut internals,
             child.inum,
+            &handle,
         ) {
             reply.error(x);
             return;
@@ -802,6 +805,7 @@ impl BentoFilesystem for Xv6FileSystem {
             linkname_str.len(),
             &mut internals,
             child.inum,
+            &handle,
         ) {
             reply.error(x);
             return;
@@ -897,6 +901,7 @@ impl Xv6FileSystem {
         nodeid: u64,
         itype: u16,
         name: &OsStr,
+        handle: &Handle
     ) -> Result<CachedInode<'a>, libc::c_int> {
         // Get inode for parent directory
     
@@ -906,7 +911,7 @@ impl Xv6FileSystem {
         let parent_inode_guard = self.ilock(parent.idx, &icache, parent.inum)?;
         let mut parent_internals = parent_inode_guard.internals.write().map_err(|_| libc::EIO)?;
     
-        let inode = self.ialloc(itype)?;
+        let inode = self.ialloc(itype, handle)?;
         if (parent_internals.size as usize + mem::size_of::<Xv6fsDirent>()) > (MAXFILE as usize * BSIZE)
         {
             return Err(libc::EIO);
@@ -919,19 +924,19 @@ impl Xv6FileSystem {
         internals.minor = parent_internals.minor;
         internals.nlink = 1;
     
-        self.iupdate(&internals, inode.inum)?;
+        self.iupdate(&internals, inode.inum, handle)?;
     
         if itype == T_DIR {
             parent_internals.nlink += 1;
-            self.iupdate(&parent_internals, parent.inum)?;
+            self.iupdate(&parent_internals, parent.inum, handle)?;
             let d = OsStr::new(".");
-            self.dirlink(&mut internals, &d, inode.inum, inode.inum)?;
+            self.dirlink(&mut internals, &d, inode.inum, inode.inum, handle)?;
     
             let dd = OsStr::new("..");
-            self.dirlink(&mut internals, &dd, nodeid as u32, inode.inum)?;
+            self.dirlink(&mut internals, &dd, nodeid as u32, inode.inum, handle)?;
         }
     
-        self.dirlink(&mut parent_internals, name, inode.inum, parent.inum)?;
+        self.dirlink(&mut parent_internals, name, inode.inum, parent.inum, handle)?;
         return Ok(inode);
     }
     
@@ -955,7 +960,7 @@ impl Xv6FileSystem {
         return Ok(true);
     }
     
-    fn dounlink(&self, nodeid: u64, name: &OsStr) -> Result<usize, libc::c_int> {
+    fn dounlink(&self, nodeid: u64, name: &OsStr, handle: &Handle) -> Result<usize, libc::c_int> {
         let parent = self.iget(nodeid)?;
         let icache = self.ilock_cache.as_ref().unwrap();
         let parent_inode_guard = self.ilock(parent.idx, &icache, parent.inum)?;
@@ -991,6 +996,7 @@ impl Xv6FileSystem {
             buf_len,
             &mut parent_internals,
             parent.inum,
+            handle
         )?;
     
         if r != buf_len {
@@ -999,11 +1005,11 @@ impl Xv6FileSystem {
     
         if inode_internals.inode_type == T_DIR {
             parent_internals.nlink -= 1;
-            self.iupdate(&parent_internals, parent.inum)?;
+            self.iupdate(&parent_internals, parent.inum, handle)?;
         }
     
         inode_internals.nlink -= 1;
-        self.iupdate(&inode_internals, inode.inum)?;
+        self.iupdate(&inode_internals, inode.inum, handle)?;
     
         return Ok(0);
     }
