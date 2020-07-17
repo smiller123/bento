@@ -1,24 +1,28 @@
 [package]
-name = "bento"
+name = "hello_client"
 version = "0.1.0"
+build = "build.rs"
 authors = ["Danyang Zhuo <danyangz@cs.washington.edu>",
            "Kaiyuan Zhang <kaiyuanz@cs.washington.edu>",
            "Samantha Miller <sm237@cs.washington.edu>"]
+edition = "2018"
 
-[features]
-default = []
-capnproto = [ "capnp" ]
+[lib]
+crate-type = ["staticlib"]
 
 [build-dependencies]
-bindgen = "*"
-cc = "1.0"
-shlex = "0.1"
+capnpc = "0.13.0-alpha"
 
 [dependencies]
 rlibc = "1.0"
-datablock = { path = "../../datablock-rs/datablock" }
+arr_macro = "0.1.0"
+
+[dependencies.bento]
+path = "../../../bento/rust"
+default-features = false
+features = ["capnproto"]
 
 [dependencies.capnp]
-version = "0.13.3"
-optional = true
+version = "0.13.0-alpha"
 default-features = false
+features = []

@@ -11,10 +11,31 @@
 #include <linux/fs.h>
 #include <linux/backing-dev.h>
 #include <linux/module.h>
+#include <linux/in.h>
+#include <linux/net.h>
+#include <linux/kthread.h>
 
-struct block_device *
-get_bdev_helper(const char* dev_name, fmode_t mode) {
-	return lookup_bdev(dev_name, mode);
+void
+wait_a_bit(void) {
+	set_current_state(TASK_INTERRUPTIBLE);
+	cond_resched();
+	//schedule();
+}
+
+void
+wait_for_interrupt(void) {
+	set_current_state(TASK_INTERRUPTIBLE);
+	schedule();
+}
+
+struct task_struct *
+kthread_run_helper(int (*threadfn)(void *data), void *data, const char *namefmt){
+	return kthread_run(threadfn, data, namefmt);
+}
+
+struct net *
+current_net() {
+	return current->nsproxy->net_ns;
 }
 
 void

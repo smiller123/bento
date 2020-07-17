@@ -58,6 +58,17 @@ const INCLUDED_TYPES: &[&str] = &[
     "fuse_out_header",
     "timespec",
     "fuse_link_in",
+    "sockaddr_in",
+    "sockaddr_in6",
+    "in_addr",
+    "in6_addr",
+    "sa_family_t",
+    "socket",
+    "sock_type",
+    "sock_shutdown_cmd",
+    "timeval",
+    "msghdr",
+    "kvec",
 ];
 const INCLUDED_FUNCTIONS: &[&str] = &[
     "cdev_add",
@@ -177,6 +188,17 @@ const INCLUDED_VARS: &[&str] = &[
     "FATTR_MTIME_NOW",
     "FATTR_LOCKOWNER",
     "FATTR_CTIME",
+    "AF_INET",
+    "AF_INET6",
+    "IPPROTO_TCP",
+    "SOL_SOCKET",
+    "SO_REUSEADDR",
+    "IP_TTL",
+    "SO_ERROR",
+    "TCP_NODELAY",
+    "SO_RCVTIMEO",
+    "SO_SNDTIMEO",
+    "MSG_PEEK",
 ];
 const OPAQUE_TYPES: &[&str] = &[
     // These need to be opaque because they're both packed and aligned, which rustc

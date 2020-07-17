@@ -19,7 +19,11 @@ impl Error {
     }
 
     pub fn from_raw_os_error(code: libc::c_int) -> Self {
-        Self { repr: Repr::Os(code) }
+        if code < 0 {
+            Self { repr: Repr::Os(-code) }
+        } else {
+            Self { repr: Repr::Os(code) }
+        }
     }
 
     pub fn kind(&self) -> ErrorKind {
@@ -112,34 +116,44 @@ pub enum ErrorKind {
     UnexpectedEof,
 }
 
-//impl ErrorKind {
-//    pub(crate) fn as_str(&self) -> &'static str {
-//        match *self {
-//            ErrorKind::NotFound => "entity not found",
-//            ErrorKind::PermissionDenied => "permission denied",
-//            ErrorKind::ConnectionRefused => "connection refused",
-//            ErrorKind::ConnectionReset => "connection reset",
-//            ErrorKind::ConnectionAborted => "connection aborted",
-//            ErrorKind::NotConnected => "not connected",
-//            ErrorKind::AddrInUse => "address in use",
-//            ErrorKind::AddrNotAvailable => "address not available",
-//            ErrorKind::BrokenPipe => "broken pipe",
-//            ErrorKind::AlreadyExists => "entity already exists",
-//            ErrorKind::WouldBlock => "operation would block",
-//            ErrorKind::InvalidInput => "invalid input parameter",
-//            ErrorKind::InvalidData => "invalid data",
-//            ErrorKind::TimedOut => "timed out",
-//            ErrorKind::WriteZero => "write zero",
-//            ErrorKind::Interrupted => "operation interrupted",
-//            ErrorKind::Other => "other os error",
-//            ErrorKind::UnexpectedEof => "unexpected end of file",
-//        }
-//    }
-//}
+impl ErrorKind {
+    pub fn as_str(&self) -> &'static str {
+        match *self {
+            ErrorKind::NotFound => "entity not found",
+            ErrorKind::PermissionDenied => "permission denied",
+            ErrorKind::ConnectionRefused => "connection refused",
+            ErrorKind::ConnectionReset => "connection reset",
+            ErrorKind::ConnectionAborted => "connection aborted",
+            ErrorKind::NotConnected => "not connected",
+            ErrorKind::AddrInUse => "address in use",
+            ErrorKind::AddrNotAvailable => "address not available",
+            ErrorKind::BrokenPipe => "broken pipe",
+            ErrorKind::AlreadyExists => "entity already exists",
+            ErrorKind::WouldBlock => "operation would block",
+            ErrorKind::InvalidInput => "invalid input parameter",
+            ErrorKind::InvalidData => "invalid data",
+            ErrorKind::TimedOut => "timed out",
+            ErrorKind::WriteZero => "write zero",
+            ErrorKind::Interrupted => "operation interrupted",
+            ErrorKind::Other => "other os error",
+            ErrorKind::UnexpectedEof => "unexpected end of file",
+        }
+    }
+}
 
 impl From<ErrorKind> for Error {
     #[inline]
     fn from(kind: ErrorKind) -> Error {
         Error { repr: Repr::Simple(kind) }
     }
+}
+
+pub trait Read {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize>;
+}
+
+pub trait Write {
+    fn write(&mut self, buf: &[u8]) -> Result<usize>;
+
+    fn flush(&mut self) -> Result<()>;
 }

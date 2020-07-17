@@ -141,7 +141,11 @@ pub fn dispatch<T: BentoFilesystem>(
             let init_in = unsafe { &*(inarg.args[0].value as *const bento_init_in) };
             let init_out = unsafe { &mut *(outarg.args[0].value as *mut fuse_init_out) };
             let mut fc_info = FuseConnInfo::from_init_in(&init_in);
-            let devname_str = str::from_utf8(init_in.devname.to_bytes_with_nul()).unwrap();
+            let devname_str = if init_in.devname.to_raw().is_null() {
+                ""
+            } else {
+                str::from_utf8(init_in.devname.to_bytes_with_nul()).unwrap()
+            };
             let devname = OsStr::new(devname_str);
             match fs.bento_init(&req, devname, &mut fc_info) {
                 Ok(()) => {

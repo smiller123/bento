@@ -11,6 +11,8 @@ build:
     - (cd bentofs && make)
     - (cd hello_ll/rust && make all)
     - (cd xv6fs/rust && make all)
+    - (cd hello_srv/rust && make)
+    - (cd hello_client/rust && make all)
 
 test_hello:
   stage: test
@@ -67,3 +69,35 @@ test_user_xv6fs:
     - echo 0 | sudo tee /proc/sys/kernel/randomize_va_space
     - sudo filebench -f /home/test/fileserver.f
     - sudo fusermount -u /mnt/xv6fs
+
+test_hello_tcp:
+  stage: test
+  script:
+    - git submodule update --init --recursive
+    - (cd bentofs && make)
+    - (cd hello_srv/rust && make)
+    - (cd hello_client/rust && make)
+    - sudo insmod bentofs/bentofs.ko
+    - sudo hello_srv/rust/target/release/hello_srv hello_ll/hello &
+    - sleep 1
+    - sudo insmod hello_client/rust/kernel/hello_client.ko
+    - sudo mkdir -p /mnt/hello
+    - sudo mount -t bento -o fd=10,rootmode=40000,user_id=0,group_id=0,name=hello_client hello_ll/hello /mnt/hello
+    - sudo cat /mnt/hello/hello
+    - sudo umount /mnt/hello
+    - sudo rmmod hello_client
+    - sudo rmmod bentofs
+
+test_user_hello_tcp:
+  stage: test
+  script:
+    - git submodule update --init --recursive
+    - (cd hello_srv/rust && make)
+    - (cd hello_client/rust && make userspace)
+    - sudo mkdir -p /mnt/hello
+    - sudo hello_srv/rust/target/release/hello_srv hello_ll/hello &
+    - sleep 1
+    - sudo hello_client/rust/userspace/target/release/hello_client /mnt/hello &
+    - sleep 1
+    - sudo cat /mnt/hello/hello
+    - sudo fusermount -u /mnt/hello

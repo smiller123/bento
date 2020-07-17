@@ -11,8 +11,6 @@ use kernel::raw::*;
 
 use core::slice;
 
-use bindings::*;
-
 use crate::libc;
 
 // /// A wrapper around the kernel `super_block` type.
@@ -57,7 +55,6 @@ def_kobj_immut_op!(RsWaitQueueHead, wake_up_all, rs_wake_up_all, ());
 impl RsBlockDevice {
     pub fn new(name: &str) -> Self {
         unsafe {
-            //Self::from_raw(get_bdev_helper(name.as_ptr() as *const c_char, FMODE_READ | FMODE_WRITE | FMODE_EXCL))
             Self::from_raw(lookup_bdev(name.as_ptr() as *const c_char, FMODE_READ | FMODE_WRITE | FMODE_EXCL))
         }
     }

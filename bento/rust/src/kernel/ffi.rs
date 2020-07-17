@@ -8,6 +8,8 @@
 #![macro_use]
 use kernel::raw;
 
+use crate::bindings;
+
 pub type Condition = extern "C" fn() -> bool;
 
 /// A macro to create a Rust wrapper around a kernel data type.
@@ -283,9 +285,63 @@ extern "C" {
     ) -> i32;
     pub fn unregister_bento_fs(fs_name: *const raw::c_void) -> i32;
     pub fn mount() -> i32;
-    //pub fn get_bdev_helper(dev_name: *const raw::c_char, mode: u32) -> *mut raw::c_void;
     pub fn lookup_bdev(dev_name: *const raw::c_char, mode: u32) -> *mut raw::c_void;
     pub fn blkdev_put(bdev: *const raw::c_void, mode: u32);
+
+    pub fn sock_create_kern(
+        net: *const raw::c_void,
+        family: i32,
+        type_: i32,
+        protocol: i32,
+        socket: *mut *mut raw::c_void
+    ) -> i32;
+    pub fn sock_release(socket: *mut raw::c_void);
+    pub fn current_net() -> *const raw::c_void;
+    pub fn kernel_bind(sock: *mut raw::c_void, addr: *const raw::c_void, addrlen: i32) -> i32;
+    pub fn kernel_listen(sock: *mut raw::c_void, backlog: i32) -> i32;
+    pub fn kernel_getsockopt(
+        sock: *mut raw::c_void,
+        level: i32,
+        optname: i32,
+        optval: *mut raw::c_char,
+        optlen: *mut i32
+    ) -> i32;
+    pub fn kernel_setsockopt(
+        sock: *mut raw::c_void,
+        level: i32,
+        optname: i32,
+        optval: *const raw::c_char,
+        optlen: u32
+    ) -> i32;
+    pub fn kernel_accept(sock: *mut raw::c_void, newsock: *mut *mut raw::c_void, flags: i32) -> i32;
+    pub fn kernel_connect(sock: *mut raw::c_void, sockaddr: *const raw::c_void, addrlen: i32, flags: i32) -> i32;
+    pub fn kernel_getpeername(sock: *mut raw::c_void, sockaddr: *mut raw::c_void, addrlen: *mut i32) -> i32;
+    pub fn kernel_getsockname(sock: *mut raw::c_void, sockaddr: *mut raw::c_void, addrlen: *mut i32) -> i32;
+    pub fn kernel_recvmsg(
+        sock: *mut raw::c_void,
+        msg: *const raw::c_void,
+        kvec: *mut raw::c_void,
+        num: u32,
+        len: u32,
+        flags: i32,
+    ) -> i32;
+    pub fn kernel_sendmsg(
+        sock: *mut raw::c_void,
+        msg: *const raw::c_void,
+        kvec: *const raw::c_void,
+        num: u32,
+        len: u32,
+    ) -> i32;
+    pub fn kernel_sock_shutdown(socket: *mut raw::c_void, how: bindings::sock_shutdown_cmd) -> i32;
+    pub fn kthread_run_helper(
+        threadfn: *const raw::c_void,
+        data: *mut raw::c_void,
+        namefmt: *const raw::c_void
+    ) -> *mut raw::c_void;
+    pub fn kthread_stop(task_struct: *mut raw::c_void) -> i32;
+    pub fn kthread_should_stop() -> bool;
+    pub fn wait_a_bit();
+    pub fn wait_for_interrupt();
 }
 
 pub unsafe fn sb_bread(sb: *const raw::c_void, blockno: u64) -> *const raw::c_void {
