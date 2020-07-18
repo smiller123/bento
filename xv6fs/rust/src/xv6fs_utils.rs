@@ -1,11 +1,11 @@
 /*
- * SPDX-License-Identifier: GPL-2.0 OR MIT
- *
- * Copyright (C) 2020 Samantha Miller, Kaiyuan Zhang, Danyang Zhuo, Tom
-      Anderson, Ang Chen, University of Washington
- * Copyright (C) 2006-2018 Frans Kaashoek, Robert Morris, Russ Cox,
- *                      Massachusetts Institute of Technology
- */
+* SPDX-License-Identifier: GPL-2.0 OR MIT
+*
+* Copyright (C) 2020 Samantha Miller, Kaiyuan Zhang, Danyang Zhuo, Tom
+     Anderson, Ang Chen, University of Washington
+* Copyright (C) 2006-2018 Frans Kaashoek, Robert Morris, Russ Cox,
+*                      Massachusetts Institute of Technology
+*/
 
 use core::mem;
 use datablock::DataBlock;
@@ -34,6 +34,18 @@ pub const NINODE: usize = 300;
 
 pub const MAXOPBLOCKS: usize = 32;
 pub const LOGSIZE: usize = MAXOPBLOCKS * 3;
+
+#[allow(dead_code)]
+pub const HTREE_ROOT_INDEXSIZE: usize =
+    (BSIZE - (mem::size_of::<Xv6fsDirent>() * 2) - mem::size_of::<u32>())
+        / mem::size_of::<u32>() as usize;
+
+pub const HTREE_MAXDEPTH: u32 = 2;
+
+pub const HTREE_M: usize =
+    (BSIZE - mem::size_of::<Xv6fsDirent>()) / mem::size_of::<Htree_entry>() as usize;
+
+// pub const HTREE_L: u32 = BSIZE / (mem::size_of::<u32>() + mem::size_of::<Xv6fsDirent>()) as u32;
 
 pub fn iblock(i: usize, sb: &Xv6fsSB) -> usize {
     i / IPB + sb.inodestart as usize
@@ -91,6 +103,67 @@ impl Xv6fsDirent {
         Self {
             inum: 0,
             name: [0; DIRSIZ as usize],
+        }
+    }
+}
+
+// Htree data structures
+// At the moment, each data structure fits to one disk block
+
+#[repr(C)]
+#[derive(DataBlock)]
+pub struct Htree_root {
+    pub dot: Xv6fsDirent,
+    pub dotdot: Xv6fsDirent,
+    pub depth: u32,
+    pub htree_indeces: [u32; HTREE_ROOT_INDEXSIZE as usize],
+}
+
+impl Htree_root {
+    pub const fn new() -> Self {
+        Self {
+            dot: Xv6fsDirent::new(),
+            dotdot: Xv6fsDirent::new(),
+            depth: 0,
+            htree_indeces: [0; HTREE_ROOT_INDEXSIZE as usize],
+        }
+    }
+}
+// #[derive(DataBlock)]
+// pub struct Htree_index {
+//     pub fake_dirent: Xv6fsDirent,
+//     pub hash: [u32; HTREE_M - 1],
+//     pub blockno: [u32; HTREE_M],
+// }
+
+#[repr(C)]
+#[derive(DataBlock)]
+pub struct Htree_index {
+    pub fake_dirent: Xv6fsDirent,
+    pub htree_entries: [Htree_entry; HTREE_M as usize],
+}
+
+impl Htree_index {
+    pub const fn new() -> Self {
+        Self {
+            fake_dirent: Xv6fsDirent::new(),
+            htree_entries: [Htree_entry::new(); HTREE_M as usize],
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(DataBlock, Copy, Clone)]
+pub struct Htree_entry {
+    pub name_hash: u32,
+    pub block: u32,
+}
+
+impl Htree_entry {
+    pub const fn new() -> Self {
+        Self {
+            name_hash: 0,
+            block: 0,
         }
     }
 }

@@ -1,3 +1,4 @@
+use crate::hash32::{Hash, Hasher};
 use core::mem;
 use core::str;
 
@@ -17,6 +18,39 @@ impl Slice {
 
     pub fn to_str(&self) -> Option<&str> {
         str::from_utf8(&self.inner).ok()
+    }
+}
+
+// Hash for Slice
+impl Hash for Slice {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.inner.hash(state);
+    }
+}
+
+pub struct SliceHasher {
+    state: u32,
+}
+
+impl SliceHasher {
+    pub fn new() -> Self {
+        SliceHasher { state: 0 as u32 }
+    }
+
+    // use dx_hack_hash
+    pub fn write_u8(&mut self, i: u8) {
+        self.state ^= i as u32 * 31;
+    }
+}
+impl Hasher for SliceHasher {
+    fn finish(&self) -> u32 {
+        self.state
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        for i in bytes {
+            self.write_u8(*i);
+        }
     }
 }
 

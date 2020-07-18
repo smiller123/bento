@@ -14,3 +14,4 @@ shlex = "0.1"
 [dependencies]
 rlibc = "1.0"
 datablock = { path = "../../datablock-rs/datablock" }
+hash32 = "0.1.1"
