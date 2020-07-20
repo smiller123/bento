@@ -20,6 +20,7 @@ use std::sync::Condvar;
 use datablock::DataBlock;
 
 use crate::xv6fs_utils::*;
+const LOGSIZE: usize = 128;
 
 #[repr(C)]
 #[derive(DataBlock)]

@@ -153,7 +153,7 @@ impl BentoFilesystem for Xv6FileSystem {
         }
 
         if flags & libc::O_TRUNC as u32 != 0 {
-            let handle = log.begin_op(MAXOPBLOCKS as u32);
+            let handle = log.begin_op(1);
             internals.size = 0;
             if let Err(x) = self.iupdate(&internals, inode.inum, &handle) {
                 reply.error(x);
@@ -259,7 +259,7 @@ impl BentoFilesystem for Xv6FileSystem {
         reply: ReplyAttr,
     ) {
         let log = self.log.as_ref().unwrap();
-        let _handle = log.begin_op(MAXOPBLOCKS as u32); // TODO check size
+        let _handle = log.begin_op(1); // TODO check size
         let inode = match self.iget(ino) {
             Ok(x) => x,
             Err(x) => {
@@ -429,9 +429,10 @@ impl BentoFilesystem for Xv6FileSystem {
         let n = data.len();
         let mut off = offset as usize;
         let mut file_off = 0;
+        let nblocks = 1 + 1 + 2 + Ord::max(1, (off + n + BSIZE - 1)/BSIZE - off/BSIZE);
         while i < n {
             let log = self.log.as_ref().unwrap();
-            let handle = log.begin_op(MAXOPBLOCKS as u32);
+            let handle = log.begin_op(nblocks as u32);
             let inode = match self.iget(nodeid) {
                 Ok(x) => x,
                 Err(x) => {
@@ -616,7 +617,7 @@ impl BentoFilesystem for Xv6FileSystem {
     ) {
         // Check if the file already exists
         let log = self.log.as_ref().unwrap();
-        let handle = log.begin_op(MAXOPBLOCKS as u32);
+        let handle = log.begin_op(5);
         let child = match self.create_internal(parent, T_FILE, name, &handle) {
             Ok(x) => x,
             Err(x) => {

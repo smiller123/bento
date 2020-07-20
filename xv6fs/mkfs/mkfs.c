@@ -4,9 +4,11 @@
 #include <string.h>
 #include <fcntl.h>
 #include <assert.h>
+#include <arpa/inet.h>
 
 #define stat xv6_stat  // avoid clash with host struct stat
 #include "xv6fs.h"
+#include "jbd2structs.h"
 
 #ifndef static_assert
 #define static_assert(a, b) do { switch (0) case 0: case (a): ; } while (0)
@@ -37,6 +39,7 @@ void rinode(uint inum, struct dinode *ip);
 void rsect(uint sec, void *buf);
 uint ialloc(ushort type);
 void iappend(uint inum, void *p, int n);
+void init_journal_sb();
 
 // convert to intel byte order
 ushort
@@ -178,6 +181,8 @@ main(int argc, char *argv[])
   winode(rootino, &din);
 
   balloc(freeblock);
+  init_journal_sb();
+  
 
   exit(0);
 }
@@ -308,4 +313,24 @@ iappend(uint inum, void *xp, int n)
   }
   din.size = xlonglong(off);
   winode(inum, &din);
+}
+
+void init_journal_sb() {
+  char buf[BSIZE];
+  journal_superblock_t jsb;
+  jsb.s_header.h_magic = htonl(JBD2_MAGIC_NUMBER);
+  jsb.s_header.h_blocktype = htonl(JBD2_SUPERBLOCK_V1);
+
+  jsb.s_blocksize = htonl(BSIZE);
+  jsb.s_maxlen = htonl(1024);
+  jsb.s_first = htonl(1);  // TODO pretty sure this is relative blocknum to logstart
+  jsb.s_max_transaction = htonl(32);
+  jsb.s_max_trans_data = htonl(32);
+
+  memset(buf, 0, sizeof(buf));
+  memmove(buf, &jsb,sizeof(jsb));
+
+  printf("%hhx %hhx %hhx %hhx\n", buf[0], buf[1], buf[2], buf[3]);
+  
+  wsect(2, buf);
 }

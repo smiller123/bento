@@ -119,13 +119,21 @@ void print_bdev(struct block_device *bdev) {
     printk(KERN_INFO "hi\n");*/
 }
 
+
+int journal_get_superblock(journal_t *journal);
+
 // TODO journal
 journal_t* rs_jbd2_journal_init_dev(struct block_device *bdev, 
                                     struct block_device *fs_dev, 
                                     unsigned long long start, 
                                     int len, 
                                     int bsize) {
-    return jbd2_journal_init_dev(bdev, fs_dev, start, len, bsize);
+    journal_t *journal = jbd2_journal_init_dev(bdev, fs_dev, start, len, bsize);
+    printk(KERN_INFO "block no: %u\n", journal->j_sb_buffer->b_blocknr);
+    printk(KERN_INFO "journal max_len: %u\n", journal->j_maxlen);
+    //printk(KERN_INFO "first-last: %u-%u\n", journal->j_first, journal->j_last);
+    //journal_get_superblock(journal);
+    return journal; 
 }
 
 int rs_jbd2_journal_load(journal_t *journal) {
@@ -149,9 +157,37 @@ int rs_jbd2_journal_get_write_access(handle_t * handle, struct buffer_head * bh)
 }
 
 int rs_jbd2_journal_dirty_metadata (handle_t *handle, struct buffer_head *bh) {
-    jbd2_journal_dirty_metadata(handle, bh);
+    return jbd2_journal_dirty_metadata(handle, bh);
 }
 
 int rs_jbd2_journal_force_commit(journal_t *journal) {
     return jbd2_journal_force_commit(journal);
+}
+
+
+
+int journal_get_superblock(journal_t *journal)
+{
+	struct buffer_head *bh;
+	journal_superblock_t *sb;
+	int err = -EIO;
+
+    printk(KERN_INFO "in get_sb\n");
+
+	bh = journal->j_sb_buffer;
+
+	J_ASSERT(bh != NULL);
+	if (!buffer_uptodate(bh)) {
+		ll_rw_block(REQ_OP_READ, 0, 1, &bh);
+		wait_on_buffer(bh);
+		if (!buffer_uptodate(bh)) {
+			printk(KERN_ERR
+				"JBD2: IO error reading journal superblock\n");
+		}
+	}
+    printk(KERN_INFO "magic num: %u\n", sb->s_header.h_magic);
+    printk(KERN_INFO "s_blocksize num: %u\n", sb->s_blocksize);
+    printk(KERN_INFO "sb start - sb first : %u - %u\n", sb->s_start, sb->s_first);
+
+    return 0;
 }

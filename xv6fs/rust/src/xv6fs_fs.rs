@@ -58,13 +58,13 @@ impl Xv6FileSystem {
     fn bzero(&self, bno: usize, handle: &Handle) -> Result<(), libc::c_int> {
         let disk = self.disk.as_ref().unwrap();
         let mut bh = disk.bread(bno as u64)?;
+        handle.get_write_access(&bh);
 
         let b_slice = bh.data_mut();
         for byte in b_slice {
             *byte = 0;
         }
 
-        bh.mark_buffer_dirty();
         handle.journal_write(&bh);
 
         return Ok(());
@@ -90,6 +90,8 @@ impl Xv6FileSystem {
             let disk = self.disk.as_ref().unwrap();
             // Read bitmap block that contains bitmap for b/last_segment, bitmap_slice contains the data
             let mut bh = disk.bread(bblock(b as usize, &sb) as u64)?;
+            handle.get_write_access(&bh);
+
             let bitmap_slice = bh.data_mut();
 
             let mut changed = false;
@@ -116,7 +118,6 @@ impl Xv6FileSystem {
 
             // Write buffer
             if changed {
-                bh.mark_buffer_dirty();
                 handle.journal_write(&bh);
             }
             // extract new block ID x
@@ -141,11 +142,11 @@ impl Xv6FileSystem {
         // Get block number
         let sb = self.sb.as_ref().unwrap();
         let block_num = bblock(block_id, &sb);
-        //let log = self.log.as_ref().unwrap();
 
         // Read block
         let disk = self.disk.as_ref().unwrap();
         let mut bh = disk.bread(block_num as u64)?;
+        handle.get_write_access(&bh);
         let b_slice = bh.data_mut();
 
         // Get bit id
@@ -160,7 +161,6 @@ impl Xv6FileSystem {
         *mut_byte &= !(1 << bit_in_byte);
 
         // Write buffer
-        bh.mark_buffer_dirty();
         handle.journal_write(&bh);
 
         return Ok(());
@@ -195,6 +195,7 @@ impl Xv6FileSystem {
             let _guard = self.ialloc_lock.as_ref().unwrap().write();
             let disk = self.disk.as_ref().unwrap();
             let mut bh = disk.bread(iblock(block_inum, &sb) as u64)?;
+            handle.get_write_access(&bh);
             let data_slice = bh.data_mut();
             for inum_idx in (block_inum % IPB)..IPB {
                 let inum = block_inum + inum_idx;
@@ -220,7 +221,6 @@ impl Xv6FileSystem {
                     dinode.inode_type = i_type;
                     dinode.nlink = 1;
                     dinode.dump_into(inode_slice).map_err(|_| libc::EIO)?;
-                    bh.mark_buffer_dirty();
                     handle.journal_write(&bh);
                     return self.iget(inum as u64);
                 }
@@ -234,6 +234,7 @@ impl Xv6FileSystem {
         let sb = self.sb.as_ref().unwrap();
         let iblock = iblock(inum as usize, &sb);
         let mut bh = disk.bread(iblock as u64)?;
+        handle.get_write_access(&bh);
         let data_slice = bh.data_mut();
     
         // Get the specific inode offset
@@ -252,7 +253,6 @@ impl Xv6FileSystem {
         disk_inode.addrs.copy_from_slice(&internals.addrs);
         disk_inode.dump_into(inode_slice).map_err(|_| libc::EIO)?;
     
-        bh.mark_buffer_dirty();
         handle.journal_write(&bh);
         return Ok(());
     }
@@ -372,29 +372,21 @@ impl Xv6FileSystem {
     // handle should be Some(_) if this bmap is part of a transaction, None otherwise
     // bmap may have to write to disk during some read operation
     fn bmap(&self, inode: &mut InodeInternal, blk_idx: usize, handle: Option<&Handle>) -> Result<u32, libc::c_int> {
-        let log = self.log.as_ref().unwrap();
         let mut idx = blk_idx;
-
-        let mut balloc_handle: Option<Handle> = None;
+        
+        let mut new_tx: Option<Handle> = None;
 
         if idx < NDIRECT as usize {
             let addr = inode.addrs.get_mut(idx).ok_or(libc::EIO)?;
-
             if *addr == 0 {
-                if let Some(h) = handle {
-                    return self.balloc(h).map(|blk_id| {
-                        *addr = blk_id;
-                        blk_id
-                    });
-                } else {
-                    if balloc_handle.is_none() {
-                        balloc_handle = Some(log.begin_op(MAXOPBLOCKS as u32));
-                    }
-                    return self.balloc(&balloc_handle.unwrap()).map(|blk_id| {
-                        *addr = blk_id;
-                        blk_id
-                    });
-                }
+                let h = match handle {
+                    Some(_) => handle.unwrap(),
+                    None => new_tx.get_or_insert_with(|| self.log.as_ref().unwrap().begin_op(MAXOPBLOCKS as u32)),
+                };
+                return self.balloc(h).map(|blk_id| {
+                    *addr = blk_id;
+                    blk_id
+                });
             }
             return Ok(*addr);
         }
@@ -403,50 +395,39 @@ impl Xv6FileSystem {
         if idx < NINDIRECT as usize {
             // indirect block
             let ind_blk_id = inode.addrs.get_mut(NDIRECT as usize).ok_or(libc::EIO)?;
-
             if *ind_blk_id == 0 {
-                if let Some(h) = handle {
-                    self.balloc(h).map(|blk_id| {
-                        *ind_blk_id = blk_id;
-                    })?;
-                } else {
-                    if balloc_handle.is_none() {
-                        balloc_handle = Some(log.begin_op(MAXOPBLOCKS as u32));
-                    }
-                    self.balloc(&balloc_handle.as_ref().unwrap()).map(|blk_id| {
-                        *ind_blk_id = blk_id;
-                    })?;
-                }
+                let h = match handle {
+                    Some(_) => handle.unwrap(),
+                    None => new_tx.get_or_insert_with(|| self.log.as_ref().unwrap().begin_op(MAXOPBLOCKS as u32)),
+                };
+                self.balloc(h).map(|blk_id| {
+                    *ind_blk_id = blk_id;
+                })?;
             }
     
             let result_blk_id: u32;
             let disk = self.disk.as_ref().unwrap();
             let mut bh = disk.bread(*ind_blk_id as u64)?;
-            let b_data = bh.data_mut();
+            let b_data = bh.data();
     
             let mut cell_data = [0; 4];
-            let cell_segment = &mut b_data[idx * 4 .. (idx + 1) * 4];
+            let cell_segment = &b_data[idx * 4 .. (idx + 1) * 4];
             cell_data.copy_from_slice(cell_segment);
             let cell = u32::from_ne_bytes(cell_data);
             if cell == 0 {
                 // need to allocate blk
-                if let Some(h) = handle {
-                    result_blk_id = self.balloc(h)?;
-                    let blk_data = result_blk_id.to_ne_bytes();
-                    cell_segment.copy_from_slice(&blk_data);
-                    bh.mark_buffer_dirty();
-                    h.journal_write(&bh);
-                } else {
-                    if balloc_handle.is_none() {
-                        balloc_handle = Some(log.begin_op(MAXOPBLOCKS as u32));
-                    }
-                    let h = &balloc_handle.as_ref().unwrap();
-                    result_blk_id = self.balloc(h)?;
-                    let blk_data = result_blk_id.to_ne_bytes();
-                    cell_segment.copy_from_slice(&blk_data);
-                    bh.mark_buffer_dirty();
-                    h.journal_write(&bh);
-                }
+                let h = match handle {
+                    Some(_) => handle.unwrap(),
+                    None => new_tx.get_or_insert_with(|| self.log.as_ref().unwrap().begin_op(MAXOPBLOCKS as u32)),
+                };
+                h.get_write_access(&bh);
+                let b_data = bh.data_mut();
+                let cell_segment = &mut b_data[idx * 4 .. (idx + 1) * 4];
+
+                result_blk_id = self.balloc(h)?;
+                let blk_data = result_blk_id.to_ne_bytes();
+                cell_segment.copy_from_slice(&blk_data);
+                h.journal_write(&bh);
             } else {
                 // just return the blk
                 result_blk_id = cell;
@@ -463,77 +444,62 @@ impl Xv6FileSystem {
                 .get_mut(NDIRECT as usize + 1)
                 .ok_or(libc::EIO)?;
             if *dind_blk_id == 0 {
-                if let Some(h) = handle {
-                    self.balloc(h).map(|blk_id| {
-                        *dind_blk_id = blk_id;
-                    })?;
-                } else {
-                    if balloc_handle.is_none() {
-                        balloc_handle = Some(log.begin_op(MAXOPBLOCKS as u32));
-                    }
-                    self.balloc(&balloc_handle.as_ref().unwrap()).map(|blk_id| {
-                        *dind_blk_id = blk_id;
-                    })?;
-                }
+                let h = match handle {
+                    Some(_) => handle.unwrap(),
+                    None => new_tx.get_or_insert_with(|| self.log.as_ref().unwrap().begin_op(MAXOPBLOCKS as u32)),
+                };
+                self.balloc(h).map(|blk_id| {
+                    *dind_blk_id = blk_id;
+                })?;
             }
     
             let disk = self.disk.as_ref().unwrap();
             let mut bh = disk.bread(*dind_blk_id as u64)?;
-            let b_data = bh.data_mut();
+            let b_data = bh.data();
             let dind_idx = idx / NINDIRECT as usize;
     
             let mut cell_data = [0; 4];
-            let cell_segment = &mut b_data[dind_idx * 4 .. (dind_idx + 1) * 4];
+            let cell_segment = &b_data[dind_idx * 4 .. (dind_idx + 1) * 4];
             cell_data.copy_from_slice(cell_segment);
             let cell = u32::from_ne_bytes(cell_data);
     
             if cell == 0 {
-                if let Some(h) = handle {
-                    let result_blk_id = self.balloc(h)?;
-                    let result_blk_data = result_blk_id.to_ne_bytes();
-                    cell_segment.copy_from_slice(&result_blk_data);
-                    bh.mark_buffer_dirty();
-                    h.journal_write(&bh);
-                } else {
-                    if balloc_handle.is_none() {
-                        balloc_handle = Some(log.begin_op(MAXOPBLOCKS as u32));
-                    }
-                    let h = &balloc_handle.as_ref().unwrap();
-                    let result_blk_id = self.balloc(h)?;
-                    let result_blk_data = result_blk_id.to_ne_bytes();
-                    cell_segment.copy_from_slice(&result_blk_data);
-                    bh.mark_buffer_dirty();
-                    h.journal_write(&bh);
-                }
+                let h = match handle {
+                    Some(_) => handle.unwrap(),
+                    None => new_tx.get_or_insert_with(|| self.log.as_ref().unwrap().begin_op(MAXOPBLOCKS as u32)),
+                };
+                h.get_write_access(&bh);
+                let b_data = bh.data_mut();
+                let cell_segment = &mut b_data[dind_idx * 4 .. (dind_idx + 1) * 4];
+
+                let result_blk_id = self.balloc(h)?;
+                let result_blk_data = result_blk_id.to_ne_bytes();
+                cell_segment.copy_from_slice(&result_blk_data);
+                h.journal_write(&bh);
             }
     
             let mut dbh = disk.bread(cell as u64)?;
-            let db_data = dbh.data_mut();
+            let db_data = dbh.data();
             let dblock_idx = idx % NINDIRECT as usize;
     
             let result_blk_id: u32;
             let mut dcell_data = [0; 4];
-            let dcell_segment = &mut db_data[dblock_idx * 4 .. (dblock_idx + 1) * 4];
+            let dcell_segment = &db_data[dblock_idx * 4 .. (dblock_idx + 1) * 4];
             dcell_data.copy_from_slice(dcell_segment);
             let dcell = u32::from_ne_bytes(dcell_data);
             if dcell == 0 {
-                if let Some(h) = handle {
-                    result_blk_id = self.balloc(h)?;
-                    let result_blk_data = result_blk_id.to_ne_bytes();
-                    dcell_segment.copy_from_slice(&result_blk_data);
-                    dbh.mark_buffer_dirty();
-                    h.journal_write(&dbh);
-                } else {
-                    if balloc_handle.is_none() {
-                        balloc_handle = Some(log.begin_op(MAXOPBLOCKS as u32));
-                    }
-                    let h = &balloc_handle.as_ref().unwrap();
-                    result_blk_id = self.balloc(h)?;
-                    let result_blk_data = result_blk_id.to_ne_bytes();
-                    dcell_segment.copy_from_slice(&result_blk_data);
-                    dbh.mark_buffer_dirty();
-                    h.journal_write(&dbh);
-                }
+                let h = match handle {
+                    Some(_) => handle.unwrap(),
+                    None => new_tx.get_or_insert_with(|| self.log.as_ref().unwrap().begin_op(MAXOPBLOCKS as u32)),
+                };
+                h.get_write_access(&dbh);
+                let db_data = dbh.data_mut();
+                let dcell_segment = &mut db_data[dblock_idx * 4 .. (dblock_idx + 1) * 4];
+
+                result_blk_id = self.balloc(h)?;
+                let result_blk_data = result_blk_id.to_ne_bytes();
+                dcell_segment.copy_from_slice(&result_blk_data);
+                h.journal_write(&dbh);
             } else {
                 result_blk_id = dcell;
             }
@@ -542,6 +508,7 @@ impl Xv6FileSystem {
     
         return Err(libc::EIO);
     }
+
     
     pub fn itrunc(&self, inode: &mut CachedInode, internals: &mut InodeInternal, handle: &Handle) -> Result<(), libc::c_int> {
         for i in 0..NDIRECT as usize {
@@ -708,6 +675,7 @@ impl Xv6FileSystem {
                 let block_no = self.bmap(internals, start_off / BSIZE, Some(handle))?;
                 let disk = self.disk.as_ref().unwrap();
                 let mut bh = disk.bread(block_no as u64)?;
+                handle.get_write_access(&bh);
     
                 let b_data = bh.data_mut();
     
@@ -716,7 +684,6 @@ impl Xv6FileSystem {
                     let idx = b_data.get_mut(i % BSIZE).ok_or(libc::EIO)?;
                     *idx = 0;
                 }
-                bh.mark_buffer_dirty();
                 written_blocks += 1;
                 handle.journal_write(&bh);
     
@@ -737,6 +704,7 @@ impl Xv6FileSystem {
     
             let disk = self.disk.as_ref().unwrap();
             let mut bh = disk.bread(block_no as u64)?;
+            handle.get_write_access(&bh);
     
             let data_slice = bh.data_mut();
             let data_off = off % BSIZE;
@@ -744,7 +712,6 @@ impl Xv6FileSystem {
     
             let copy_region = &buf[src..src + m];
             data_region.copy_from_slice(copy_region);
-            bh.mark_buffer_dirty();
             handle.journal_write(&bh);
             written_blocks += 1;
     

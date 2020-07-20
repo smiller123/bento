@@ -148,9 +148,9 @@ impl Journal {
         } else {
             unsafe {
                 // TODO call jbd2_journal_load
-                /*if rs_jbd2_journal_load(journal) != 0 {
+                if rs_jbd2_journal_load(journal) != 0 {
                     return None;
-                }*/
+                }
 
                 return Some(Journal { 
                     journal: UnsafeCell::new(RsJournal::from_raw(journal as *const c_void)),
