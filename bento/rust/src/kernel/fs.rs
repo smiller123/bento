@@ -185,9 +185,9 @@ impl Journal {
     }
 
     pub fn destroy(&self) {
-        println!("drop journal");
+        println!("destroy journal");
         unsafe {
-            self.force_commit();
+            //self.force_commit();
             rs_jbd2_journal_destroy((*self.journal.get()).get_raw() as *const c_void);
         }
     }
