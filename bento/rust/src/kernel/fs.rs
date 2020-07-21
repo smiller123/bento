@@ -162,8 +162,9 @@ impl Journal {
     // begin transaction of size blocks
     pub fn begin_op(&self, blocks: u32) -> Handle {
         let handle;
+        //println!("begin {}", blocks);
         unsafe {
-            handle = rs_jbd2_journal_start(self.journal.get() as *const c_void, blocks as i32)
+            handle = rs_jbd2_journal_start((*self.journal.get()).get_raw() as *const c_void, blocks as i32)
         }
         if handle.is_null() {
             panic!("transaction begin failed")
@@ -179,33 +180,31 @@ impl Journal {
     // force completed transactions to write to disk
     pub fn force_commit(&self) -> i32 {
         unsafe {
-            return rs_jbd2_journal_force_commit(self.journal.get() as *const c_void);
+            return rs_jbd2_journal_force_commit((*self.journal.get()).get_raw() as *const c_void);
         }
     }
-}
 
-impl Drop for Journal {
-    fn drop(&mut self) {
-        //TODO destroy journal
+    pub fn destroy(&self) {
+        println!("drop journal");
         unsafe {
-            rs_jbd2_journal_destroy(self.journal.get() as *const c_void);
+            self.force_commit();
+            rs_jbd2_journal_destroy((*self.journal.get()).get_raw() as *const c_void);
         }
     }
 }
-
 
 impl Handle {
     // notify intent to modify BufferHead as a part of this transaction
     pub fn get_write_access(&self, bh: &BufferHead) -> i32 {
         unsafe {
-            return rs_jbd2_journal_get_write_access(self.handle.get() as *const c_void, bh.get_raw());
+            return rs_jbd2_journal_get_write_access((*self.handle.get()).get_raw() as *const c_void, bh.get_raw());
         }
     }
 
     // register a block as part of the transaction associated with this handle
     pub fn journal_write(&self, bh: &BufferHead) -> i32 {
         unsafe {
-            return rs_jbd2_journal_dirty_metadata(self.handle.get() as *const c_void, bh.get_raw());
+            return rs_jbd2_journal_dirty_metadata((*self.handle.get()).get_raw() as *const c_void, bh.get_raw());
         }
     }
 }
@@ -215,9 +214,10 @@ impl Drop for Handle {
     fn drop(&mut self) {
         let res;
         unsafe {
-            res = rs_jbd2_journal_stop(self.handle.get() as *const c_void);
+            res = rs_jbd2_journal_stop((*self.handle.get()).get_raw() as *const c_void);
         }
         if res == 0 {
+            //println!("drop handle");
              ()
         } else {
              println!("some log transaction was aborted");

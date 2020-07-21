@@ -129,10 +129,13 @@ journal_t* rs_jbd2_journal_init_dev(struct block_device *bdev,
                                     int len, 
                                     int bsize) {
     journal_t *journal = jbd2_journal_init_dev(bdev, fs_dev, start, len, bsize);
+    journal->j_max_transaction_buffers = journal->j_maxlen / 4;
+
     printk(KERN_INFO "block no: %u\n", journal->j_sb_buffer->b_blocknr);
     printk(KERN_INFO "journal max_len: %u\n", journal->j_maxlen);
-    //printk(KERN_INFO "first-last: %u-%u\n", journal->j_first, journal->j_last);
-    //journal_get_superblock(journal);
+    printk(KERN_INFO "journal max transactions: %u\n", journal->j_max_transaction_buffers);
+    printk(KERN_INFO "journal: %p\n", journal);
+
     return journal; 
 }
 
@@ -145,6 +148,10 @@ int rs_jbd2_journal_destroy(journal_t *journal) {
 }
 
 handle_t *rs_jbd2_journal_start(journal_t * journal, int nblocks) {
+    /*printk(KERN_INFO "begin_op\n\tjournal %p\n\tmax_len %u\n\tmax_transaction_buffers %u\n",
+                                                journal,
+                                                journal->j_maxlen,
+                                                journal->j_max_transaction_buffers);*/
     return jbd2_journal_start(journal, nblocks);
 }
 

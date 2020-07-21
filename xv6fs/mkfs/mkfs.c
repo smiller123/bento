@@ -324,6 +324,8 @@ void init_journal_sb() {
   jsb.s_blocksize = htonl(BSIZE);
   jsb.s_maxlen = htonl(1024);
   jsb.s_first = htonl(1);  // TODO pretty sure this is relative blocknum to logstart
+  jsb.s_sequence = htonl(1);
+  jsb.s_nr_users = htonl(1);
   jsb.s_max_transaction = htonl(32);
   jsb.s_max_trans_data = htonl(32);
 

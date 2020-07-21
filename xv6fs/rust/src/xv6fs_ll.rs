@@ -36,7 +36,7 @@ use fuse::*;
 
 use bento::kernel::fs::*;
 
-//use println;
+use crate::println;
 
 use std::ffi::OsStr;
 use std::path::Path;
@@ -61,6 +61,12 @@ impl BentoFilesystem for Xv6FileSystem {
     fn get_name(&self) -> &'static str {
         Xv6FileSystem::NAME
     }
+
+    fn bento_destroy(&mut self, _req: &Request) {
+        println!("bento destroy *****************************************************");
+        self.log.as_ref().unwrap().destroy();
+    }
+
 
     fn bento_init(
         &mut self,
