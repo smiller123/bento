@@ -703,6 +703,7 @@ impl Xv6FileSystem {
         }
         return Ok(n);
     }
+
     // entry lookup
     pub fn dirlookup<'a>(
         &'a self,
@@ -715,14 +716,13 @@ impl Xv6FileSystem {
             return Err(libc::ENOTDIR);
         }
 
-        // read disk block
-        let de_size = mem::size_of::<Xv6fsDirent>();
-        let mut de_arr_vec: Vec<u8> = vec![0; BSIZE];
+        let hroot_len = mem::size_of::<Htree_root>();
+        let hindex_len = mem::size_of::<Htree_index>();
+        let hentry_len = mem::size_of::<Htree_entry>();
+        let de_len = mem::size_of::<Xv6fsDirent>();
 
-        let num_blocks = match internals.size {
-            0 => 0,
-            _ => (internals.size as usize - 1) / BSIZE + 1,
-        };
+        let mut hroot_arr_vec: Vec<u8> = vec![0; BSIZE];
+
         let search_name = match name.to_str() {
             Some(s) => s,
             None => {
@@ -730,16 +730,125 @@ impl Xv6FileSystem {
             }
         };
 
-        for block_idx in 0..num_blocks {
-            let de_arr_slice = de_arr_vec.as_mut_slice();
-            self.readi(de_arr_slice, BSIZE * block_idx, BSIZE, internals)?;
-            // resolve all dirent entries in the current data block.
-            for de_idx in 0..BSIZE / de_size {
+        // get hash of target entry
+        let target_hash = name.calculate_hash();
+
+        // Nodes should be in different logical blocks within the same file
+
+        // read in entire root block
+        let root_arr_slice = hroot_arr_vec.as_mut_slice();
+        self.readi(root_arr_slice, 0, BSIZE, internals)?;
+
+        // extract root of dir
+        let mut root = Htree_root::new();
+        let root_slice = &mut root_arr_slice[0..hroot_len];
+        root.extract_from(root_slice).map_err(|_| libc::EIO)?;
+
+        // get all the index entries in a list and do binary search
+        let num_indeces = root.ind_entries;
+        let mut index_vec: Vec<Htree_entry> = Vec::with_capacity(num_indeces as usize);
+        for rie_idx in 0..num_indeces {
+            let mut ie = Htree_entry::new();
+            let ie_slice = &mut root_arr_slice[hroot_len + (hentry_len * rie_idx as usize)
+                ..hroot_len + (hentry_len * (rie_idx as usize + 1))];
+            ie.extract_from(ie_slice).map_err(|_| libc::EIO)?;
+            index_vec.push(ie);
+        }
+
+        // look for correct index node
+        let ind_slice = index_vec.as_slice();
+        let target_entry = match find_lowerbound(ind_slice, index_vec.len(), target_hash) {
+            Some(index) => index,
+            None => return Err(libc::ENOENT),
+        };
+
+        let target_lblock: u32 = index_vec[target_entry].lb_offset;
+        let mut hindex_arr_vec: Vec<u8> = vec![0; BSIZE];
+        let hindex_arr_slice = hindex_arr_vec.as_mut_slice();
+        self.readi(
+            hindex_arr_slice,
+            target_lblock as usize * BSIZE,
+            BSIZE,
+            internals,
+        )?;
+
+        // get index header
+        let mut index = Htree_index::new();
+        let hindex_slice = &mut hindex_arr_slice[0..hindex_len];
+        index.extract_from(hindex_slice).map_err(|_| libc::EIO)?;
+
+        // create vec for binary search
+        let num_entries = index.entries;
+        let mut leaf_vec: Vec<Htree_entry> = Vec::with_capacity(num_entries as usize);
+        for off in (hindex_len..BSIZE).step_by(hentry_len) {
+            let mut hentry = Htree_entry::new();
+            let hentry_slice = &mut hindex_arr_slice[off..off + hentry_len + 1];
+            hentry.extract_from(hentry_slice).map_err(|_| libc::EIO)?;
+            leaf_vec.push(hentry);
+        }
+
+        // get correct leaf node
+        let leaf_slice = leaf_vec.as_slice();
+        let target_leaf = match find_lowerbound(leaf_slice, leaf_vec.len(), target_hash) {
+            Some(index) => index,
+            None => return Err(libc::ENOENT),
+        };
+
+        let leaf_idx = leaf_vec[target_leaf].lb_offset;
+        let mut leaf_arr_vec: Vec<u8> = vec![0; BSIZE];
+        let leaf_arr_slice = leaf_arr_vec.as_mut_slice();
+        self.readi(leaf_arr_slice, BSIZE * leaf_idx as usize, BSIZE, internals)?;
+
+        // look through the entries in the leafnode
+        for de_idx in 0..BSIZE / de_len {
+            let mut de = Xv6fsDirent::new();
+            let de_slice = &mut leaf_arr_slice[de_idx * de_len..(de_idx + 1) * de_len];
+            de.extract_from(de_slice).map_err(|_| libc::EIO)?;
+
+            if (leaf_idx as usize * BSIZE + de_idx * de_len) as u64 >= internals.size {
+                break;
+            }
+            if de.inum == 0 {
+                continue;
+            }
+            let de_name = match str::from_utf8(&de.name) {
+                Ok(x) => x,
+                Err(_) => break,
+            };
+            let de_name_trimmed = de_name.trim_end_matches('\0');
+            if de_name_trimmed == search_name {
+                *poff = (leaf_idx as usize * BSIZE + de_idx * de_len) as u64;
+                return self.iget(de.inum as u64);
+            }
+        }
+
+        // nothing found in leaf node block
+        // there is still possibility of a hash collision
+        // check collision bit in hash
+        let next_leaf = target_leaf + 1;
+        let leaf_hash = leaf_vec[next_leaf].name_hash;
+
+        // TODO: get lowest bit
+        let collision = leaf_hash;
+        if collision == 1 {
+            let leaf2_idx = leaf_vec[next_leaf].lb_offset;
+
+            let mut leaf2_arr_vec: Vec<u8> = vec![0; BSIZE];
+            let leaf2_arr_slice = leaf2_arr_vec.as_mut_slice();
+
+            self.readi(
+                leaf2_arr_slice,
+                BSIZE * leaf2_idx as usize,
+                BSIZE,
+                internals,
+            )?;
+
+            for de_idx in 0..BSIZE / de_len {
                 let mut de = Xv6fsDirent::new();
-                let de_slice = &mut de_arr_slice[de_idx * de_size..(de_idx + 1) * de_size];
+                let de_slice = &mut leaf_arr_slice[de_idx * de_len..(de_idx + 1) * de_len];
                 de.extract_from(de_slice).map_err(|_| libc::EIO)?;
 
-                if (block_idx * BSIZE + de_idx * de_size) as u64 >= internals.size {
+                if (leaf2_idx as usize * BSIZE + de_idx * de_len) as u64 >= internals.size {
                     break;
                 }
                 if de.inum == 0 {
@@ -751,12 +860,13 @@ impl Xv6FileSystem {
                 };
                 let de_name_trimmed = de_name.trim_end_matches('\0');
                 if de_name_trimmed == search_name {
-                    *poff = (block_idx * BSIZE + de_idx * de_size) as u64;
+                    *poff = (leaf2_idx as usize * BSIZE + de_idx * de_len) as u64;
                     return self.iget(de.inum as u64);
                 }
             }
         }
 
+        // no hash collision, no entry found
         return Err(libc::ENOENT);
     }
 

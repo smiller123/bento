@@ -35,17 +35,11 @@ pub const NINODE: usize = 300;
 pub const MAXOPBLOCKS: usize = 32;
 pub const LOGSIZE: usize = MAXOPBLOCKS * 3;
 
-#[allow(dead_code)]
-pub const HTREE_ROOT_INDEXSIZE: usize =
-    (BSIZE - (mem::size_of::<Xv6fsDirent>() * 2) - mem::size_of::<u32>())
-        / mem::size_of::<u32>() as usize;
-
 pub const HTREE_MAXDEPTH: u32 = 2;
 
-pub const HTREE_M: usize =
-    (BSIZE - mem::size_of::<Xv6fsDirent>()) / mem::size_of::<Htree_entry>() as usize;
+pub const HTREE_M: usize = (BSIZE - mem::size_of::<Xv6fsDirent>()) / mem::size_of::<Htree_entry>();
 
-// pub const HTREE_L: u32 = BSIZE / (mem::size_of::<u32>() + mem::size_of::<Xv6fsDirent>()) as u32;
+pub const HTREE_L: usize = BSIZE / (mem::size_of::<u32>() + mem::size_of::<Xv6fsDirent>());
 
 pub fn iblock(i: usize, sb: &Xv6fsSB) -> usize {
     i / IPB + sb.inodestart as usize
@@ -108,7 +102,6 @@ impl Xv6fsDirent {
 }
 
 // Htree data structures
-// At the moment, each data structure fits to one disk block
 
 #[repr(C)]
 #[derive(DataBlock)]
@@ -116,7 +109,7 @@ pub struct Htree_root {
     pub dot: Xv6fsDirent,
     pub dotdot: Xv6fsDirent,
     pub depth: u32,
-    pub htree_indeces: [u32; HTREE_ROOT_INDEXSIZE as usize],
+    pub ind_entries: u32,
 }
 
 impl Htree_root {
@@ -125,29 +118,23 @@ impl Htree_root {
             dot: Xv6fsDirent::new(),
             dotdot: Xv6fsDirent::new(),
             depth: 0,
-            htree_indeces: [0; HTREE_ROOT_INDEXSIZE as usize],
+            ind_entries: 0,
         }
     }
 }
-// #[derive(DataBlock)]
-// pub struct Htree_index {
-//     pub fake_dirent: Xv6fsDirent,
-//     pub hash: [u32; HTREE_M - 1],
-//     pub blockno: [u32; HTREE_M],
-// }
 
 #[repr(C)]
 #[derive(DataBlock)]
 pub struct Htree_index {
     pub fake_dirent: Xv6fsDirent,
-    pub htree_entries: [Htree_entry; HTREE_M as usize],
+    pub entries: u32,
 }
 
 impl Htree_index {
     pub const fn new() -> Self {
         Self {
             fake_dirent: Xv6fsDirent::new(),
-            htree_entries: [Htree_entry::new(); HTREE_M as usize],
+            entries: 0,
         }
     }
 }
@@ -156,14 +143,41 @@ impl Htree_index {
 #[derive(DataBlock, Copy, Clone)]
 pub struct Htree_entry {
     pub name_hash: u32,
-    pub block: u32,
+    pub lb_offset: u32,
 }
 
 impl Htree_entry {
     pub const fn new() -> Self {
         Self {
             name_hash: 0,
-            block: 0,
+            lb_offset: 0,
         }
     }
+}
+
+pub fn find_lowerbound(arr: &[Htree_entry], len: usize, target: u32) -> Option<usize> {
+    let mut lo: i8 = 0;
+    let mut hi: i8 = len as i8 - 1;
+
+    while lo <= hi {
+        let mid = ((hi - lo) / 2) + lo;
+        let mid_index = mid as usize;
+        let val = &arr[mid_index].name_hash;
+        if lo == mid {
+            let val2 = &arr[hi as usize].name_hash;
+            if *val2 <= target {
+                return Some(hi as usize);
+            }
+            if *val > target {
+                return None;
+            }
+            return Some(lo as usize);
+        }
+        if *val <= target {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    return None;
 }

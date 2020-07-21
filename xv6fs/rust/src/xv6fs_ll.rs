@@ -1,11 +1,11 @@
 /*
- * SPDX-License-Identifier: GPL-2.0 OR MIT
- *
- * Copyright (C) 2020 Samantha Miller, Kaiyuan Zhang, Danyang Zhuo, Tom
-      Anderson, Ang Chen, University of Washington
- * Copyright (C) 2006-2018 Frans Kaashoek, Robert Morris, Russ Cox,
- *                      Massachusetts Institute of Technology
- */
+* SPDX-License-Identifier: GPL-2.0 OR MIT
+*
+* Copyright (C) 2020 Samantha Miller, Kaiyuan Zhang, Danyang Zhuo, Tom
+     Anderson, Ang Chen, University of Washington
+* Copyright (C) 2006-2018 Frans Kaashoek, Robert Morris, Russ Cox,
+*                      Massachusetts Institute of Technology
+*/
 
 #[cfg(not(feature = "user"))]
 use crate::bento_utils;
@@ -29,8 +29,8 @@ use bento_utils::Disk;
 
 use datablock::DataBlock;
 
-use bento_utils::*;
 use bento_utils::consts::*;
+use bento_utils::*;
 use fuse::consts::*;
 
 use fuse::*;
@@ -43,8 +43,8 @@ use std::sync::RwLock;
 
 use time::*;
 
-use crate::xv6fs_log::*;
 use crate::xv6fs_file::*;
+use crate::xv6fs_log::*;
 use crate::xv6fs_utils::*;
 
 pub struct Xv6FileSystem {
@@ -112,13 +112,7 @@ impl BentoFilesystem for Xv6FileSystem {
         reply.statfs(fs_size as u64, 0, 0, 0, 0, BSIZE as u32, DIRSIZ as u32, 0);
     }
 
-    fn bento_open(
-        &self,
-        _req: &Request,
-        nodeid: u64,
-        flags: u32,
-        reply: ReplyOpen,
-    ) {
+    fn bento_open(&self, _req: &Request, nodeid: u64, flags: u32, reply: ReplyOpen) {
         let log = self.log.as_ref().unwrap();
         let inode = match self.iget(nodeid) {
             Ok(x) => x,
@@ -164,13 +158,7 @@ impl BentoFilesystem for Xv6FileSystem {
         reply.opened(fh, open_flags);
     }
 
-    fn bento_opendir(
-        &self,
-        _req: &Request,
-        nodeid: u64,
-        _flags: u32,
-        reply: ReplyOpen,
-    ) {
+    fn bento_opendir(&self, _req: &Request, nodeid: u64, _flags: u32, reply: ReplyOpen) {
         let inode = match self.iget(nodeid) {
             Ok(x) => x,
             Err(x) => {
@@ -288,13 +276,7 @@ impl BentoFilesystem for Xv6FileSystem {
         }
     }
 
-    fn bento_lookup(
-        &self,
-        _req: &Request,
-        nodeid: u64,
-        name: &OsStr,
-        reply: ReplyEntry,
-    ) {
+    fn bento_lookup(&self, _req: &Request, nodeid: u64, name: &OsStr, reply: ReplyEntry) {
         // Get inode number from nodeid
         let inode = match self.iget(nodeid) {
             Ok(x) => x,
@@ -348,7 +330,7 @@ impl BentoFilesystem for Xv6FileSystem {
         match self.stati(outarg_nodeid, &child_internals) {
             Ok(outarg_attr) => {
                 reply.entry(&attr_valid, &outarg_attr, outarg_generation);
-            },
+            }
             Err(x) => {
                 reply.error(x);
             }
@@ -702,13 +684,7 @@ impl BentoFilesystem for Xv6FileSystem {
         }
     }
 
-    fn bento_rmdir(
-        &self,
-        _req: &Request,
-        parent: u64,
-        name: &OsStr,
-        reply: ReplyEmpty,
-    ) {
+    fn bento_rmdir(&self, _req: &Request, parent: u64, name: &OsStr, reply: ReplyEmpty) {
         let log = self.log.as_ref().unwrap();
         let _guard = log.begin_op();
         match self.dounlink(parent, name) {
@@ -717,13 +693,7 @@ impl BentoFilesystem for Xv6FileSystem {
         }
     }
 
-    fn bento_unlink(
-        &self,
-        _req: &Request,
-        parent: u64,
-        name: &OsStr,
-        reply: ReplyEmpty,
-    ) {
+    fn bento_unlink(&self, _req: &Request, parent: u64, name: &OsStr, reply: ReplyEmpty) {
         let log = self.log.as_ref().unwrap();
         let _guard = log.begin_op();
         match self.dounlink(parent, name) {
@@ -732,14 +702,7 @@ impl BentoFilesystem for Xv6FileSystem {
         }
     }
 
-    fn bento_fsync(
-        &self,
-        _req: &Request,
-        _ino: u64,
-        _fh: u64,
-        _datasync: bool,
-        reply: ReplyEmpty,
-    ) {
+    fn bento_fsync(&self, _req: &Request, _ino: u64, _fh: u64, _datasync: bool, reply: ReplyEmpty) {
         let log = self.log.as_ref().unwrap();
         log.force_commit();
         reply.ok();
@@ -850,12 +813,7 @@ impl BentoFilesystem for Xv6FileSystem {
 
         let mut len_slice = [0; 4];
 
-        match self.readi(
-            &mut len_slice,
-            0,
-            mem::size_of::<u32>(),
-            &mut internals,
-        ) {
+        match self.readi(&mut len_slice, 0, mem::size_of::<u32>(), &mut internals) {
             Ok(x) if x != mem::size_of::<u32>() => {
                 reply.error(libc::EIO);
                 return;
@@ -899,81 +857,123 @@ impl Xv6FileSystem {
         name: &OsStr,
     ) -> Result<CachedInode<'a>, libc::c_int> {
         // Get inode for parent directory
-    
+
         let parent = self.iget(nodeid)?;
         let icache = self.ilock_cache.as_ref().unwrap();
         // Get inode for new file
         let parent_inode_guard = self.ilock(parent.idx, &icache, parent.inum)?;
-        let mut parent_internals = parent_inode_guard.internals.write().map_err(|_| libc::EIO)?;
-    
+        let mut parent_internals = parent_inode_guard
+            .internals
+            .write()
+            .map_err(|_| libc::EIO)?;
+
         let inode = self.ialloc(itype)?;
-        if (parent_internals.size as usize + mem::size_of::<Xv6fsDirent>()) > (MAXFILE as usize * BSIZE)
+        if (parent_internals.size as usize + mem::size_of::<Xv6fsDirent>())
+            > (MAXFILE as usize * BSIZE)
         {
             return Err(libc::EIO);
         }
-    
+
         let inode_guard = self.ilock(inode.idx, &icache, inode.inum)?;
         let mut internals = inode_guard.internals.write().map_err(|_| libc::EIO)?;
-    
+
         internals.major = parent_internals.major;
         internals.minor = parent_internals.minor;
         internals.nlink = 1;
-    
+
         self.iupdate(&internals, inode.inum)?;
-    
+
         if itype == T_DIR {
             parent_internals.nlink += 1;
             self.iupdate(&parent_internals, parent.inum)?;
             let d = OsStr::new(".");
             self.dirlink(&mut internals, &d, inode.inum, inode.inum)?;
-    
+
             let dd = OsStr::new("..");
             self.dirlink(&mut internals, &dd, nodeid as u32, inode.inum)?;
         }
-    
+
         self.dirlink(&mut parent_internals, name, inode.inum, parent.inum)?;
         return Ok(inode);
     }
-    
+
     fn isdirempty(&self, internals: &mut InodeInternal) -> Result<bool, libc::c_int> {
-        let de_len = mem::size_of::<Xv6fsDirent>();
-        let mut de_vec: Vec<u8> = vec![0; de_len];
-        for off in (2 * de_len..internals.size as usize).step_by(de_len) {
-            let de_slice = de_vec.as_mut_slice();
-            match self.readi(de_slice, off as usize, de_len, internals) {
-                Ok(x) if x != de_len => return Err(libc::EIO),
+        let hroot_len = mem::size_of::<Htree_root>();
+        let hindex_len = mem::size_of::<Htree_index>();
+        let hentry_len = mem::size_of::<Htree_entry>();
+        let mut hroot_vec: Vec<u8> = vec![0; hroot_len];
+
+        let hroot_slice = hroot_vec.as_mut_slice();
+
+        // try reading directory root
+        let mut root = Htree_root::new();
+        match self.readi(hroot_slice, 0, hroot_len, internals) {
+            Ok(x) if x != hroot_len => return Err(libc::EIO),
+            Err(x) => return Err(x),
+            _ => {}
+        };
+        root.extract_from(hroot_slice).map_err(|_| libc::EIO)?;
+
+        let num_indeces = root.ind_entries;
+        if num_indeces == 0 {
+            return Ok(true);
+        }
+
+        let mut hie_vec: Vec<u8> = vec![0; hentry_len];
+        let hie_slice = hie_vec.as_mut_slice();
+
+        // check the index pointers stored in the root
+        for off in (hroot_len..num_indeces as usize * hentry_len).step_by(hentry_len) {
+            let mut hie = Htree_entry::new();
+            match self.readi(hie_slice, off as usize, hentry_len, internals) {
+                Ok(x) if x != hentry_len => return Err(libc::EIO),
                 Err(x) => return Err(x),
                 _ => {}
-            };
-            let mut de = Xv6fsDirent::new();
-            de.extract_from(de_slice).map_err(|_| libc::EIO)?;
-    
-            if de.inum != 0 {
+            }
+            hie.extract_from(hie_slice).map_err(|_| libc::EIO)?;
+
+            // check the index block for entries
+            let mut ind_vec: Vec<u8> = vec![0; hindex_len];
+            let ind_slice = ind_vec.as_mut_slice();
+            let mut index = Htree_index::new();
+            match self.readi(ind_slice, hie.lb_offset as usize, hindex_len, internals) {
+                Ok(x) if x != hindex_len => return Err(libc::EIO),
+                Err(x) => return Err(x),
+                _ => {}
+            }
+            index.extract_from(ind_slice).map_err(|_| libc::EIO)?;
+
+            // TODO: probably need to check the actual direntries in the leaf blocks pointed by the htree_indeces
+            if index.entries != 0 {
                 return Ok(false);
             }
         }
+
         return Ok(true);
     }
-    
+
     fn dounlink(&self, nodeid: u64, name: &OsStr) -> Result<usize, libc::c_int> {
         let parent = self.iget(nodeid)?;
         let icache = self.ilock_cache.as_ref().unwrap();
         let parent_inode_guard = self.ilock(parent.idx, &icache, parent.inum)?;
-        let mut parent_internals = parent_inode_guard.internals.write().map_err(|_| libc::EIO)?;
+        let mut parent_internals = parent_inode_guard
+            .internals
+            .write()
+            .map_err(|_| libc::EIO)?;
         let mut poff = 0;
         let name_str = name.to_str().unwrap();
         if name_str == "." || name_str == ".." {
             return Err(libc::EIO);
         }
         let inode = self.dirlookup(&mut parent_internals, name, &mut poff)?;
-    
+
         let inode_guard = self.ilock(inode.idx, &icache, inode.inum)?;
         let mut inode_internals = inode_guard.internals.write().map_err(|_| libc::EIO)?;
-    
+
         if inode_internals.nlink < 1 {
             return Err(libc::EIO);
         }
-    
+
         if inode_internals.inode_type == T_DIR {
             match self.isdirempty(&mut inode_internals) {
                 Ok(true) => {}
@@ -982,7 +982,7 @@ impl Xv6FileSystem {
                 }
             }
         }
-    
+
         let de_arr = [0; mem::size_of::<Xv6fsDirent>()];
         let buf_len = mem::size_of::<Xv6fsDirent>();
         let r = self.writei(
@@ -992,19 +992,19 @@ impl Xv6FileSystem {
             &mut parent_internals,
             parent.inum,
         )?;
-    
+
         if r != buf_len {
             return Err(libc::EIO);
         }
-    
+
         if inode_internals.inode_type == T_DIR {
             parent_internals.nlink -= 1;
             self.iupdate(&parent_internals, parent.inum)?;
         }
-    
+
         inode_internals.nlink -= 1;
         self.iupdate(&inode_internals, inode.inum)?;
-    
+
         return Ok(0);
     }
 }
