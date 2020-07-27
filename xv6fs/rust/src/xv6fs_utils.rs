@@ -143,14 +143,14 @@ impl Htree_index {
 #[derive(DataBlock, Copy, Clone)]
 pub struct Htree_entry {
     pub name_hash: u32,
-    pub lb_offset: u32,
+    pub block: u32,
 }
 
 impl Htree_entry {
     pub const fn new() -> Self {
         Self {
             name_hash: 0,
-            lb_offset: 0,
+            block: 0,
         }
     }
 }

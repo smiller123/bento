@@ -936,7 +936,7 @@ impl Xv6FileSystem {
             let mut ind_vec: Vec<u8> = vec![0; hindex_len];
             let ind_slice = ind_vec.as_mut_slice();
             let mut index = Htree_index::new();
-            match self.readi(ind_slice, hie.lb_offset as usize, hindex_len, internals) {
+            match self.readi(ind_slice, hie.block as usize, hindex_len, internals) {
                 Ok(x) if x != hindex_len => return Err(libc::EIO),
                 Err(x) => return Err(x),
                 _ => {}
@@ -952,6 +952,7 @@ impl Xv6FileSystem {
         return Ok(true);
     }
 
+    // TODO might want to coalesce adjacent block to reduce fragmentation
     fn dounlink(&self, nodeid: u64, name: &OsStr) -> Result<usize, libc::c_int> {
         let parent = self.iget(nodeid)?;
         let icache = self.ilock_cache.as_ref().unwrap();
