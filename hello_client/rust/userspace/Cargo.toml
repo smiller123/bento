@@ -25,3 +25,7 @@ time = "0.1"
 log = "0.3"
 capnp = "*"
 capnpc = "*"
+
+[dependencies.serde]
+version = "*"
+features = ["derive"]

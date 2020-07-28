@@ -5,13 +5,15 @@ use libc::ENOSYS;
 
 use crate::fuse::*;
 
-use kernel::ffi::{register_bento_fs,unregister_bento_fs};
+use kernel::ffi::{register_bento_fs,unregister_bento_fs, reregister_bento_fs};
 use kernel::raw;
 
 use std::ffi::OsStr;
 use std::path::Path;
 
 use time::Timespec;
+
+use serde::{Serialize, Deserialize};
 
 pub const BENTO_KERNEL_VERSION: u32 = 1;
 pub const BENTO_KERNEL_MINOR_VERSION: u32 = 0;
@@ -46,7 +48,7 @@ pub mod consts {
 /// correspond to the `fuse_lowlevel_ops` in libfuse. The user must provide a
 /// name for the file system. Otherwise, default implementations are
 /// provided here to get a mountable filesystem that does nothing.
-pub trait BentoFilesystem {
+pub trait BentoFilesystem<'de, TransferIn: Send + Deserialize<'de>=i32,TransferOut: Send + Serialize=i32> {
     /// Get the name of the file system.
     ///
     /// This must be provided to mount the filesystem.
@@ -64,7 +66,25 @@ pub trait BentoFilesystem {
             register_bento_fs(
                 self as *const Self as *const raw::c_void,
                 self.get_name().as_bytes().as_ptr() as *const raw::c_void,
-                dispatch::<Self> as *const raw::c_void,
+                dispatch::<TransferIn, TransferOut, Self> as *const raw::c_void,
+            )
+        };
+    }
+
+    /// Reregister the filesystem with Bento on top of an existing register.
+    ///
+    /// This should be called when the filesystem module is inserted using the
+    /// name of an existing filesystem that has been previously inserted. The existing
+    /// filesystem implementation will be overwritten with the new filesystem.
+    fn reregister(&self) -> i32
+    where
+        Self: core::marker::Sized,
+    {
+        return unsafe {
+            reregister_bento_fs(
+                self as *const Self as *const raw::c_void,
+                self.get_name().as_bytes().as_ptr() as *const raw::c_void,
+                dispatch::<TransferIn, TransferOut, Self> as *const raw::c_void,
             )
         };
     }
@@ -78,6 +98,14 @@ pub trait BentoFilesystem {
             unregister_bento_fs(self.get_name().as_bytes().as_ptr() as *const raw::c_void)
         };
     }
+
+    fn bento_update_prepare(&mut self) -> Option<TransferOut> {
+    //fn bento_update_prepare(&mut self) -> Option<*const raw::c_void> {
+        None
+    }
+
+    fn bento_update_transfer(&mut self, Option<TransferIn>) { }
+    //fn bento_update_transfer(&mut self, Option<*const raw::c_void>) { }
 
     /// Initialize the file system and fill in initialization flags.
     ///

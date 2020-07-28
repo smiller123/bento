@@ -10,6 +10,8 @@ use time::Timespec;
 
 use fuse::*;
 
+use serde::{Serialize, Deserialize};
+
 pub const BENTO_KERNEL_VERSION: u32 = 1;
 pub const BENTO_KERNEL_MINOR_VERSION: u32 = 0;
 
@@ -76,7 +78,7 @@ impl FuseConnInfo {
 /// correspond to the `fuse_lowlevel_ops` in libfuse. The user must provide a
 /// name for the file system. Otherwise, default implementations are
 /// provided here to get a mountable filesystem that does nothing.
-pub trait BentoFilesystem {
+pub trait BentoFilesystem<'de, TransferIn: Send + Deserialize<'de>=i32, TransferOut: Send + Serialize=i32> {
     /// Get the name of the file system.
     ///
     /// This must be provided to mount the filesystem.
@@ -956,6 +958,14 @@ pub trait BentoFilesystem {
     ) {
         return reply.error(ENOSYS);
     }
+
+    /// Unused in user version
+    fn bento_update_prepare(&mut self) -> Option<TransferOut> {
+        None
+    }
+
+    /// Unused in user version
+    fn bento_update_transfer(&mut self, Option<TransferIn>) { }
 }
 
 macro_rules! impl_filesystem {

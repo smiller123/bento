@@ -14,3 +14,8 @@ bento = {path = "../../../bento/rust" }
 rlibc = "1.0"
 arr_macro = "0.1.0"
 
+[dependencies.serde]
+version = "*"
+default-features = false
+features = ["alloc", "derive"]
+

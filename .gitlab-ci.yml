@@ -101,3 +101,22 @@ test_user_hello_tcp:
     - sleep 1
     - sudo cat /mnt/hello/hello
     - sudo fusermount -u /mnt/hello
+
+test_update_hello:
+  stage: test
+  script:
+    - git submodule update --init --recursive
+    - (cd bentofs && make)
+    - (cd hello_ll/rust && make)
+    - (cd hello_ll2/rust && make)
+    - sudo insmod bentofs/bentofs.ko
+    - sudo insmod hello_ll/rust/kernel/hello_ll.ko
+    - sudo mkdir -p /mnt/hello
+    - sudo mount -t bentoblk -o fd=10,rootmode=40000,user_id=0,group_id=0,blksize=4096,name=hello_ll -o loop hello_ll/hello /mnt/hello
+    - sudo cat /mnt/hello/hello
+    - sudo insmod hello_ll2/rust/kernel/hello_ll2.ko
+    - sudo rmmod hello_ll
+    - sudo cat /mnt/hello/hello2
+    - sudo umount /mnt/hello
+    - sudo rmmod hello_ll2
+    - sudo rmmod bentofs

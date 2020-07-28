@@ -18,6 +18,8 @@ use crate::std;
 #[cfg(not(feature = "user"))]
 use crate::time;
 
+use alloc::string::String;
+use alloc::string::ToString;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
@@ -43,9 +45,16 @@ use std::sync::RwLock;
 
 use time::*;
 
+use serde::{Serialize, Deserialize};
+
 use crate::xv6fs_log::*;
 use crate::xv6fs_file::*;
 use crate::xv6fs_utils::*;
+
+#[derive(Serialize, Deserialize)]
+pub struct Xv6State {
+    diskname: String,
+}
 
 pub struct Xv6FileSystem {
     pub log: Option<Xv6Log>,
@@ -54,9 +63,10 @@ pub struct Xv6FileSystem {
     pub ilock_cache: Option<Vec<RwLock<Inode>>>,
     pub ialloc_lock: Option<RwLock<usize>>,
     pub balloc_lock: Option<RwLock<usize>>,
+    pub diskname: Option<String>,
 }
 
-impl BentoFilesystem for Xv6FileSystem {
+impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
     fn get_name(&self) -> &'static str {
         Xv6FileSystem::NAME
     }
@@ -78,6 +88,9 @@ impl BentoFilesystem for Xv6FileSystem {
         if self.disk.is_none() {
             let devname_str = devname.to_str().unwrap();
             let disk = Disk::new(devname_str, BSIZE as u64);
+            let mut disk_string = devname_str.to_string();
+            disk_string.push('\0');
+            self.diskname = Some(disk_string);
             self.disk = Some(Arc::new(disk));
         }
 
@@ -886,6 +899,33 @@ impl BentoFilesystem for Xv6FileSystem {
             }
         };
         reply.data(buf_slice);
+    }
+
+    fn bento_update_prepare(&mut self) -> Option<Xv6State> {
+        let state = Xv6State {
+            diskname: self.diskname.as_ref().unwrap().clone(),
+        };
+        Some(state)
+    }
+
+    fn bento_update_transfer(&mut self, state_opt: Option<Xv6State>) {
+        if let Some(state) = state_opt {
+            let disk = Arc::new(Disk::new(state.diskname.as_str(), 4096));
+            self.disk = Some(disk);
+            self.diskname = Some(state.diskname);
+            let sb_lock = Xv6fsSB {
+                size: 0,
+                nblocks: 0,
+                ninodes: 0,
+                nlog: 0,
+                logstart: 0,
+                inodestart: 0,
+                bmapstart: 0,
+            };
+            self.sb = Some(sb_lock);
+
+            self.iinit();
+        }
     }
 }
 

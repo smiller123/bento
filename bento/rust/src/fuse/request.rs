@@ -1,3 +1,4 @@
+use alloc::boxed::Box;
 use core::str;
 
 use crate::libc;
@@ -13,6 +14,11 @@ use crate::time::Timespec;
 use fuse::reply::*;
 use crate::bento_utils::BentoFilesystem;
 use fuse::internal::*;
+
+use serde::{Serialize, Deserialize};
+
+const BENTO_UPDATE_PREPARE: u32 = 8192;
+const BENTO_UPDATE_TRANSFER: u32 = 8193;
 
 #[repr(C)]
 pub struct bento_in_arg {
@@ -124,7 +130,7 @@ struct bento_init_in {
     devname: CStr,
 }
 
-pub fn dispatch<T: BentoFilesystem>(
+pub fn dispatch<'de, TransferIn: Send + Deserialize<'de>, TransferOut: Send + Serialize, T: BentoFilesystem<'de, TransferIn, TransferOut>>(
     fs: &'static mut T,
     opcode: fuse_opcode,
     inarg: &bento_in,
@@ -944,6 +950,35 @@ pub fn dispatch<T: BentoFilesystem>(
                 Ok(_) => 0,
                 Err(x) => -*x,
             }
+        }
+        BENTO_UPDATE_PREPARE => {
+            if outarg.numargs != 1 {
+                return -1;
+            }
+
+            match fs.bento_update_prepare() {
+                Some(x_val) => {
+                    // TODO: Serialize the struct once bincode supports no_std
+                    outarg.args[0].value = Box::into_raw(Box::new(x_val)) as *const _ as *const raw::c_void;
+                    0
+                }
+                None => 0
+            }
+        }
+        BENTO_UPDATE_TRANSFER => {
+            if inarg.numargs != 1 {
+                return -1;
+            }
+
+            let transfer_ptr = inarg.args[0].value as *mut raw::c_void;
+            let transfer_in = if transfer_ptr.is_null() {
+                None
+            } else {
+                // TODO: Deserialize the struct once bincode supports no_std
+                unsafe { Some(*Box::from_raw(transfer_ptr as *mut TransferIn)) }
+            };
+            fs.bento_update_transfer(transfer_in);
+            0
         }
         _ => {
             println!("got a different opcode");
