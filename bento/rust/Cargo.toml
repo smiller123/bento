@@ -22,3 +22,8 @@ datablock = { path = "../../datablock-rs/datablock" }
 version = "0.13.3"
 optional = true
 default-features = false
+
+[dependencies.serde]
+version = "*"
+default-features = false
+features = ["alloc", "derive"]

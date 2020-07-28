@@ -46,7 +46,7 @@ impl HelloFS {
     const NAME: &'static str = "hello_client\0";
 }
 
-impl BentoFilesystem for HelloFS {
+impl BentoFilesystem<'_> for HelloFS {
     fn get_name(&self) -> &'static str {
         Self::NAME
     }
@@ -79,11 +79,6 @@ impl BentoFilesystem for HelloFS {
         let mut foo_msg = message.init_root::<foo::Builder>();
         foo_msg.set_msg("hello");
         serialize::write_message(&mut stream, &message);
-        //let msg = "hello\0";
-        //let _size = match stream.write(msg.as_bytes()) {
-        //    Ok(x) => x,
-        //    Err(_) => return Err(-1),
-        //};
         self.socket = Some(stream);
 
         return Ok(());

@@ -8,6 +8,7 @@ extern crate fuse;
 extern crate capnp;
 extern crate core;
 extern crate libc;
+extern crate serde;
 extern crate time;
 
 #[macro_use]

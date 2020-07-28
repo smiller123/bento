@@ -19,6 +19,7 @@
 #![no_std]
 
 extern crate alloc;
+extern crate serde;
 
 #[cfg(feature = "capnproto")]
 extern crate capnp;

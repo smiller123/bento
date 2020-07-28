@@ -1,0 +1,14 @@
+obj-m := xv6fs2.o
+xv6fs2-objs := src/module.o xv6fs2.rust.o
+
+EXTRA_LDFLAGS += --gc-sections --entry=init_module --undefined=cleanup_module
+
+KBUILD_EXTRA_SYMBOLS = $(src)/../../../bentofs/Module.symvers
+
+CARGO ?= cargo
+
+$(src)/target/x86_64-linux-kernel/release/libxv6fs2.a: $(src)/Cargo.toml $(wildcard $(src)/src/*.rs)
+	cd $(src); env -u MAKE -u MAKEFLAGS $(CARGO) build -Z build-std=core,alloc --release --target=x86_64-linux-kernel
+
+%.rust.o: target/x86_64-linux-kernel/release/lib%.a
+	$(LD) -r -o $@ --whole-archive $<

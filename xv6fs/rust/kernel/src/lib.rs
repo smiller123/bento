@@ -13,6 +13,7 @@ extern crate arr_macro;
 extern crate bento;
 extern crate datablock;
 extern crate rlibc;
+extern crate serde;
 
 use bento::fuse;
 use bento::libc;
@@ -39,6 +40,7 @@ pub static XV6FS: Xv6FileSystem = Xv6FileSystem {
     ilock_cache: None,
     ialloc_lock: None,
     balloc_lock: None,
+    diskname: None,
 };
 
 

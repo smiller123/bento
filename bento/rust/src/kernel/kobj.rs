@@ -72,9 +72,9 @@ impl RsBlockDevice {
     }
 
     pub fn put(&self) {
-        unsafe {
-            blkdev_put(self.get_raw(), 0x80);
-        }
+        //unsafe {
+        //    blkdev_put(self.get_raw(), 0x80);
+        //}
     }
 }
 
@@ -92,23 +92,6 @@ impl Drop for RsRwSemaphore {
         self.put();
     }
 }
-
-//#[repr(C)]
-//pub struct QStr {
-//    hash: u32,
-//    len: u32,
-//    name: *const c_char,
-//}
-//
-//impl QStr {
-//    pub fn len(&self) -> usize {
-//        self.len as usize
-//    }
-//
-//    pub fn get_ref(&self) -> &[u8] {
-//        unsafe { core::slice::from_raw_parts(self.name as *const u8, self.len()) }
-//    }
-//}
 
 /// A Rust representation of a C-style, null-terminated string.
 ///
