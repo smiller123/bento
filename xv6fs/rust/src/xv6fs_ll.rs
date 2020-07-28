@@ -923,7 +923,11 @@ impl Xv6FileSystem {
         let hie_slice = hie_vec.as_mut_slice();
 
         // check the index pointers stored in the root
-        for off in (hroot_len..num_indeces as usize * hentry_len).step_by(hentry_len) {
+        for off in (hroot_len..(num_indeces as usize * hentry_len) + hroot_len).step_by(hentry_len)
+        {
+            if off >= BSIZE {
+                break;
+            }
             let mut hie = Htree_entry::new();
             match self.readi(hie_slice, off as usize, hentry_len, internals) {
                 Ok(x) if x != hentry_len => return Err(libc::EIO),
@@ -936,7 +940,7 @@ impl Xv6FileSystem {
             let mut ind_vec: Vec<u8> = vec![0; hindex_len];
             let ind_slice = ind_vec.as_mut_slice();
             let mut index = Htree_index::new();
-            match self.readi(ind_slice, hie.block as usize, hindex_len, internals) {
+            match self.readi(ind_slice, BSIZE * hie.block as usize, hindex_len, internals) {
                 Ok(x) if x != hindex_len => return Err(libc::EIO),
                 Err(x) => return Err(x),
                 _ => {}

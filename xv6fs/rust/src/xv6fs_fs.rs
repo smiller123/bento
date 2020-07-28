@@ -766,10 +766,16 @@ impl Xv6FileSystem {
         let num_indeces = root.ind_entries;
         let mut index_vec: Vec<Htree_entry> = Vec::with_capacity(num_indeces as usize);
         for rie_idx in 0..num_indeces {
+            if hroot_len + rie_idx as usize * hentry_len >= BSIZE {
+                break;
+            }
             let mut ie = Htree_entry::new();
             let ie_slice = &mut root_arr_slice[hroot_len + (hentry_len * rie_idx as usize)
                 ..hroot_len + (hentry_len * (rie_idx as usize + 1))];
             ie.extract_from(ie_slice).map_err(|_| libc::EIO)?;
+            if ie.name_hash == 0 || ie.block == 0 {
+                break;
+            }
             index_vec.push(ie);
         }
 
@@ -780,6 +786,7 @@ impl Xv6FileSystem {
             None => return Err(libc::ENOENT),
         };
 
+        // get index block
         let target_lblock: u32 = index_vec[target_entry].block;
         let mut hindex_arr_vec: Vec<u8> = vec![0; BSIZE];
         let hindex_arr_slice = hindex_arr_vec.as_mut_slice();
@@ -800,8 +807,11 @@ impl Xv6FileSystem {
         let mut leaf_vec: Vec<Htree_entry> = Vec::with_capacity(num_entries as usize);
         for off in (hindex_len..BSIZE).step_by(hentry_len) {
             let mut hentry = Htree_entry::new();
-            let hentry_slice = &mut hindex_arr_slice[off..off + hentry_len + 1];
+            let hentry_slice = &mut hindex_arr_slice[off..off + hentry_len];
             hentry.extract_from(hentry_slice).map_err(|_| libc::EIO)?;
+            if hentry.name_hash == 0 || hentry.block == 0 {
+                break;
+            }
             leaf_vec.push(hentry);
         }
 
@@ -915,11 +925,6 @@ impl Xv6FileSystem {
             }
         };
 
-        let num_blocks = match internals.size {
-            0 => 0,
-            _ => (internals.size as usize - 1) / BSIZE + 1,
-        };
-
         // get hash of target entry
         let target_hash = name.calculate_hash();
 
@@ -933,9 +938,8 @@ impl Xv6FileSystem {
         let mut root = Htree_root::new();
         let root_slice = &mut root_arr_slice[0..hroot_len];
         root.extract_from(root_slice).map_err(|_| libc::EIO)?;
-
-        // get all the index entries in a list and do binary search
         let num_indeces = root.ind_entries;
+        let num_blocks = root.blocks as usize;
 
         // dirent to be written to leaf node
         let mut de = Xv6fsDirent::new();
@@ -962,6 +966,7 @@ impl Xv6FileSystem {
             let root_de_slice = &mut root_slice[0..de_len];
             de.dump_into(root_de_slice).map_err(|_| libc::EIO)?;
             root.ind_entries = 0;
+            root.blocks = 1;
             if self.writei(root_slice, 0, hroot_len, internals, parent_inum)? != hroot_len {
                 return Err(libc::EIO);
             }
@@ -983,14 +988,14 @@ impl Xv6FileSystem {
         if num_indeces == 0 {
             let rie_offset = hroot_len;
             let index_offset = num_blocks * BSIZE;
-            let ine_offset = hindex_len;
+            let ine_offset = index_offset + hindex_len;
             let de_offset = (num_blocks + 1) * BSIZE;
 
             // create new index entry in root node
             let mut rie = Htree_entry::new();
             let mut rie_vec: Vec<u8> = vec![0; hentry_len];
             let rie_slice = rie_vec.as_mut_slice();
-            rie.extract_from(rie_slice).map_err(|_| libc::EIO)?;
+            // rie.extract_from(rie_slice).map_err(|_| libc::EIO)?;
             rie.name_hash = target_hash;
             rie.block = index_offset as u32;
             rie.dump_into(rie_slice).map_err(|_| libc::EIO)?;
@@ -1004,7 +1009,7 @@ impl Xv6FileSystem {
             let mut index = Htree_index::new();
             let mut index_vec: Vec<u8> = vec![0; hindex_len];
             let index_slice = index_vec.as_mut_slice();
-            index.extract_from(index_slice).map_err(|_| libc::EIO)?;
+            // index.extract_from(index_slice).map_err(|_| libc::EIO)?;
             index.entries = 1 as u32;
             index.dump_into(index_slice).map_err(|_| libc::EIO)?;
 
@@ -1023,7 +1028,7 @@ impl Xv6FileSystem {
             let mut ine = Htree_entry::new();
             let mut ine_vec: Vec<u8> = vec![0; hentry_len];
             let ine_slice = ine_vec.as_mut_slice();
-            ine.extract_from(ine_slice).map_err(|_| libc::EIO)?;
+            // ine.extract_from(ine_slice).map_err(|_| libc::EIO)?;
             ine.name_hash = target_hash;
             ine.block = de_offset as u32;
             ine.dump_into(ine_slice).map_err(|_| libc::EIO)?;
@@ -1051,10 +1056,16 @@ impl Xv6FileSystem {
         // directory is not empty
         let mut index_vec: Vec<Htree_entry> = Vec::with_capacity(num_indeces as usize);
         for rie_idx in 0..num_indeces {
+            if hroot_len + rie_idx as usize * hentry_len >= BSIZE {
+                break;
+            }
             let mut ie = Htree_entry::new();
             let ie_slice = &mut root_arr_slice[hroot_len + (hentry_len * rie_idx as usize)
                 ..hroot_len + (hentry_len * (rie_idx as usize + 1))];
             ie.extract_from(ie_slice).map_err(|_| libc::EIO)?;
+            if ie.name_hash == 0 || ie.block == 0 {
+                break;
+            }
             index_vec.push(ie);
         }
 
@@ -1085,9 +1096,9 @@ impl Xv6FileSystem {
         let mut leaf_vec: Vec<Htree_entry> = Vec::with_capacity((num_entries + 1) as usize);
         for off in (hindex_len..BSIZE).step_by(hentry_len) {
             let mut hentry = Htree_entry::new();
-            let hentry_slice = &mut hindex_arr_slice[off..off + hentry_len + 1];
+            let hentry_slice = &mut hindex_arr_slice[off..off + hentry_len];
             hentry.extract_from(hentry_slice).map_err(|_| libc::EIO)?;
-            if hentry.block == 0 {
+            if hentry.block == 0 || hentry.name_hash == 0 {
                 break;
             }
             leaf_vec.push(hentry);
@@ -1135,7 +1146,7 @@ impl Xv6FileSystem {
         // need to split leaf nodes
 
         // final off should be internals.size
-        let final_off = final_off.unwrap_or(internals.size);
+        let final_off = num_blocks * BSIZE;
 
         // add entries into a map
         let mut de_map: BTreeMap<u32, Xv6fsDirent> = BTreeMap::new();
@@ -1166,12 +1177,12 @@ impl Xv6FileSystem {
 
         // get the new lower bounds for the leaf nodes
         let mut de_map2 = de_map.split_off(&((de_map.len() / 2) as u32));
-        let leaf1_lower = 0;
+        // let leaf1_lower = 0;
         let leaf2_lower = 0;
-        for (key, _val) in de_map.iter() {
-            let leaf1_lower = *key;
-            break;
-        }
+        // for (key, _val) in de_map.iter() {
+        //     let leaf1_lower = *key;
+        //     break;
+        // }
 
         for (key, _val) in de_map2.iter() {
             let leaf2_lower = *key;
@@ -1246,7 +1257,7 @@ impl Xv6FileSystem {
             }
             if self.writei(
                 leaf_slice,
-                final_off as usize * BSIZE,
+                (num_blocks + 1) * BSIZE,
                 BSIZE,
                 internals,
                 parent_inum,
@@ -1266,7 +1277,7 @@ impl Xv6FileSystem {
         }
         let mut new_ie = Htree_entry::new();
         new_ie.name_hash = leaf2_lower;
-        new_ie.block = (final_off as usize / BSIZE) as u32;
+        new_ie.block = num_blocks as u32 + 1;
         ie_map.insert(new_ie.name_hash, new_ie);
         {
             let keys: Vec<_> = ie_map.keys().cloned().collect();
@@ -1309,7 +1320,8 @@ impl Xv6FileSystem {
                 let mut new_rie = Htree_entry::new();
                 let mut new_index = Htree_index::new();
 
-                // update current index node
+                // split original index node and update previous index node
+                let mut ie2_vec = leaf_vec.split_off(leaf_vec.len() / 2);
                 {
                     index.entries = leaf_vec.len() as u32;
                     let mut index_vec: Vec<u8> = vec![0; BSIZE];
@@ -1336,18 +1348,18 @@ impl Xv6FileSystem {
                     }
                 }
 
-                // create new index node with the remaining entries
+                // create new index node with the remaining entries for root indeces
 
-                let mut ie2_vec = leaf_vec.split_off(leaf_vec.len() / 2);
                 new_index.entries = ie2_vec.len() as u32;
+                // should be the same as leaf2_lower
                 let lower_bound = ie2_vec[0].name_hash;
                 new_rie.name_hash = lower_bound;
-                new_rie.block = internals.size as u32;
+                new_rie.block = num_blocks as u32 + 2;
 
                 {
                     let mut index_vec: Vec<u8> = vec![0; BSIZE];
                     let index_slice = index_vec.as_mut_slice();
-                    let index_header_slice = &mut index_slice[de_len..hindex_len];
+                    let index_header_slice = &mut index_slice[0..hindex_len];
                     new_index
                         .dump_into(index_header_slice)
                         .map_err(|_| libc::EIO)?;
@@ -1361,7 +1373,7 @@ impl Xv6FileSystem {
 
                     if self.writei(
                         index_slice,
-                        internals.size as usize,
+                        num_blocks + 2 as usize,
                         BSIZE,
                         internals,
                         parent_inum,
@@ -1389,6 +1401,7 @@ impl Xv6FileSystem {
                 }
 
                 {
+                    root.ind_entries += 1;
                     let root_header_slice = &mut root_arr_slice[0..hroot_len];
                     root.dump_into(root_header_slice).map_err(|_| libc::EIO)?;
                     let mut rie_idx = 0;

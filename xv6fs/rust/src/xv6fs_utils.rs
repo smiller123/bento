@@ -36,10 +36,9 @@ pub const MAXOPBLOCKS: usize = 32;
 pub const LOGSIZE: usize = MAXOPBLOCKS * 3;
 
 pub const HTREE_MAXDEPTH: u32 = 2;
-
-pub const HTREE_M: usize = (BSIZE - mem::size_of::<Xv6fsDirent>()) / mem::size_of::<Htree_entry>();
-
-pub const HTREE_L: usize = BSIZE / (mem::size_of::<u32>() + mem::size_of::<Xv6fsDirent>());
+pub const HTREE_MAXBLOCKS: u32 =
+    (((BSIZE - mem::size_of::<Htree_root>()) / mem::size_of::<Htree_entry>())
+        * ((BSIZE - mem::size_of::<Htree_index>()) / mem::size_of::<Htree_entry>())) as u32;
 
 pub fn iblock(i: usize, sb: &Xv6fsSB) -> usize {
     i / IPB + sb.inodestart as usize
@@ -109,6 +108,7 @@ pub struct Htree_root {
     pub dot: Xv6fsDirent,
     pub dotdot: Xv6fsDirent,
     pub depth: u32,
+    pub blocks: u32,
     pub ind_entries: u32,
 }
 
@@ -118,6 +118,7 @@ impl Htree_root {
             dot: Xv6fsDirent::new(),
             dotdot: Xv6fsDirent::new(),
             depth: 0,
+            blocks: 0,
             ind_entries: 0,
         }
     }
