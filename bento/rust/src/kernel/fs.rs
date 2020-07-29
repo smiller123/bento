@@ -9,9 +9,6 @@ use kernel::ffi::*;
 use kernel::kobj::*;
 use kernel::raw::*;
 
-use core::cell::UnsafeCell;
-
-
 use crate::std::os::unix::io::*;
 
 use crate::libc;
@@ -68,7 +65,7 @@ pub fn blkdev_issue_flush_rust(
 
 #[derive(Debug)]
 pub struct BlockDevice {
-    bdev: RsBlockDevice,
+    pub bdev: RsBlockDevice,
     bsize: u32,
 }
 
@@ -115,116 +112,3 @@ impl AsRawFd for BlockDevice {
         self.bdev.bd_dev() as RawFd
     }
 }
-
-
-
-
-/// Wrapper around the kernel `journal_t`.
-#[derive(Debug)]
-pub struct Journal {
-    journal: UnsafeCell<RsJournal>,
-}
-
-/// Wrapper around the kernel `handle_t`.
-#[derive(Debug)]
-pub struct Handle {
-    handle: UnsafeCell<RsHandle>,
-}
-
-impl Journal {
-    pub fn new(bdev: &BlockDevice, fs_dev: &BlockDevice, start: u64, len: i32, bsize: i32) -> Option<Journal> {
-        println!("initializing journal");
-
-        let journal;
-        unsafe {
-            journal = rs_jbd2_journal_init_dev(bdev.bdev.get_raw() as *const c_void, 
-                                                fs_dev.bdev.get_raw() as *const c_void, 
-                                                start, 
-                                                len, 
-                                                bsize);
-        }
-        if journal.is_null() {
-            return None;
-        } else {
-            unsafe {
-                // TODO call jbd2_journal_load
-                if rs_jbd2_journal_load(journal) != 0 {
-                    return None;
-                }
-
-                return Some(Journal { 
-                    journal: UnsafeCell::new(RsJournal::from_raw(journal as *const c_void)),
-                });
-            }
-        }
-    }
-
-    // begin transaction of size blocks
-    pub fn begin_op(&self, blocks: u32) -> Handle {
-        let handle;
-        //println!("begin {}", blocks);
-        unsafe {
-            handle = rs_jbd2_journal_start((*self.journal.get()).get_raw() as *const c_void, blocks as i32)
-        }
-        if handle.is_null() {
-            panic!("transaction begin failed")
-        } else {
-            unsafe {
-                return Handle {
-                    handle: UnsafeCell::new(RsHandle::from_raw(handle as *const c_void)),
-                };
-            }
-        }
-    }
-
-    // force completed transactions to write to disk
-    pub fn force_commit(&self) -> i32 {
-        unsafe {
-            return rs_jbd2_journal_force_commit((*self.journal.get()).get_raw() as *const c_void);
-        }
-    }
-
-    pub fn destroy(&self) {
-        println!("destroy journal");
-        unsafe {
-            //self.force_commit();
-            rs_jbd2_journal_destroy((*self.journal.get()).get_raw() as *const c_void);
-        }
-    }
-}
-
-impl Handle {
-    // notify intent to modify BufferHead as a part of this transaction
-    pub fn get_write_access(&self, bh: &BufferHead) -> i32 {
-        unsafe {
-            return rs_jbd2_journal_get_write_access((*self.handle.get()).get_raw() as *const c_void, bh.get_raw());
-        }
-    }
-
-    // register a block as part of the transaction associated with this handle
-    pub fn journal_write(&self, bh: &BufferHead) -> i32 {
-        unsafe {
-            return rs_jbd2_journal_dirty_metadata((*self.handle.get()).get_raw() as *const c_void, bh.get_raw());
-        }
-    }
-}
-
-// ends transaction
-impl Drop for Handle {
-    fn drop(&mut self) {
-        let res;
-        unsafe {
-            res = rs_jbd2_journal_stop((*self.handle.get()).get_raw() as *const c_void);
-        }
-        if res == 0 {
-            //println!("drop handle");
-             ()
-        } else {
-             println!("some log transaction was aborted");
-             //TODO 
-             loop {};
-        }
-    }
-}
-
-unsafe impl Sync for Journal {}

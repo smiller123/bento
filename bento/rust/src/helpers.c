@@ -70,6 +70,12 @@ rs_buffer_head_get_b_size(void* bh) {
     return buffer_head->b_size;
 }
 
+size_t
+rs_buffer_head_get_b_blocknr(void* bh) {
+    struct buffer_head* buffer_head = (struct buffer_head*) bh;
+    return buffer_head->b_blocknr;
+}
+
 struct wait_queue_head* rs_get_wait_queue_head(void) {
 	struct wait_queue_head* wq_head = kmalloc(sizeof(struct wait_queue_head), GFP_KERNEL);
 	init_waitqueue_head(wq_head);
@@ -106,20 +112,6 @@ void rs_ndelay(unsigned long x) {
     ndelay(x);
 }
 
-void print_bdev(struct block_device *bdev) {
-    printk(KERN_INFO "bd_dev: %u\n", bdev->bd_dev);
-    printk(KERN_INFO "bd_openers: %i\n", bdev->bd_openers);
-    printk(KERN_INFO "bd_inode: %p\n", bdev->bd_inode);
-    printk(KERN_INFO "bd_super: %p\n", bdev->bd_super);
-    //printk("****  super block\n");
-    //rs_dump_super_block(bdev->bd_super);
-    printk(KERN_INFO "bd_block_size: %u\n", bdev->bd_block_size);
-    /*printk(KERN_INFO "hi\n");
-    printk(KERN_INFO "hi\n");
-    printk(KERN_INFO "hi\n");*/
-}
-
-
 int journal_get_superblock(journal_t *journal);
 
 // TODO journal
@@ -131,10 +123,8 @@ journal_t* rs_jbd2_journal_init_dev(struct block_device *bdev,
     journal_t *journal = jbd2_journal_init_dev(bdev, fs_dev, start, len, bsize);
     journal->j_max_transaction_buffers = journal->j_maxlen / 4;
 
-    printk(KERN_INFO "block no: %u\n", journal->j_sb_buffer->b_blocknr);
     printk(KERN_INFO "journal max_len: %u\n", journal->j_maxlen);
     printk(KERN_INFO "journal max transactions: %u\n", journal->j_max_transaction_buffers);
-    printk(KERN_INFO "journal: %p\n", journal);
 
     return journal; 
 }
@@ -171,13 +161,10 @@ int rs_jbd2_journal_force_commit(journal_t *journal) {
     return jbd2_journal_force_commit(journal);
 }
 
-
-
 int journal_get_superblock(journal_t *journal)
 {
 	struct buffer_head *bh;
 	journal_superblock_t *sb;
-	int err = -EIO;
 
     printk(KERN_INFO "in get_sb\n");
 

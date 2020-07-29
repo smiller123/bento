@@ -40,6 +40,7 @@ void rsect(uint sec, void *buf);
 uint ialloc(ushort type);
 void iappend(uint inum, void *p, int n);
 void init_journal_sb();
+//int journal_sb_checksum(journal_superblock_t *jsb);
 
 // convert to intel byte order
 ushort
@@ -319,20 +320,43 @@ void init_journal_sb() {
   char buf[BSIZE];
   journal_superblock_t jsb;
   jsb.s_header.h_magic = htonl(JBD2_MAGIC_NUMBER);
-  jsb.s_header.h_blocktype = htonl(JBD2_SUPERBLOCK_V1);
+  jsb.s_header.h_blocktype = htonl(JBD2_SUPERBLOCK_V2);
 
   jsb.s_blocksize = htonl(BSIZE);
   jsb.s_maxlen = htonl(1032);
-  jsb.s_first = htonl(8);  // TODO pretty sure this is relative blocknum to logstart
+  jsb.s_first = htonl(8);
   jsb.s_sequence = htonl(1);
   jsb.s_nr_users = htonl(1);
   jsb.s_max_transaction = htonl(32);
   jsb.s_max_trans_data = htonl(32);
 
+  jsb.s_feature_compat = htonl(JBD2_FEATURE_COMPAT_CHECKSUM);
+  //jsb.s_feature_incompat = htonl(JBD2_FEATURE_INCOMPAT_ASYNC_COMMIT);
+  //jsb.s_checksum = 
+  //jsb.s_checksum_type = JBD2_CRC32C_CHKSUM;
+  //jsb.s_checksum = htonl(journal_sb_checksum(&jsb));
+
   memset(buf, 0, sizeof(buf));
   memmove(buf, &jsb,sizeof(jsb));
-
-  printf("%hhx %hhx %hhx %hhx\n", buf[0], buf[1], buf[2], buf[3]);
   
   wsect(2, buf);
 }
+
+/*int journal_sb_checksum(journal_superblock_t *jsb) {
+  struct {
+		struct shash_desc shash;
+		char ctx[JBD_MAX_CHECKSUM_SIZE];
+	} desc;
+
+  struct crypto_shash driver = crypto_alloc_shash("crc32c", 0, 0);
+
+  desc.shash.tfm = 0;//TODO;
+	*(uint32_t *)desc.ctx = ~0;
+
+	crypto_shash_update(&desc.shash, jsb, sizeof(journal_superblock_t));
+	return *(uint32_t *) desc.ctx;
+  //u32 crc = crc32c(crc, jsb, sizeof(journal_superblock_t));
+  //return crc;
+}*/
+
+

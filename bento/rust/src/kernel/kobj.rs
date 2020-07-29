@@ -11,7 +11,6 @@ use kernel::raw::*;
 
 use core::slice;
 
-use bindings::*;
 
 use crate::libc;
 
@@ -36,6 +35,8 @@ def_kernel_obj_type!(RsHandle);
 
 def_kernel_val_getter!(BufferHead, b_data, buffer_head, *const c_void);
 def_kernel_val_getter!(BufferHead, b_size, buffer_head, c_size_t);
+def_kernel_val_getter!(BufferHead, b_blocknr, buffer_head, c_size_t);
+
 
 use kernel::ffi::*;
 
@@ -194,6 +195,10 @@ impl BufferHead {
         unsafe {
             return slice::from_raw_parts_mut::<c_uchar>(b_data as *mut c_uchar, size as usize);
         }
+    }
+
+    pub fn blocknr(&self) -> u64 {
+        return self.b_blocknr();
     }
 }
 

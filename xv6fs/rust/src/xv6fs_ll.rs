@@ -35,6 +35,7 @@ use fuse::consts::*;
 use fuse::*;
 
 use bento::kernel::fs::*;
+use bento::kernel::journal::*;
 
 use crate::println;
 
@@ -63,7 +64,7 @@ impl BentoFilesystem for Xv6FileSystem {
     }
 
     fn bento_destroy(&mut self, _req: &Request) {
-        println!("bento destroy *****************************************************");
+        println!("journal clean up");
         self.log.as_ref().unwrap().destroy();
     }
 
@@ -159,7 +160,7 @@ impl BentoFilesystem for Xv6FileSystem {
         }
 
         if flags & libc::O_TRUNC as u32 != 0 {
-            let handle = log.begin_op(1);
+            let handle = log.begin_op(2, "open");
             internals.size = 0;
             if let Err(x) = self.iupdate(&internals, inode.inum, &handle) {
                 reply.error(x);
@@ -264,8 +265,7 @@ impl BentoFilesystem for Xv6FileSystem {
         _flags: Option<u32>,
         reply: ReplyAttr,
     ) {
-        let log = self.log.as_ref().unwrap();
-        let _handle = log.begin_op(1); // TODO check size
+        
         let inode = match self.iget(ino) {
             Ok(x) => x,
             Err(x) => {
@@ -435,10 +435,10 @@ impl BentoFilesystem for Xv6FileSystem {
         let n = data.len();
         let mut off = offset as usize;
         let mut file_off = 0;
-        let nblocks = 1 + 1 + 2 + Ord::max(1, (off + n + BSIZE - 1)/BSIZE - off/BSIZE);
+        let nblocks = 1 + 1 + 2 + (off + n + BSIZE - 1)/BSIZE - off/BSIZE;
         while i < n {
             let log = self.log.as_ref().unwrap();
-            let handle = log.begin_op(nblocks as u32);
+            let handle = log.begin_op(MAXOPBLOCKS as u32, "write");
             let inode = match self.iget(nodeid) {
                 Ok(x) => x,
                 Err(x) => {
@@ -623,7 +623,7 @@ impl BentoFilesystem for Xv6FileSystem {
     ) {
         // Check if the file already exists
         let log = self.log.as_ref().unwrap();
-        let handle = log.begin_op(5);
+        let handle = log.begin_op(5, "create");
         let child = match self.create_internal(parent, T_FILE, name, &handle) {
             Ok(x) => x,
             Err(x) => {
@@ -672,7 +672,8 @@ impl BentoFilesystem for Xv6FileSystem {
         reply: ReplyEntry,
     ) {
         let log = self.log.as_ref().unwrap();
-        let handle = log.begin_op(MAXOPBLOCKS as u32);
+        //println!("mkdir");
+        let handle = log.begin_op(MAXOPBLOCKS as u32, "mkdir");
         let child = match self.create_internal(parent, T_DIR, &name, &handle) {
             Ok(x) => x,
             Err(x) => {
@@ -719,7 +720,8 @@ impl BentoFilesystem for Xv6FileSystem {
         reply: ReplyEmpty,
     ) {
         let log = self.log.as_ref().unwrap();
-        let handle = log.begin_op(MAXOPBLOCKS as u32);
+        //println!("rmdir");
+        let handle = log.begin_op(MAXOPBLOCKS as u32, "rmdir");
         match self.dounlink(parent, name, &handle) {
             Ok(_) => reply.ok(),
             Err(x) => reply.error(x),
@@ -734,7 +736,8 @@ impl BentoFilesystem for Xv6FileSystem {
         reply: ReplyEmpty,
     ) {
         let log = self.log.as_ref().unwrap();
-        let handle = log.begin_op(MAXOPBLOCKS as u32);
+        //println!("unlink");
+        let handle = log.begin_op(MAXOPBLOCKS as u32, "unlink");
         match self.dounlink(parent, name, &handle) {
             Ok(_) => reply.ok(),
             Err(x) => reply.error(x),
@@ -749,6 +752,7 @@ impl BentoFilesystem for Xv6FileSystem {
         _datasync: bool,
         reply: ReplyEmpty,
     ) {
+        println!("fsync");
         let log = self.log.as_ref().unwrap();
         log.force_commit();
         reply.ok();
@@ -763,7 +767,8 @@ impl BentoFilesystem for Xv6FileSystem {
         reply: ReplyEntry,
     ) {
         let log = self.log.as_ref().unwrap();
-        let handle = log.begin_op(MAXOPBLOCKS as u32);
+        //println!("symlink");
+        let handle = log.begin_op(MAXOPBLOCKS as u32, "symlink");
         // Create new file
         let child = match self.create_internal(nodeid, T_LNK, name, &handle) {
             Ok(x) => x,

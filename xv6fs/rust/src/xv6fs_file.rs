@@ -23,8 +23,7 @@ pub struct CachedInode<'a> {
 
 impl Drop for CachedInode<'_> {
     fn drop(&mut self) {
-        let handle = self.fs.log.as_ref().unwrap().begin_op(MAXOPBLOCKS as u32);
-        let _ = self.fs.iput(self, &handle);
+        let _ = self.fs.iput(self);
     }
 }
 

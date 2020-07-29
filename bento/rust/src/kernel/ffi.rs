@@ -245,6 +245,7 @@ extern "C" {
     // fs
     pub fn rs_buffer_head_get_b_data(bh: *const raw::c_void) -> *const raw::c_void;
     pub fn rs_buffer_head_get_b_size(bh: *const raw::c_void) -> raw::c_size_t;
+    pub fn rs_buffer_head_get_b_blocknr(bh: *const raw::c_void) -> raw::c_size_t;
 
     pub fn rs_block_device_get_bd_dev(bdev: *const raw::c_void) -> u32;
 
