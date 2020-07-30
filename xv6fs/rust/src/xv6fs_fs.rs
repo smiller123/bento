@@ -1233,13 +1233,14 @@ impl Xv6FileSystem {
                 de.dump_into(leaf_idx_slice).map_err(|_| libc::EIO)?;
                 idx += 1;
             }
+            let write_size = idx * de_len as usize;
             if self.writei(
                 leaf_slice,
                 leaf_idx as usize * BSIZE,
-                BSIZE,
+                write_size,
                 internals,
                 parent_inum,
-            )? != BSIZE
+            )? != write_size
             {
                 return Err(libc::EIO);
             }
@@ -1255,13 +1256,14 @@ impl Xv6FileSystem {
                 de.dump_into(leaf_idx_slice).map_err(|_| libc::EIO)?;
                 idx += 1;
             }
+            let write_size = idx * de_len as usize;
             if self.writei(
                 leaf_slice,
                 (num_blocks + 1) * BSIZE,
-                BSIZE,
+                write_size,
                 internals,
                 parent_inum,
-            )? != BSIZE
+            )? != write_size
             {
                 return Err(libc::EIO);
             }
@@ -1302,13 +1304,14 @@ impl Xv6FileSystem {
                 ie.dump_into(ie_slice).map_err(|_| libc::EIO)?;
                 ie_idx += 1;
             }
+            let write_size = ie_idx * hentry_len as usize;
             if self.writei(
                 index_slice,
                 target_lblock as usize,
-                BSIZE,
+                write_size,
                 internals,
                 parent_inum,
-            )? != BSIZE
+            )? != write_size
             {
                 return Err(libc::EIO);
             }
@@ -1335,14 +1338,14 @@ impl Xv6FileSystem {
                         ie.dump_into(ie_slice).map_err(|_| libc::EIO)?;
                         ie_idx += 1;
                     }
-
+                    let write_size = ie_idx * hentry_len as usize;
                     if self.writei(
                         index_slice,
                         target_lblock as usize,
-                        BSIZE,
+                        write_size,
                         internals,
                         parent_inum,
-                    )? != BSIZE
+                    )? != write_size
                     {
                         return Err(libc::EIO);
                     }
@@ -1370,14 +1373,14 @@ impl Xv6FileSystem {
                         ie.dump_into(ie_slice).map_err(|_| libc::EIO)?;
                         ie_idx += 1;
                     }
-
+                    let write_size = ie_idx * hentry_len as usize;
                     if self.writei(
                         index_slice,
                         num_blocks + 2 as usize,
-                        BSIZE,
+                        write_size,
                         internals,
                         parent_inum,
-                    )? != BSIZE
+                    )? != write_size
                     {
                         return Err(libc::EIO);
                     }
@@ -1412,8 +1415,10 @@ impl Xv6FileSystem {
                         rie.dump_into(rie_slice).map_err(|_| libc::EIO)?;
                         rie_idx += 1;
                     }
-
-                    if self.writei(root_arr_slice, 0, BSIZE, internals, parent_inum)? != BSIZE {
+                    let write_size = hroot_len + hentry_len * rie_idx as usize;
+                    if self.writei(root_arr_slice, 0, write_size, internals, parent_inum)?
+                        != write_size
+                    {
                         return Err(libc::EIO);
                     }
                 }
