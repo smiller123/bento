@@ -501,21 +501,52 @@ impl BentoFilesystem for Xv6FileSystem {
             reply.error(libc::ENOTDIR);
             return;
         }
-
+        let hroot_len = mem::size_of::<Htree_root>();
+        let hindex_len = mem::size_of::<Htree_index>();
+        let hentry_len = mem::size_of::<Htree_entry>();
         let de_len = mem::size_of::<Xv6fsDirent>();
-        let mut de_vec: Vec<u8> = vec![0; de_len];
-
+        let mut hroot_vec: Vec<u8> = vec![0; hroot_len];
         let mut buf_off = 1;
         let mut inarg_offset = offset as usize;
-        for off in (0..internals.size).step_by(de_len) {
-            if inarg_offset >= 1 {
-                inarg_offset -= 1;
-                buf_off += 1;
-                continue;
+        let hroot_slice = hroot_vec.as_mut_slice();
+
+        // try reading directory root
+        let mut root = Htree_root::new();
+        match self.readi(hroot_slice, 0, hroot_len, &mut internals) {
+            Ok(x) if x != hroot_len => {
+                reply.error(1);
+                return;
             }
-            let de_slice = de_vec.as_mut_slice();
-            match self.readi(de_slice, off as usize, de_len, &mut internals) {
-                Ok(x) if x != de_len => {
+            Err(x) => {
+                reply.error(x);
+                return;
+            }
+            _ => {}
+        };
+        if root.extract_from(hroot_slice).is_err() {
+            reply.error(libc::EIO);
+            return;
+        }
+
+        let num_indeces = root.ind_entries;
+        if num_indeces == 0 {
+            // TODO double check
+            reply.ok();
+            return;
+        }
+
+        let mut hie_vec: Vec<u8> = vec![0; hentry_len];
+        let hie_slice = hie_vec.as_mut_slice();
+
+        // check the index pointers stored in the root
+        for off in (hroot_len..(num_indeces as usize * hentry_len) + hroot_len).step_by(hentry_len)
+        {
+            if off >= BSIZE {
+                break;
+            }
+            let mut hie = Htree_entry::new();
+            match self.readi(hie_slice, off as usize, hentry_len, &mut internals) {
+                Ok(x) if x != hentry_len => {
                     reply.error(1);
                     return;
                 }
@@ -524,63 +555,141 @@ impl BentoFilesystem for Xv6FileSystem {
                     return;
                 }
                 _ => {}
-            };
-            let mut de = Xv6fsDirent::new();
-            if de.extract_from(de_slice).is_err() {
-                reply.error(libc::EIO);
-                return;
             }
-            let mut de = Xv6fsDirent::new();
-            if de.extract_from(de_slice).is_err() {
+            if hie.extract_from(hie_slice).is_err() {
                 reply.error(libc::EIO);
                 return;
             }
 
-            if de.inum == 0 {
+            // check the index block for entries
+            let mut ind_arr_vec: Vec<u8> = vec![0; BSIZE];
+            let ind_arr_slice = ind_arr_vec.as_mut_slice();
+            match self.readi(
+                ind_arr_slice,
+                BSIZE * hie.block as usize,
+                BSIZE,
+                &mut internals,
+            ) {
+                Ok(x) if x != BSIZE => {
+                    reply.error(1);
+                    return;
+                }
+                Err(x) => {
+                    reply.error(x);
+                    return;
+                }
+                _ => {}
+            }
+
+            let ind_header_slice = &mut ind_arr_slice[0..hindex_len];
+            let mut index = Htree_index::new();
+            if index.extract_from(ind_header_slice).is_err() {
+                reply.error(libc::EIO);
+                return;
+            }
+
+            let num_entries = index.entries;
+
+            if num_entries == 0 {
                 continue;
             }
-            let i_type;
-            if de.inum as u64 == nodeid {
-                i_type = FileType::Directory;
-            } else {
-                let entry = match self.iget(de.inum as u64) {
-                    Ok(x) => x,
-                    Err(x) => {
-                        reply.error(x);
-                        return;
-                    }
-                };
 
-                let entry_inode_guard = match self.ilock(entry.idx, &icache, de.inum) {
-                    Ok(x) => x,
+            // check all leaf nodes
+            for ine_idx in
+                (hindex_len..hindex_len + (hentry_len * index.entries as usize)).step_by(hentry_len)
+            {
+                let ine_slice = &mut ind_arr_slice[ine_idx..ine_idx + hentry_len];
+                let mut ine = Htree_entry::new();
+                if ine.extract_from(ine_slice).is_err() {
+                    reply.error(libc::EIO);
+                    return;
+                }
+                let dblock_off = ine.block;
+                if dblock_off == 0 {
+                    continue;
+                }
+                let mut de_block_vec: Vec<u8> = vec![0; BSIZE];
+                let de_block_slice = de_block_vec.as_mut_slice();
+
+                match self.readi(
+                    de_block_slice,
+                    BSIZE * dblock_off as usize,
+                    BSIZE,
+                    &mut internals,
+                ) {
+                    Ok(x) if x != BSIZE => {
+                        reply.error(1);
+                        return;
+                    }
                     Err(x) => {
                         reply.error(x);
                         return;
                     }
-                };
-                let entry_internals = match entry_inode_guard.internals.read() {
-                    Ok(x) => x,
-                    Err(_) => {
+                    _ => {}
+                }
+
+                // check dirents in leaf node
+                for de_off in (0..BSIZE).step_by(de_len) {
+                    if inarg_offset >= 1 {
+                        inarg_offset -= 1;
+                        buf_off += 1;
+                        continue;
+                    }
+                    let de_slice = &mut de_block_slice[de_off..de_off + de_len];
+                    let mut de = Xv6fsDirent::new();
+                    if de.extract_from(de_slice).is_err() {
                         reply.error(libc::EIO);
                         return;
                     }
-                };
 
-                i_type = match entry_internals.inode_type {
-                    T_DIR => FileType::Directory,
-                    T_LNK => FileType::Symlink,
-                    _ => FileType::RegularFile,
-                };
-            }
+                    if de.inum == 0 {
+                        continue;
+                    }
 
-            let name_str = match str::from_utf8(&de.name) {
-                Ok(x) => x,
-                Err(_) => "",
-            };
-            if reply.add(de.inum as u64, buf_off, i_type, name_str) {
-                break;
+                    let i_type;
+                    if de.inum as u64 == nodeid {
+                        i_type = FileType::Directory;
+                    } else {
+                        let entry = match self.iget(de.inum as u64) {
+                            Ok(x) => x,
+                            Err(x) => {
+                                reply.error(x);
+                                return;
+                            }
+                        };
+
+                        let entry_inode_guard = match self.ilock(entry.idx, &icache, de.inum) {
+                            Ok(x) => x,
+                            Err(x) => {
+                                reply.error(x);
+                                return;
+                            }
+                        };
+                        let entry_internals = match entry_inode_guard.internals.read() {
+                            Ok(x) => x,
+                            Err(_) => {
+                                reply.error(libc::EIO);
+                                return;
+                            }
+                        };
+
+                        i_type = match entry_internals.inode_type {
+                            T_DIR => FileType::Directory,
+                            T_LNK => FileType::Symlink,
+                            _ => FileType::RegularFile,
+                        };
+                    }
+
+                    let name_str = match str::from_utf8(&de.name) {
+                        Ok(x) => x,
+                        Err(_) => "",
+                    };
+                    if reply.add(de.inum as u64, buf_off, i_type, name_str) {
+                        break;
+                    }
+                    buf_off += 1;
+                }
             }
-            buf_off += 1;
         }
         reply.ok();
     }
@@ -901,6 +1010,7 @@ impl Xv6FileSystem {
         let hroot_len = mem::size_of::<Htree_root>();
         let hindex_len = mem::size_of::<Htree_index>();
         let hentry_len = mem::size_of::<Htree_entry>();
+        let de_len = mem::size_of::<Xv6fsDirent>();
         let mut hroot_vec: Vec<u8> = vec![0; hroot_len];
 
         let hroot_slice = hroot_vec.as_mut_slice();
@@ -937,19 +1047,60 @@ impl Xv6FileSystem {
             hie.extract_from(hie_slice).map_err(|_| libc::EIO)?;
 
             // check the index block for entries
-            let mut ind_vec: Vec<u8> = vec![0; hindex_len];
-            let ind_slice = ind_vec.as_mut_slice();
-            let mut index = Htree_index::new();
-            match self.readi(ind_slice, BSIZE * hie.block as usize, hindex_len, internals) {
-                Ok(x) if x != hindex_len => return Err(libc::EIO),
+            let mut ind_arr_vec: Vec<u8> = vec![0; BSIZE];
+            let ind_arr_slice = ind_arr_vec.as_mut_slice();
+            match self.readi(ind_arr_slice, BSIZE * hie.block as usize, BSIZE, internals) {
+                Ok(x) if x != BSIZE => return Err(libc::EIO),
                 Err(x) => return Err(x),
                 _ => {}
             }
-            index.extract_from(ind_slice).map_err(|_| libc::EIO)?;
 
-            // TODO: probably need to check the actual direntries in the leaf blocks pointed by the htree_indeces
-            if index.entries != 0 {
+            let ind_header_slice = &mut ind_arr_slice[0..hindex_len];
+            let mut index = Htree_index::new();
+            index
+                .extract_from(ind_header_slice)
+                .map_err(|_| libc::EIO)?;
+
+            let num_entries = index.entries;
+            if num_entries != 0 {
                 return Ok(false);
+            }
+
+            // check all leaf nodes
+            for ine_idx in
+                (hindex_len..hindex_len + (hentry_len * index.entries as usize)).step_by(hentry_len)
+            {
+                let ine_slice = &mut ind_arr_slice[ine_idx..ine_idx + hentry_len];
+                let mut ine = Htree_entry::new();
+                ine.extract_from(ine_slice).map_err(|_| libc::EIO)?;
+                let dblock_off = ine.block;
+                if dblock_off == 0 {
+                    continue;
+                }
+                let mut de_block_vec: Vec<u8> = vec![0; BSIZE];
+                let de_block_slice = de_block_vec.as_mut_slice();
+
+                match self.readi(
+                    de_block_slice,
+                    BSIZE * dblock_off as usize,
+                    BSIZE,
+                    internals,
+                ) {
+                    Ok(x) if x != BSIZE => return Err(libc::EIO),
+                    Err(x) => return Err(x),
+                    _ => {}
+                }
+
+                // check dirents in leaf node
+                for de_off in (0..BSIZE).step_by(de_len) {
+                    let de_slice = &mut de_block_slice[de_off..de_off + de_len];
+                    let mut de = Xv6fsDirent::new();
+                    de.extract_from(de_slice).map_err(|_| libc::EIO);
+
+                    if de.inum != 0 {
+                        return Ok(false);
+                    }
+                }
             }
         }
 
