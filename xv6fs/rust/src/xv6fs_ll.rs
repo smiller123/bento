@@ -35,7 +35,7 @@ use fuse::consts::*;
 
 use fuse::*;
 
-//use println;
+use crate::println;
 
 use std::ffi::OsStr;
 use std::path::Path;
@@ -471,6 +471,7 @@ impl BentoFilesystem for Xv6FileSystem {
         offset: i64,
         mut reply: ReplyDirectory,
     ) {
+        println!("readdir");
         // Get inode number nodeid
         let inode = match self.iget(nodeid) {
             Ok(x) => x,
@@ -511,6 +512,7 @@ impl BentoFilesystem for Xv6FileSystem {
         let hroot_slice = hroot_vec.as_mut_slice();
 
         // try reading directory root
+        println!("reading root..");
         let mut root = Htree_root::new();
         match self.readi(hroot_slice, 0, hroot_len, &mut internals) {
             Ok(x) if x != hroot_len => {
@@ -537,7 +539,7 @@ impl BentoFilesystem for Xv6FileSystem {
 
         let mut hie_vec: Vec<u8> = vec![0; hentry_len];
         let hie_slice = hie_vec.as_mut_slice();
-
+        println!("reading root index pointers..");
         // check the index pointers stored in the root
         for off in (hroot_len..(num_indeces as usize * hentry_len) + hroot_len).step_by(hentry_len)
         {
@@ -593,7 +595,7 @@ impl BentoFilesystem for Xv6FileSystem {
             if num_entries == 0 {
                 continue;
             }
-
+            println!("reading leaf nodes..");
             // check all leaf nodes
             for ine_idx in
                 (hindex_len..hindex_len + (hentry_len * index.entries as usize)).step_by(hentry_len)
@@ -684,6 +686,7 @@ impl BentoFilesystem for Xv6FileSystem {
                         Ok(x) => x,
                         Err(_) => "",
                     };
+                    println!("current dirent name: {}", name_str);
                     if reply.add(de.inum as u64, buf_off, i_type, name_str) {
                         break;
                     }
@@ -753,6 +756,9 @@ impl BentoFilesystem for Xv6FileSystem {
         _mode: u32,
         reply: ReplyEntry,
     ) {
+        println!("bento_mkdir");
+
+        println!("begin op.. child..");
         let log = self.log.as_ref().unwrap();
         let _guard = log.begin_op();
         let child = match self.create_internal(parent, T_DIR, &name) {
@@ -762,7 +768,8 @@ impl BentoFilesystem for Xv6FileSystem {
                 return;
             }
         };
-
+        println!("Ok");
+        println!("inode_guard..");
         let icache = self.ilock_cache.as_ref().unwrap();
         let inode_guard = match self.ilock(child.idx, &icache, child.inum) {
             Ok(x) => x,
@@ -771,14 +778,17 @@ impl BentoFilesystem for Xv6FileSystem {
                 return;
             }
         };
+        println!("Ok");
+        println!("internals..");
         let internals = match inode_guard.internals.read() {
             Ok(x) => x,
             Err(_) => {
+                println!("internal..FAILED");
                 reply.error(libc::EIO);
                 return;
             }
         };
-
+        println!("Ok");
         let out_nodeid = child.inum as u64;
         let generation = 0;
         let attr_valid = Timespec::new(1, 999999999);
@@ -966,7 +976,7 @@ impl Xv6FileSystem {
         name: &OsStr,
     ) -> Result<CachedInode<'a>, libc::c_int> {
         // Get inode for parent directory
-
+        println!("creating internal node");
         let parent = self.iget(nodeid)?;
         let icache = self.ilock_cache.as_ref().unwrap();
         // Get inode for new file
@@ -993,6 +1003,7 @@ impl Xv6FileSystem {
         self.iupdate(&internals, inode.inum)?;
 
         if itype == T_DIR {
+            println!("..creating directory");
             parent_internals.nlink += 1;
             self.iupdate(&parent_internals, parent.inum)?;
             let d = OsStr::new(".");
@@ -1003,10 +1014,12 @@ impl Xv6FileSystem {
         }
 
         self.dirlink(&mut parent_internals, name, inode.inum, parent.inum)?;
+        println!("");
         return Ok(inode);
     }
 
     fn isdirempty(&self, internals: &mut InodeInternal) -> Result<bool, libc::c_int> {
+        println!("isdirempty..");
         let hroot_len = mem::size_of::<Htree_root>();
         let hindex_len = mem::size_of::<Htree_index>();
         let hentry_len = mem::size_of::<Htree_entry>();
@@ -1103,7 +1116,7 @@ impl Xv6FileSystem {
                 }
             }
         }
-
+        println!("");
         return Ok(true);
     }
 
