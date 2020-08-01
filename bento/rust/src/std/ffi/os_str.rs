@@ -75,6 +75,12 @@ impl OsStr {
     pub fn len(&self) -> usize {
         self.inner.inner.len()
     }
+
+    pub fn calculate_hash(&self) -> u32 {
+        let mut s = SliceHasher::new();
+        self.inner.hash(&mut s);
+        s.finish()
+    }
 }
 
 impl AsRef<OsStr> for str {
