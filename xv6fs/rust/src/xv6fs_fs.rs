@@ -915,10 +915,7 @@ impl Xv6FileSystem {
         let hindex_len = mem::size_of::<Htree_index>();
         let hentry_len = mem::size_of::<Htree_entry>();
         let de_len = mem::size_of::<Xv6fsDirent>();
-        println!(
-            "hroot_len: {}, hindex_len: {}, hentry_len: {}, de_len: {}",
-            hroot_len, hindex_len, hentry_len, de_len,
-        );
+
         let mut hroot_arr_vec: Vec<u8> = vec![0; BSIZE];
 
         let search_name = match name.to_str() {
@@ -948,14 +945,7 @@ impl Xv6FileSystem {
             "extracted root node - depth: {}, num_indeces: {}, num_blocks: {}",
             root.depth, num_indeces, num_blocks
         );
-        // println!(
-        //     " root '.' - hash: {}, block: {}",
-        //     root.dot.name_hash, root.dot.block
-        // );
-        // println!(
-        //     " root '..' - hash: {}, block: {}",
-        //     root.dotdot.name_hash, root.dotdot.block
-        // );
+
         // dirent to be written to leaf node
         let mut de = Xv6fsDirent::new();
         let mut de_vec: Vec<u8> = vec![0; de_len];
@@ -1083,6 +1073,7 @@ impl Xv6FileSystem {
             // update root info
             root.depth = 2;
             root.ind_entries = 1;
+            root.blocks = 3;
             println!(
                 "..updating root - depth: {}, ind_entries: {}",
                 root.depth, root.ind_entries
@@ -1097,7 +1088,7 @@ impl Xv6FileSystem {
 
         println!("..directory is not empty");
         // directory is not empty
-        let mut index_vec: Vec<Htree_entry> = Vec::with_capacity(num_indeces as usize);
+        let mut index_vec: Vec<Htree_entry> = Vec::with_capacity((num_indeces + 1) as usize);
         println!("..adding root indences to vec");
         for rie_idx in 0..num_indeces {
             println!("rie_idx: {}", rie_idx);
@@ -1125,7 +1116,93 @@ impl Xv6FileSystem {
             index_vec.push(ie);
         }
         println!("..finding lower bound for root indeces");
-        // look for correct index node
+        // case: new hash < lowest hash value in root entries
+        if target_hash < index_vec[0].name_hash {
+            let rie_offset = hroot_len;
+            let index_offset = num_blocks * BSIZE;
+            let ine_offset = index_offset + hindex_len;
+            let de_offset = (num_blocks + 1) * BSIZE;
+
+            // do write
+
+            let mut index = Htree_index::new();
+            let mut index_bvec: Vec<u8> = vec![0; hindex_len];
+            let index_slice = index_bvec.as_mut_slice();
+            index.entries = 1 as u32;
+            println!(
+                "..writing index with entries #: {} at off: {}",
+                index.entries, index_offset
+            );
+            index.dump_into(index_slice).map_err(|_| libc::EIO)?;
+
+            if self.writei(
+                index_slice,
+                index_offset,
+                hindex_len,
+                internals,
+                parent_inum,
+            )? != hindex_len
+            {
+                return Err(libc::EIO);
+            }
+
+            // create entry in index node
+            let mut ine = Htree_entry::new();
+            let mut ine_vec: Vec<u8> = vec![0; hentry_len];
+            let ine_slice = ine_vec.as_mut_slice();
+            ine.name_hash = target_hash;
+            ine.block = (de_offset / BSIZE) as u32;
+
+            println!(
+                "..writing ine with hash: {}, block: {} at off: {}",
+                ine.name_hash, ine.block, ine_offset
+            );
+            ine.dump_into(ine_slice).map_err(|_| libc::EIO)?;
+
+            if self.writei(ine_slice, ine_offset, hentry_len, internals, parent_inum)? != hentry_len
+            {
+                return Err(libc::EIO);
+            }
+
+            if self.writei(de_slice, de_offset, de_len, internals, parent_inum)? != de_len {
+                return Err(libc::EIO);
+            }
+
+            // update root info and add new entry
+            let root2_slice = &mut root_arr_slice[0..hroot_len];
+            root.ind_entries += 1;
+
+            root.dump_into(root2_slice).map_err(|_| libc::EIO)?;
+            let mut rie = Htree_entry::new();
+            // let rie_slice = rie_vec.as_mut_slice();
+            // rie.extract_from(rie_slice).map_err(|_| libc::EIO)?;
+            rie.name_hash = target_hash;
+            rie.block = (index_offset / BSIZE) as u32;
+            index_vec.insert(0, rie);
+            println!(
+                "..writing rie with hash: {}, block: {} at off: {}",
+                rie.name_hash, rie.block, rie_offset
+            );
+
+            let mut rie_idx = 0;
+            while let Some(rie) = index_vec.pop() {
+                let rie_slice = &mut root_arr_slice[hroot_len + rie_idx as usize * hentry_len
+                    ..hroot_len + (rie_idx + 1) as usize * hentry_len];
+                rie.dump_into(rie_slice).map_err(|_| libc::EIO)?;
+                rie_idx += 1;
+            }
+            let write_size = hroot_len + hentry_len * rie_idx as usize;
+            if self.writei(root_arr_slice, 0, write_size, internals, parent_inum)? != write_size {
+                return Err(libc::EIO);
+            }
+
+            // if self.writei(root_slice, 0, hroot_len, internals, parent_inum)? != hroot_len {
+            //     return Err(libc::EIO);
+            // }
+            return Ok(0);
+        }
+
+        // look for correct index node block
         let ind_slice = index_vec.as_slice();
         let target_entry = match find_lowerbound(ind_slice, index_vec.len(), target_hash) {
             Some(index) => index,
@@ -1401,7 +1478,7 @@ impl Xv6FileSystem {
             let write_size = ie_idx * hentry_len as usize;
             if self.writei(
                 index_slice,
-                target_lblock as usize,
+                target_lblock as usize * BSIZE,
                 write_size,
                 internals,
                 parent_inum,
@@ -1436,7 +1513,7 @@ impl Xv6FileSystem {
                     let write_size = ie_idx * hentry_len as usize;
                     if self.writei(
                         index_slice,
-                        target_lblock as usize,
+                        target_lblock as usize * BSIZE,
                         write_size,
                         internals,
                         parent_inum,
@@ -1471,7 +1548,7 @@ impl Xv6FileSystem {
                     let write_size = ie_idx * hentry_len as usize;
                     if self.writei(
                         index_slice,
-                        num_blocks + 2 as usize,
+                        num_blocks + 2 as usize * BSIZE,
                         write_size,
                         internals,
                         parent_inum,
