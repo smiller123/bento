@@ -1023,7 +1023,7 @@ impl Xv6FileSystem {
             let rie_slice = rie_vec.as_mut_slice();
             // rie.extract_from(rie_slice).map_err(|_| libc::EIO)?;
             rie.name_hash = target_hash;
-            rie.block = index_offset as u32;
+            rie.block = (index_offset / BSIZE) as u32;
             println!(
                 "..writing rie with hash: {}, block: {} at off: {}",
                 rie.name_hash, rie.block, rie_offset
@@ -1063,7 +1063,7 @@ impl Xv6FileSystem {
             let ine_slice = ine_vec.as_mut_slice();
             // ine.extract_from(ine_slice).map_err(|_| libc::EIO)?;
             ine.name_hash = target_hash;
-            ine.block = de_offset as u32;
+            ine.block = (de_offset / BSIZE) as u32;
 
             println!(
                 "..writing ine with hash: {}, block: {} at off: {}",

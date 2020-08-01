@@ -476,6 +476,7 @@ impl BentoFilesystem for Xv6FileSystem {
         let inode = match self.iget(nodeid) {
             Ok(x) => x,
             Err(x) => {
+                println!("iget failed");
                 reply.error(x);
                 return;
             }
@@ -485,6 +486,7 @@ impl BentoFilesystem for Xv6FileSystem {
         let inode_guard = match self.ilock(inode.idx, &icache, inode.inum) {
             Ok(x) => x,
             Err(x) => {
+                println!("ilock failed");
                 reply.error(x);
                 return;
             }
@@ -492,6 +494,7 @@ impl BentoFilesystem for Xv6FileSystem {
         let mut internals = match inode_guard.internals.write() {
             Ok(x) => x,
             Err(_) => {
+                println!("write failed");
                 reply.error(libc::EIO);
                 return;
             }
@@ -499,6 +502,7 @@ impl BentoFilesystem for Xv6FileSystem {
 
         // Check if inode is directory
         if internals.inode_type != T_DIR {
+            println!("not dir failed");
             reply.error(libc::ENOTDIR);
             return;
         }
@@ -516,16 +520,19 @@ impl BentoFilesystem for Xv6FileSystem {
         let mut root = Htree_root::new();
         match self.readi(hroot_slice, 0, hroot_len, &mut internals) {
             Ok(x) if x != hroot_len => {
+                println!("not root len");
                 reply.error(1);
                 return;
             }
             Err(x) => {
+                println!("root len failed");
                 reply.error(x);
                 return;
             }
             _ => {}
         };
         if root.extract_from(hroot_slice).is_err() {
+            println!("root extract failed");
             reply.error(libc::EIO);
             return;
         }
@@ -549,16 +556,19 @@ impl BentoFilesystem for Xv6FileSystem {
             let mut hie = Htree_entry::new();
             match self.readi(hie_slice, off as usize, hentry_len, &mut internals) {
                 Ok(x) if x != hentry_len => {
+                println!("readi failed short");
                     reply.error(1);
                     return;
                 }
                 Err(x) => {
+                println!("readi failed");
                     reply.error(x);
                     return;
                 }
                 _ => {}
             }
             if hie.extract_from(hie_slice).is_err() {
+                println!("hie extract failed");
                 reply.error(libc::EIO);
                 return;
             }
@@ -573,10 +583,12 @@ impl BentoFilesystem for Xv6FileSystem {
                 &mut internals,
             ) {
                 Ok(x) if x != BSIZE => {
+                println!("readi 2 failed size");
                     reply.error(1);
                     return;
                 }
                 Err(x) => {
+                println!("readi 2 failed, reading block {}", hie.block);
                     reply.error(x);
                     return;
                 }
@@ -586,6 +598,7 @@ impl BentoFilesystem for Xv6FileSystem {
             let ind_header_slice = &mut ind_arr_slice[0..hindex_len];
             let mut index = Htree_index::new();
             if index.extract_from(ind_header_slice).is_err() {
+                println!("inode extract failed");
                 reply.error(libc::EIO);
                 return;
             }
@@ -603,6 +616,7 @@ impl BentoFilesystem for Xv6FileSystem {
                 let ine_slice = &mut ind_arr_slice[ine_idx..ine_idx + hentry_len];
                 let mut ine = Htree_entry::new();
                 if ine.extract_from(ine_slice).is_err() {
+                println!("ine (2?) extract failed");
                     reply.error(libc::EIO);
                     return;
                 }
@@ -619,11 +633,8 @@ impl BentoFilesystem for Xv6FileSystem {
                     BSIZE,
                     &mut internals,
                 ) {
-                    Ok(x) if x != BSIZE => {
-                        reply.error(1);
-                        return;
-                    }
                     Err(x) => {
+                println!("readi 3 failed");
                         reply.error(x);
                         return;
                     }
@@ -640,6 +651,7 @@ impl BentoFilesystem for Xv6FileSystem {
                     let de_slice = &mut de_block_slice[de_off..de_off + de_len];
                     let mut de = Xv6fsDirent::new();
                     if de.extract_from(de_slice).is_err() {
+                println!("de extract failed");
                         reply.error(libc::EIO);
                         return;
                     }
@@ -655,6 +667,7 @@ impl BentoFilesystem for Xv6FileSystem {
                         let entry = match self.iget(de.inum as u64) {
                             Ok(x) => x,
                             Err(x) => {
+                println!("iget next failed");
                                 reply.error(x);
                                 return;
                             }
@@ -663,6 +676,7 @@ impl BentoFilesystem for Xv6FileSystem {
                         let entry_inode_guard = match self.ilock(entry.idx, &icache, de.inum) {
                             Ok(x) => x,
                             Err(x) => {
+                println!("ilock next failed");
                                 reply.error(x);
                                 return;
                             }
@@ -670,6 +684,7 @@ impl BentoFilesystem for Xv6FileSystem {
                         let entry_internals = match entry_inode_guard.internals.read() {
                             Ok(x) => x,
                             Err(_) => {
+                println!("entry inode guard failed");
                                 reply.error(libc::EIO);
                                 return;
                             }
@@ -764,6 +779,7 @@ impl BentoFilesystem for Xv6FileSystem {
         let child = match self.create_internal(parent, T_DIR, &name) {
             Ok(x) => x,
             Err(x) => {
+                println!("create internal failed");
                 reply.error(x);
                 return;
             }
@@ -774,6 +790,7 @@ impl BentoFilesystem for Xv6FileSystem {
         let inode_guard = match self.ilock(child.idx, &icache, child.inum) {
             Ok(x) => x,
             Err(x) => {
+                println!("ilock failed");
                 reply.error(x);
                 return;
             }
