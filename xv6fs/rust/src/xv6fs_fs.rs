@@ -773,7 +773,7 @@ impl Xv6FileSystem {
             let ie_slice = &mut root_arr_slice[hroot_len + (hentry_len * rie_idx as usize)
                 ..hroot_len + (hentry_len * (rie_idx as usize + 1))];
             ie.extract_from(ie_slice).map_err(|_| libc::EIO)?;
-            if ie.name_hash == 0 || ie.block == 0 {
+            if ie.block == 0 {
                 break;
             }
             index_vec.push(ie);
@@ -805,11 +805,12 @@ impl Xv6FileSystem {
         // create vec for binary search
         let num_entries = index.entries;
         let mut leaf_vec: Vec<Htree_entry> = Vec::with_capacity(num_entries as usize);
-        for off in (hindex_len..BSIZE).step_by(hentry_len) {
+        for off in (hindex_len..hindex_len + num_entries as usize * hentry_len).step_by(hentry_len)
+        {
             let mut hentry = Htree_entry::new();
             let hentry_slice = &mut hindex_arr_slice[off..off + hentry_len];
             hentry.extract_from(hentry_slice).map_err(|_| libc::EIO)?;
-            if hentry.name_hash == 0 || hentry.block == 0 {
+            if hentry.block == 0 {
                 break;
             }
             leaf_vec.push(hentry);
@@ -1109,13 +1110,14 @@ impl Xv6FileSystem {
                 "extracted - rie hash: {}, block: {}",
                 ie.name_hash, ie.block
             );
-            if ie.name_hash == 0 || ie.block == 0 {
+            if ie.block == 0 {
                 break;
             }
             println!("..adding rie hash: {}, block: {}", ie.name_hash, ie.block);
             index_vec.push(ie);
         }
         println!("..finding lower bound for root indeces");
+
         // case: new hash < lowest hash value in root entries
         if target_hash < index_vec[0].name_hash {
             let rie_offset = hroot_len;
@@ -1178,19 +1180,26 @@ impl Xv6FileSystem {
             // rie.extract_from(rie_slice).map_err(|_| libc::EIO)?;
             rie.name_hash = target_hash;
             rie.block = (index_offset / BSIZE) as u32;
-            index_vec.insert(0, rie);
+            // index_vec.insert(0, rie);
+
+            let mut index_vec_rev: Vec<Htree_entry> = Vec::with_capacity(index_vec.len());
+            while let Some(hen) = index_vec.pop() {
+                index_vec_rev.push(hen);
+            }
+            index_vec_rev.push(rie);
             println!(
                 "..writing rie with hash: {}, block: {} at off: {}",
                 rie.name_hash, rie.block, rie_offset
             );
 
             let mut rie_idx = 0;
-            while let Some(rie) = index_vec.pop() {
+            while let Some(rie) = index_vec_rev.pop() {
                 let rie_slice = &mut root_arr_slice[hroot_len + rie_idx as usize * hentry_len
                     ..hroot_len + (rie_idx + 1) as usize * hentry_len];
                 rie.dump_into(rie_slice).map_err(|_| libc::EIO)?;
                 rie_idx += 1;
             }
+            println!("rie_idx = {}", rie_idx);
             let write_size = hroot_len + hentry_len * rie_idx as usize;
             if self.writei(root_arr_slice, 0, write_size, internals, parent_inum)? != write_size {
                 return Err(libc::EIO);
@@ -1239,7 +1248,7 @@ impl Xv6FileSystem {
             let mut hentry = Htree_entry::new();
             let hentry_slice = &mut hindex_arr_slice[off..off + hentry_len];
             hentry.extract_from(hentry_slice).map_err(|_| libc::EIO)?;
-            if hentry.block == 0 || hentry.name_hash == 0 {
+            if hentry.block == 0 {
                 break;
             }
             println!(
@@ -1468,8 +1477,12 @@ impl Xv6FileSystem {
             index.entries += 1;
             let index_header_slice = &mut index_slice[de_len..hindex_len];
             index.dump_into(index_header_slice).map_err(|_| libc::EIO)?;
+            let mut sorted_vec: Vec<Htree_entry> = Vec::with_capacity(leaf_vec.len());
+            while let Some(hen) = leaf_vec.pop() {
+                sorted_vec.push(hen);
+            }
             let mut ie_idx = 0;
-            while let Some(ie) = leaf_vec.pop() {
+            while let Some(ie) = sorted_vec.pop() {
                 let ie_slice = &mut index_slice[hindex_len + ie_idx as usize * hentry_len
                     ..hindex_len + (ie_idx + 1) as usize * hentry_len];
                 ie.dump_into(ie_slice).map_err(|_| libc::EIO)?;
@@ -1503,8 +1516,12 @@ impl Xv6FileSystem {
                     let index_slice = index_vec.as_mut_slice();
                     let index_header_slice = &mut index_slice[de_len..hindex_len];
                     index.dump_into(index_header_slice).map_err(|_| libc::EIO)?;
+                    let mut sorted_vec: Vec<Htree_entry> = Vec::with_capacity(leaf_vec.len());
+                    while let Some(hen) = leaf_vec.pop() {
+                        sorted_vec.push(hen);
+                    }
                     let mut ie_idx = 0;
-                    while let Some(ie) = leaf_vec.pop() {
+                    while let Some(ie) = sorted_vec.pop() {
                         let ie_slice = &mut index_slice[hindex_len + ie_idx as usize * hentry_len
                             ..hindex_len + (ie_idx + 1) as usize * hentry_len];
                         ie.dump_into(ie_slice).map_err(|_| libc::EIO)?;
@@ -1538,8 +1555,12 @@ impl Xv6FileSystem {
                     new_index
                         .dump_into(index_header_slice)
                         .map_err(|_| libc::EIO)?;
+                    let mut sorted_vec: Vec<Htree_entry> = Vec::with_capacity(ie2_vec.len());
+                    while let Some(hen) = ie2_vec.pop() {
+                        sorted_vec.push(hen);
+                    }
                     let mut ie_idx = 0;
-                    while let Some(ie) = ie2_vec.pop() {
+                    while let Some(ie) = sorted_vec.pop() {
                         let ie_slice = &mut index_slice[hindex_len + ie_idx as usize * hentry_len
                             ..hindex_len + (ie_idx + 1) as usize * hentry_len];
                         ie.dump_into(ie_slice).map_err(|_| libc::EIO)?;
@@ -1579,8 +1600,12 @@ impl Xv6FileSystem {
                     root.ind_entries += 1;
                     let root_header_slice = &mut root_arr_slice[0..hroot_len];
                     root.dump_into(root_header_slice).map_err(|_| libc::EIO)?;
+                    let mut sorted_vec: Vec<Htree_entry> = Vec::with_capacity(index_vec.len());
+                    while let Some(hen) = index_vec.pop() {
+                        sorted_vec.push(hen);
+                    }
                     let mut rie_idx = 0;
-                    while let Some(rie) = index_vec.pop() {
+                    while let Some(rie) = sorted_vec.pop() {
                         let rie_slice = &mut root_arr_slice[hroot_len
                             + rie_idx as usize * hentry_len
                             ..hroot_len + (rie_idx + 1) as usize * hentry_len];

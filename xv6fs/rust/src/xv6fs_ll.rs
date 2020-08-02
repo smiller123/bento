@@ -539,7 +539,6 @@ impl BentoFilesystem for Xv6FileSystem {
 
         let num_indeces = root.ind_entries;
         if num_indeces == 0 {
-            // TODO double check
             reply.ok();
             return;
         }
@@ -556,12 +555,12 @@ impl BentoFilesystem for Xv6FileSystem {
             let mut hie = Htree_entry::new();
             match self.readi(hie_slice, off as usize, hentry_len, &mut internals) {
                 Ok(x) if x != hentry_len => {
-                println!("readi failed short");
+                    println!("readi failed short");
                     reply.error(1);
                     return;
                 }
                 Err(x) => {
-                println!("readi failed");
+                    println!("readi failed");
                     reply.error(x);
                     return;
                 }
@@ -583,12 +582,12 @@ impl BentoFilesystem for Xv6FileSystem {
                 &mut internals,
             ) {
                 Ok(x) if x != BSIZE => {
-                println!("readi 2 failed size");
+                    println!("readi 2 failed size");
                     reply.error(1);
                     return;
                 }
                 Err(x) => {
-                println!("readi 2 failed, reading block {}", hie.block);
+                    println!("readi 2 failed, reading block {}", hie.block);
                     reply.error(x);
                     return;
                 }
@@ -616,7 +615,7 @@ impl BentoFilesystem for Xv6FileSystem {
                 let ine_slice = &mut ind_arr_slice[ine_idx..ine_idx + hentry_len];
                 let mut ine = Htree_entry::new();
                 if ine.extract_from(ine_slice).is_err() {
-                println!("ine (2?) extract failed");
+                    println!("ine (2?) extract failed");
                     reply.error(libc::EIO);
                     return;
                 }
@@ -634,7 +633,7 @@ impl BentoFilesystem for Xv6FileSystem {
                     &mut internals,
                 ) {
                     Err(x) => {
-                println!("readi 3 failed");
+                        println!("readi 3 failed");
                         reply.error(x);
                         return;
                     }
@@ -651,7 +650,7 @@ impl BentoFilesystem for Xv6FileSystem {
                     let de_slice = &mut de_block_slice[de_off..de_off + de_len];
                     let mut de = Xv6fsDirent::new();
                     if de.extract_from(de_slice).is_err() {
-                println!("de extract failed");
+                        println!("de extract failed");
                         reply.error(libc::EIO);
                         return;
                     }
@@ -667,7 +666,7 @@ impl BentoFilesystem for Xv6FileSystem {
                         let entry = match self.iget(de.inum as u64) {
                             Ok(x) => x,
                             Err(x) => {
-                println!("iget next failed");
+                                println!("iget next failed");
                                 reply.error(x);
                                 return;
                             }
@@ -676,7 +675,7 @@ impl BentoFilesystem for Xv6FileSystem {
                         let entry_inode_guard = match self.ilock(entry.idx, &icache, de.inum) {
                             Ok(x) => x,
                             Err(x) => {
-                println!("ilock next failed");
+                                println!("ilock next failed");
                                 reply.error(x);
                                 return;
                             }
@@ -684,7 +683,7 @@ impl BentoFilesystem for Xv6FileSystem {
                         let entry_internals = match entry_inode_guard.internals.read() {
                             Ok(x) => x,
                             Err(_) => {
-                println!("entry inode guard failed");
+                                println!("entry inode guard failed");
                                 reply.error(libc::EIO);
                                 return;
                             }
@@ -703,7 +702,8 @@ impl BentoFilesystem for Xv6FileSystem {
                     };
                     println!("current dirent name: {}", name_str);
                     if reply.add(de.inum as u64, buf_off, i_type, name_str) {
-                        break;
+                        reply.ok();
+                        return;
                     }
                     buf_off += 1;
                 }
@@ -1059,8 +1059,8 @@ impl Xv6FileSystem {
             return Ok(true);
         }
 
-        let mut hie_vec: Vec<u8> = vec![0; hentry_len];
-        let hie_slice = hie_vec.as_mut_slice();
+        let mut rie_vec: Vec<u8> = vec![0; hentry_len];
+        let rie_slice = rie_vec.as_mut_slice();
 
         // check the index pointers stored in the root
         for off in (hroot_len..(num_indeces as usize * hentry_len) + hroot_len).step_by(hentry_len)
@@ -1068,18 +1068,18 @@ impl Xv6FileSystem {
             if off >= BSIZE {
                 break;
             }
-            let mut hie = Htree_entry::new();
-            match self.readi(hie_slice, off as usize, hentry_len, internals) {
+            let mut rie = Htree_entry::new();
+            match self.readi(rie_slice, off as usize, hentry_len, internals) {
                 Ok(x) if x != hentry_len => return Err(libc::EIO),
                 Err(x) => return Err(x),
                 _ => {}
             }
-            hie.extract_from(hie_slice).map_err(|_| libc::EIO)?;
+            rie.extract_from(rie_slice).map_err(|_| libc::EIO)?;
 
             // check the index block for entries
             let mut ind_arr_vec: Vec<u8> = vec![0; BSIZE];
             let ind_arr_slice = ind_arr_vec.as_mut_slice();
-            match self.readi(ind_arr_slice, BSIZE * hie.block as usize, BSIZE, internals) {
+            match self.readi(ind_arr_slice, BSIZE * rie.block as usize, BSIZE, internals) {
                 Ok(x) if x != BSIZE => return Err(libc::EIO),
                 Err(x) => return Err(x),
                 _ => {}
@@ -1125,7 +1125,7 @@ impl Xv6FileSystem {
                 for de_off in (0..BSIZE).step_by(de_len) {
                     let de_slice = &mut de_block_slice[de_off..de_off + de_len];
                     let mut de = Xv6fsDirent::new();
-                    de.extract_from(de_slice).map_err(|_| libc::EIO);
+                    de.extract_from(de_slice).map_err(|_| libc::EIO)?;
 
                     if de.inum != 0 {
                         return Ok(false);
