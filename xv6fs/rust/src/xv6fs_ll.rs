@@ -471,7 +471,7 @@ impl BentoFilesystem for Xv6FileSystem {
         offset: i64,
         mut reply: ReplyDirectory,
     ) {
-        println!("readdir");
+        println!("\nreaddir");
         // Get inode number nodeid
         let inode = match self.iget(nodeid) {
             Ok(x) => x,
@@ -549,6 +549,7 @@ impl BentoFilesystem for Xv6FileSystem {
         // check the index pointers stored in the root
         for off in (hroot_len..(num_indeces as usize * hentry_len) + hroot_len).step_by(hentry_len)
         {
+            println!("rie off: {}", off);
             if off >= BSIZE {
                 break;
             }
@@ -575,6 +576,7 @@ impl BentoFilesystem for Xv6FileSystem {
             // check the index block for entries
             let mut ind_arr_vec: Vec<u8> = vec![0; BSIZE];
             let ind_arr_slice = ind_arr_vec.as_mut_slice();
+            println!("rie.block: {}", hie.block);
             match self.readi(
                 ind_arr_slice,
                 BSIZE * hie.block as usize,
@@ -605,6 +607,7 @@ impl BentoFilesystem for Xv6FileSystem {
             let num_entries = index.entries;
 
             if num_entries == 0 {
+                println!("index.entries == 0");
                 continue;
             }
             println!("reading leaf nodes..");
@@ -612,6 +615,7 @@ impl BentoFilesystem for Xv6FileSystem {
             for ine_idx in
                 (hindex_len..hindex_len + (hentry_len * index.entries as usize)).step_by(hentry_len)
             {
+                println!("ine_idx: {}", ine_idx);
                 let ine_slice = &mut ind_arr_slice[ine_idx..ine_idx + hentry_len];
                 let mut ine = Htree_entry::new();
                 if ine.extract_from(ine_slice).is_err() {
@@ -621,6 +625,7 @@ impl BentoFilesystem for Xv6FileSystem {
                 }
                 let dblock_off = ine.block;
                 if dblock_off == 0 {
+                    println!("ine.block == 0");
                     continue;
                 }
                 let mut de_block_vec: Vec<u8> = vec![0; BSIZE];
@@ -642,11 +647,7 @@ impl BentoFilesystem for Xv6FileSystem {
 
                 // check dirents in leaf node
                 for de_off in (0..BSIZE).step_by(de_len) {
-                    if inarg_offset >= 1 {
-                        inarg_offset -= 1;
-                        buf_off += 1;
-                        continue;
-                    }
+                    println!("de_off: {}", de_off);
                     let de_slice = &mut de_block_slice[de_off..de_off + de_len];
                     let mut de = Xv6fsDirent::new();
                     if de.extract_from(de_slice).is_err() {
@@ -656,6 +657,11 @@ impl BentoFilesystem for Xv6FileSystem {
                     }
 
                     if de.inum == 0 {
+                        continue;
+                    }
+                    if inarg_offset >= 1 {
+                        inarg_offset -= 1;
+                        buf_off += 1;
                         continue;
                     }
 
@@ -702,10 +708,13 @@ impl BentoFilesystem for Xv6FileSystem {
                     };
                     println!("current dirent name: {}", name_str);
                     if reply.add(de.inum as u64, buf_off, i_type, name_str) {
+                        println!("reply added");
                         reply.ok();
+                        println!("returning");
                         return;
                     }
                     buf_off += 1;
+                    println!("reply.add failed, buf_off = {}", buf_off);
                 }
             }
         }

@@ -1125,8 +1125,7 @@ impl Xv6FileSystem {
             let ine_offset = index_offset + hindex_len;
             let de_offset = (num_blocks + 1) * BSIZE;
 
-            // do write
-
+            // create index node
             let mut index = Htree_index::new();
             let mut index_bvec: Vec<u8> = vec![0; hindex_len];
             let index_slice = index_bvec.as_mut_slice();
@@ -1170,11 +1169,6 @@ impl Xv6FileSystem {
                 return Err(libc::EIO);
             }
 
-            // update root info and add new entry
-            let root2_slice = &mut root_arr_slice[0..hroot_len];
-            root.ind_entries += 1;
-
-            root.dump_into(root2_slice).map_err(|_| libc::EIO)?;
             let mut rie = Htree_entry::new();
             // let rie_slice = rie_vec.as_mut_slice();
             // rie.extract_from(rie_slice).map_err(|_| libc::EIO)?;
@@ -1194,20 +1188,36 @@ impl Xv6FileSystem {
 
             let mut rie_idx = 0;
             while let Some(rie) = index_vec_rev.pop() {
-                let rie_slice = &mut root_arr_slice[hroot_len + rie_idx as usize * hentry_len
-                    ..hroot_len + (rie_idx + 1) as usize * hentry_len];
+                let mut rie_vec: Vec<u8> = vec![0; hentry_len];
+                // let rie_slice = &mut root_arr_slice[hroot_len + rie_idx as usize * hentry_len
+                //     ..hroot_len + (rie_idx + 1) as usize * hentry_len];
+                let rie_slice = rie_vec.as_mut_slice();
                 rie.dump_into(rie_slice).map_err(|_| libc::EIO)?;
+                let offset = hroot_len + rie_idx * hentry_len;
+                if self.writei(rie_slice, offset, hentry_len, internals, parent_inum)? != hentry_len
+                {
+                    return Err(libc::EIO);
+                }
+
                 rie_idx += 1;
             }
             println!("rie_idx = {}", rie_idx);
-            let write_size = hroot_len + hentry_len * rie_idx as usize;
-            if self.writei(root_arr_slice, 0, write_size, internals, parent_inum)? != write_size {
-                return Err(libc::EIO);
-            }
+            // let write_size = hroot_len + hentry_len * rie_idx as usize;
+            // if self.writei(root_arr_slice, 0, write_size, internals, parent_inum)? != write_size {
+            //     return Err(libc::EIO);
+            // }
 
             // if self.writei(root_slice, 0, hroot_len, internals, parent_inum)? != hroot_len {
             //     return Err(libc::EIO);
             // }
+            // update root info and add new entry
+            let root2_slice = &mut root_arr_slice[0..hroot_len];
+            root.ind_entries += 1;
+
+            root.dump_into(root2_slice).map_err(|_| libc::EIO)?;
+            if self.writei(root2_slice, 0, hroot_len, internals, parent_inum)? != hroot_len {
+                return Err(libc::EIO);
+            }
             return Ok(0);
         }
 
