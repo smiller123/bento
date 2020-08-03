@@ -731,10 +731,33 @@ impl Xv6FileSystem {
                 return Err(libc::ENOENT);
             }
         };
+        let mut de = Xv6fsDirent::new();
+        let mut de_vec: Vec<u8> = vec![0; de_len];
+        let de_slice = de_vec.as_mut_slice();
+        de.extract_from(de_slice).map_err(|_| libc::EIO)?;
+
+        let name_slice = name.to_str().unwrap().as_bytes();
+        if name_slice.len() > DIRSIZ as usize {
+            return Err(libc::EIO);
+        }
+
+        for (idx, ch) in de.name.iter_mut().enumerate() {
+            *ch = match name_slice.get(idx) {
+                Some(x) => *x,
+                None => 0,
+            };
+        }
 
         // get hash of target entry
+        let tmp_name = match str::from_utf8(&de.name) {
+            Ok(x) => x,
+            Err(_) => return Err(libc::EIO),
+        };
+        let osstr_name = OsStr::new(tmp_name);
+        let target_hash = osstr_name.calculate_hash();
+        // get hash of target entry
         println!("calculate hash failed");
-        let target_hash = name.calculate_hash();
+        // let target_hash = name.calculate_hash();
 
         // Nodes should be in different logical blocks within the same file
 
@@ -845,9 +868,9 @@ impl Xv6FileSystem {
             let de_slice = &mut leaf_arr_slice[de_idx * de_len..(de_idx + 1) * de_len];
             de.extract_from(de_slice).map_err(|_| libc::EIO)?;
 
-            if (leaf_idx as usize * BSIZE + de_idx * de_len) as u64 >= internals.size {
-                break;
-            }
+            // if (leaf_idx as usize * BSIZE + de_idx * de_len) as u64 >= internals.size {
+            //     break;
+            // }
             if de.inum == 0 {
                 continue;
             }
@@ -937,10 +960,6 @@ impl Xv6FileSystem {
             }
         };
 
-        // get hash of target entry
-        let target_hash = name.calculate_hash();
-        println!("search_name: {}, hash: {}", search_name, target_hash);
-
         // Nodes should be in different logical blocks within the same file
 
         // read in entire root block
@@ -978,6 +997,14 @@ impl Xv6FileSystem {
 
         de.inum = child_inum as u32;
 
+        // get hash of target entry
+        let tmp_name = match str::from_utf8(&de.name) {
+            Ok(x) => x,
+            Err(_) => return Err(libc::EIO),
+        };
+        let osstr_name = OsStr::new(tmp_name);
+        let target_hash = osstr_name.calculate_hash();
+        println!("search_name: {}, hash: {}", search_name, target_hash);
         // new directory, create root node
         if search_name == "." {
             println!("..creating '.'");
@@ -1000,9 +1027,6 @@ impl Xv6FileSystem {
             if self.writei(root_de_slice, de_len, de_len, internals, parent_inum)? != de_len {
                 return Err(libc::EIO);
             }
-            // if self.writei(root_slice, 0, hroot_len, internals, parent_inum)? != hroot_len {
-            //     return Err(libc::EIO);
-            // }
 
             return Ok(0);
         }
@@ -1023,7 +1047,6 @@ impl Xv6FileSystem {
             let mut rie = Htree_entry::new();
             let mut rie_vec: Vec<u8> = vec![0; hentry_len];
             let rie_slice = rie_vec.as_mut_slice();
-            // rie.extract_from(rie_slice).map_err(|_| libc::EIO)?;
             rie.name_hash = target_hash;
             rie.block = (index_offset / BSIZE) as u32;
             println!(
@@ -1040,7 +1063,6 @@ impl Xv6FileSystem {
             let mut index = Htree_index::new();
             let mut index_vec: Vec<u8> = vec![0; hindex_len];
             let index_slice = index_vec.as_mut_slice();
-            // index.extract_from(index_slice).map_err(|_| libc::EIO)?;
             index.entries = 1 as u32;
             println!(
                 "..writing index with entries #: {} at off: {}",
@@ -1063,7 +1085,6 @@ impl Xv6FileSystem {
             let mut ine = Htree_entry::new();
             let mut ine_vec: Vec<u8> = vec![0; hentry_len];
             let ine_slice = ine_vec.as_mut_slice();
-            // ine.extract_from(ine_slice).map_err(|_| libc::EIO)?;
             ine.name_hash = target_hash;
             ine.block = (de_offset / BSIZE) as u32;
 
@@ -1180,11 +1201,8 @@ impl Xv6FileSystem {
             }
 
             let mut rie = Htree_entry::new();
-            // let rie_slice = rie_vec.as_mut_slice();
-            // rie.extract_from(rie_slice).map_err(|_| libc::EIO)?;
             rie.name_hash = target_hash;
             rie.block = (index_offset / BSIZE) as u32;
-            // index_vec.insert(0, rie);
 
             let mut index_vec_rev: Vec<Htree_entry> = Vec::with_capacity(index_vec.len());
             while let Some(hen) = index_vec.pop() {
@@ -1199,8 +1217,6 @@ impl Xv6FileSystem {
             let mut rie_idx = 0;
             while let Some(rie) = index_vec_rev.pop() {
                 let mut rie_vec: Vec<u8> = vec![0; hentry_len];
-                // let rie_slice = &mut root_arr_slice[hroot_len + rie_idx as usize * hentry_len
-                //     ..hroot_len + (rie_idx + 1) as usize * hentry_len];
                 let rie_slice = rie_vec.as_mut_slice();
                 rie.dump_into(rie_slice).map_err(|_| libc::EIO)?;
                 let offset = hroot_len + rie_idx * hentry_len;
@@ -1215,7 +1231,7 @@ impl Xv6FileSystem {
             // update root info and add new entry
             let root2_slice = &mut root_arr_slice[0..hroot_len];
             root.ind_entries += 1;
-
+            root.blocks += 2;
             root.dump_into(root2_slice).map_err(|_| libc::EIO)?;
             if self.writei(root2_slice, 0, hroot_len, internals, parent_inum)? != hroot_len {
                 return Err(libc::EIO);
@@ -1316,332 +1332,336 @@ impl Xv6FileSystem {
             }
         }
         println!("no space in current leaf node");
-        return Err(libc::ENOENT);
 
         // not enough space in the current leaf node
         // need to split leaf nodes
 
         // final off should be internals.size
-        //     let final_off = num_blocks * BSIZE;
+        let final_off = num_blocks * BSIZE;
+        let mut de_map: BTreeMap<u32, Vec<Xv6fsDirent>> = BTreeMap::new();
 
-        //     // add entries into a map
-        //     let mut de_map: BTreeMap<u32, Xv6fsDirent> = BTreeMap::new();
-        //     // there shouldn't be many duplicates
-        //     let mut de_dup_map: BTreeMap<u32, Xv6fsDirent> = BTreeMap::new();
-        //     // leaf should be full
-        //     println!(
-        //         "..current leafnode is full. Splitting.. new leaf node at off: {}",
-        //         final_off
-        //     );
-        //     for de_idx in 0..BSIZE / de_len {
-        //         if (de_idx * de_len + leaf_idx as usize * BSIZE) >= internals.size as usize {
-        //             break;
-        //         }
-        //         let mut de_temp = Xv6fsDirent::new();
-        //         let de_slice_temp = &mut leaf_arr_slice[de_idx * de_len..(de_idx + 1) * de_len];
-        //         de_temp.extract_from(de_slice_temp).map_err(|_| libc::EIO)?;
-        //         let de_name = match str::from_utf8(&de.name) {
-        //             Ok(x) => x,
-        //             Err(_) => return Err(libc::EIO),
-        //         };
-        //         let de_name = OsStr::new(&de_name);
-        //         let de_hash = de_name.calculate_hash();
+        println!(
+            "..current leafnode is full. Splitting.. new leaf node at off: {}",
+            final_off
+        );
+        for de_idx in 0..BSIZE / de_len {
+            println!("de_idx: {}", de_idx);
+            let mut de_temp = Xv6fsDirent::new();
+            let de_slice_temp = &mut leaf_arr_slice[de_idx * de_len..(de_idx + 1) * de_len];
+            de_temp.extract_from(de_slice_temp).map_err(|_| libc::EIO)?;
+            if de_temp.inum == 0 {
+                continue;
+            }
+            let de_name = match str::from_utf8(&de_temp.name) {
+                Ok(x) => x,
+                Err(_) => return Err(libc::EIO),
+            };
+            println!("de_name: {}", de_name);
+            let de_name = OsStr::new(de_name);
+            let de_hash = de_name.calculate_hash();
+            println!("de_hash: {}", de_hash);
 
-        //         // add dirents to map in sorted order
-        //         if de_map.contains_key(&de_hash) {
-        //             de_dup_map.insert(de_hash, de_temp);
-        //         } else {
-        //             de_map.insert(de_hash, de_temp);
-        //         }
-        //     }
-        //     println!("..total number of dirents: {}", de_map.len());
-        //     // get the new lower bounds for the leaf nodes
-        //     let mut de_map2 = de_map.split_off(&((de_map.len() / 2) as u32));
-        //     // let leaf1_lower = 0;
-        //     let leaf2_lower = 0;
-        //     // for (key, _val) in de_map.iter() {
-        //     //     let leaf1_lower = *key;
-        //     //     break;
-        //     // }
+            if !de_map.contains_key(&de_hash) {
+                de_map.insert(de_hash, Vec::with_capacity(3));
+            }
+            if let Some(x) = de_map.get_mut(&de_hash) {
+                x.push(de_temp);
+            }
+        }
+        println!("..total number of dirents: {}", de_map.len());
+        // get the new lower bounds for the leaf nodes
+        let mut keys: Vec<_> = de_map.keys().cloned().collect();
+        let keys2 = keys.split_off(keys.len() / 2);
+        let mut de_map2 = de_map.split_off(&keys2[0]);
+        println!(
+            "de_map len: {}, de_map2 len: {}",
+            de_map.len(),
+            de_map2.len()
+        );
+        // let leaf1_lower = 0;
+        let leaf2_lower = keys2[0];
+        println!("leaf2_lower bound: {}", leaf2_lower);
 
-        //     for (key, _val) in de_map2.iter() {
-        //         let leaf2_lower = *key;
-        //         break;
-        //     }
+        // get vecs from the dirents maps
+        let mut leaf1_dir_vec: Vec<Xv6fsDirent> = Vec::with_capacity(66);
+        let mut leaf2_dir_vec: Vec<Xv6fsDirent> = Vec::with_capacity(66);
 
-        //     // TODO duplicates
-        //     // let mut keys: Vec<_> = de_dup_map.keys().cloned().collect();
-        //     // for key in keys {
-        //     //     if let Some(val) = de_dup_map.remove(&key) {
-        //     //         if key < leaf2_lower {
-        //     //             de_map.insert(key, val);
-        //     //         } else {
-        //     //             de_map2.insert(key, val);
-        //     //         }
-        //     //     }
-        //     // }
+        {
+            println!("map1 keys");
+            for key in keys {
+                println!("{}", key);
+                if let Some(mut val) = de_map.remove(&key) {
+                    while let Some(dirent) = val.pop() {
+                        leaf1_dir_vec.push(dirent);
+                    }
+                }
+            }
+        }
+        {
+            println!("map2 keys");
+            for key in keys2 {
+                println!("{}", key);
+                if let Some(mut val) = de_map2.remove(&key) {
+                    while let Some(dirent) = val.pop() {
+                        leaf2_dir_vec.push(dirent);
+                    }
+                }
+            }
+        }
+        println!("leaf1_dir_vec len: {}", leaf1_dir_vec.len());
+        println!("leaf2_dir_vec len: {}", leaf2_dir_vec.len());
 
-        //     // get vecs from the dirents maps
-        //     let mut leaf1_dir_vec: Vec<Xv6fsDirent> = Vec::with_capacity(512);
-        //     let mut leaf2_dir_vec: Vec<Xv6fsDirent> = Vec::with_capacity(512);
+        // keep half dirents into current leaf node
+        {
+            let mut leaf_vec: Vec<u8> = vec![0; BSIZE];
+            let leaf_slice = leaf_vec.as_mut_slice();
+            let mut idx = 0;
+            println!("..orig leafnode # dirents: {}", leaf1_dir_vec.len());
+            while let Some(de) = leaf1_dir_vec.pop() {
+                let leaf_idx_slice = &mut leaf_slice[idx * de_len..(idx + 1) * de_len];
+                de.dump_into(leaf_idx_slice).map_err(|_| libc::EIO)?;
+                idx += 1;
+            }
+            // let write_size = idx * de_len as usize;
+            // need overwrite prev dirents with 0's.
+            let write_size = BSIZE;
+            println!(
+                "..written # dirents: {}, total write size: {}",
+                idx, write_size
+            );
+            if self.writei(
+                leaf_slice,
+                leaf_idx as usize * BSIZE,
+                write_size,
+                internals,
+                parent_inum,
+            )? != write_size
+            {
+                println!("orig leafnode write failed");
+                return Err(libc::EIO);
+            }
+        }
 
-        //     {
-        //         let keys: Vec<_> = de_map.keys().cloned().collect();
-        //         for key in keys {
-        //             if let Some(val) = de_map.remove(&key) {
-        //                 leaf1_dir_vec.push(val);
+        // write other half into a new leafnode
+        {
+            let mut leaf_vec: Vec<u8> = vec![0; BSIZE];
+            let leaf_slice = leaf_vec.as_mut_slice();
+            let mut idx = 0;
+            println!("..new leafnode # dirents: {}", leaf2_dir_vec.len());
+            while let Some(de) = leaf2_dir_vec.pop() {
+                let leaf_idx_slice = &mut leaf_slice[idx * de_len..(idx + 1) * de_len];
+                de.dump_into(leaf_idx_slice).map_err(|_| libc::EIO)?;
+                idx += 1;
+            }
+            let write_size = idx * de_len as usize;
+            println!(
+                "..written # dirents: {}, total write size: {}",
+                idx, write_size
+            );
+            if self.writei(
+                leaf_slice,
+                (num_blocks + 1) * BSIZE,
+                write_size,
+                internals,
+                parent_inum,
+            )? != write_size
+            {
+                println!("new leafnode write failed");
+                return Err(libc::EIO);
+            }
+        }
+
+        println!("..creating new hentry in index node");
+        // create a new hentry in the index node
+        let num_entries = index.entries as usize;
+
+        // sort old entries in index node
+        let mut ie_map: BTreeMap<u32, Htree_entry> = BTreeMap::new();
+        println!("leaf_vec len: {}", leaf_vec.len());
+        while let Some(ie) = leaf_vec.pop() {
+            ie_map.insert(ie.name_hash, ie);
+        }
+        println!("ie_map len: {}", ie_map.len());
+        let mut new_ie = Htree_entry::new();
+        new_ie.name_hash = leaf2_lower;
+        new_ie.block = num_blocks as u32 + 1;
+        ie_map.insert(new_ie.name_hash, new_ie);
+        println!("ie_map len: {}", ie_map.len());
+        println!(
+            "..new_ie hash: {}, block: {}",
+            new_ie.name_hash, new_ie.block
+        );
+        {
+            let mut keys: Vec<_> = ie_map.keys().cloned().collect();
+            while let Some(key) = keys.pop() {
+                println!("key: {}", key);
+                if let Some(val) = ie_map.remove(&key) {
+                    leaf_vec.push(val);
+                }
+            }
+        }
+        println!("leaf_vec sorted len: {}", leaf_vec.len());
+        println!("leaf_vec is sorted");
+        // enough space in current index node
+        if num_entries < ((BSIZE - hindex_len) / hentry_len) {
+            // // insert in sorted order
+            println!(".. inserting new_ie in current index node");
+            let mut index_vec: Vec<u8> = vec![0; BSIZE];
+            let index_slice = index_vec.as_mut_slice();
+            index.entries += 1;
+            let index_header_slice = &mut index_slice[0..hindex_len];
+            index.dump_into(index_header_slice).map_err(|_| libc::EIO)?;
+            println!("new index entries number: {}", index.entries);
+            let mut ie_idx = 0;
+            while let Some(ie) = leaf_vec.pop() {
+                println!("dumping ine with hash: {}", ie.name_hash);
+                let ie_slice = &mut index_slice[hindex_len + ie_idx as usize * hentry_len
+                    ..hindex_len + (ie_idx + 1) as usize * hentry_len];
+                ie.dump_into(ie_slice).map_err(|_| libc::EIO)?;
+                ie_idx += 1;
+            }
+            let write_size = ie_idx * hentry_len as usize;
+            println!("writing ie_idx elements: {}", ie_idx);
+            if self.writei(
+                index_slice,
+                target_lblock as usize * BSIZE,
+                write_size,
+                internals,
+                parent_inum,
+            )? != write_size
+            {
+                println!("write index_slice failed");
+                return Err(libc::EIO);
+            }
+        } // else {
+          //     // not enough space, need to split root index nodes
+
+        //     println!("..not enough space, create new hentry in root node");
+        //     if (root.ind_entries as usize) < (BSIZE - hroot_len) / hentry_len {
+        //         // new entries to add to root node
+        //         let mut new_rie = Htree_entry::new();
+        //         let mut new_index = Htree_index::new();
+
+        //         // split original index node and update previous index node
+        //         let mut ie2_vec = leaf_vec.split_off(leaf_vec.len() / 2);
+        //         {
+        //             index.entries = leaf_vec.len() as u32;
+        //             let mut index_vec: Vec<u8> = vec![0; BSIZE];
+        //             let index_slice = index_vec.as_mut_slice();
+        //             let index_header_slice = &mut index_slice[de_len..hindex_len];
+        //             index.dump_into(index_header_slice).map_err(|_| libc::EIO)?;
+        //             let mut sorted_vec: Vec<Htree_entry> = Vec::with_capacity(leaf_vec.len());
+        //             while let Some(hen) = leaf_vec.pop() {
+        //                 sorted_vec.push(hen);
+        //             }
+        //             let mut ie_idx = 0;
+        //             while let Some(ie) = sorted_vec.pop() {
+        //                 let ie_slice = &mut index_slice[hindex_len + ie_idx as usize * hentry_len
+        //                     ..hindex_len + (ie_idx + 1) as usize * hentry_len];
+        //                 ie.dump_into(ie_slice).map_err(|_| libc::EIO)?;
+        //                 ie_idx += 1;
+        //             }
+        //             let write_size = ie_idx * hentry_len as usize;
+        //             if self.writei(
+        //                 index_slice,
+        //                 target_lblock as usize * BSIZE,
+        //                 write_size,
+        //                 internals,
+        //                 parent_inum,
+        //             )? != write_size
+        //             {
+        //                 return Err(libc::EIO);
         //             }
         //         }
-        //     }
 
-        //     {
-        //         let keys: Vec<_> = de_map2.keys().cloned().collect();
-        //         for key in keys {
-        //             if let Some(val) = de_map2.remove(&key) {
-        //                 leaf2_dir_vec.push(val);
+        //         // create new index node with the remaining entries for root indeces
+
+        //         new_index.entries = ie2_vec.len() as u32;
+        //         // should be the same as leaf2_lower
+        //         let lower_bound = ie2_vec[0].name_hash;
+        //         new_rie.name_hash = lower_bound;
+        //         new_rie.block = num_blocks as u32 + 2;
+
+        //         {
+        //             let mut index_vec: Vec<u8> = vec![0; BSIZE];
+        //             let index_slice = index_vec.as_mut_slice();
+        //             let index_header_slice = &mut index_slice[0..hindex_len];
+        //             new_index
+        //                 .dump_into(index_header_slice)
+        //                 .map_err(|_| libc::EIO)?;
+        //             let mut sorted_vec: Vec<Htree_entry> = Vec::with_capacity(ie2_vec.len());
+        //             while let Some(hen) = ie2_vec.pop() {
+        //                 sorted_vec.push(hen);
+        //             }
+        //             let mut ie_idx = 0;
+        //             while let Some(ie) = sorted_vec.pop() {
+        //                 let ie_slice = &mut index_slice[hindex_len + ie_idx as usize * hentry_len
+        //                     ..hindex_len + (ie_idx + 1) as usize * hentry_len];
+        //                 ie.dump_into(ie_slice).map_err(|_| libc::EIO)?;
+        //                 ie_idx += 1;
+        //             }
+        //             let write_size = ie_idx * hentry_len as usize;
+        //             if self.writei(
+        //                 index_slice,
+        //                 num_blocks + 2 as usize * BSIZE,
+        //                 write_size,
+        //                 internals,
+        //                 parent_inum,
+        //             )? != write_size
+        //             {
+        //                 return Err(libc::EIO);
         //             }
         //         }
-        //     }
+        //         // index_vec = index entries in the root node
+        //         // leaf_vec = hentries in index node
 
-        //     // keep half dirents into current leaf node
-        //     {
-        //         let mut leaf_vec: Vec<u8> = vec![0; BSIZE];
-        //         let leaf_slice = leaf_vec.as_mut_slice();
-        //         let mut idx = 0;
-        //         println!("..orig leafnode # dirents: {}", leaf1_dir_vec.len());
-        //         while let Some(de) = leaf1_dir_vec.pop() {
-        //             let leaf_idx_slice = &mut leaf_slice[idx * de_len..(idx + 1) * de_len];
-        //             de.dump_into(leaf_idx_slice).map_err(|_| libc::EIO)?;
-        //             idx += 1;
+        //         // udpate root
+        //         let mut rie_map: BTreeMap<u32, Htree_entry> = BTreeMap::new();
+        //         while let Some(ie) = index_vec.pop() {
+        //             rie_map.insert(ie.name_hash, ie);
         //         }
-        //         let write_size = idx * de_len as usize;
-        //         println!(
-        //             "..written # dirents: {}, total write size: {}",
-        //             idx, write_size
-        //         );
-        //         if self.writei(
-        //             leaf_slice,
-        //             leaf_idx as usize * BSIZE,
-        //             write_size,
-        //             internals,
-        //             parent_inum,
-        //         )? != write_size
+        //         rie_map.insert(new_rie.name_hash, new_rie);
         //         {
-        //             return Err(libc::EIO);
-        //         }
-        //     }
-
-        //     // write other half into a new leafnode
-        //     {
-        //         let mut leaf_vec: Vec<u8> = vec![0; BSIZE];
-        //         let leaf_slice = leaf_vec.as_mut_slice();
-        //         let mut idx = 0;
-        //         println!("..new leafnode # dirents: {}", leaf1_dir_vec.len());
-        //         while let Some(de) = leaf2_dir_vec.pop() {
-        //             let leaf_idx_slice = &mut leaf_slice[idx * de_len..(idx + 1) * de_len];
-        //             de.dump_into(leaf_idx_slice).map_err(|_| libc::EIO)?;
-        //             idx += 1;
-        //         }
-        //         let write_size = idx * de_len as usize;
-        //         println!(
-        //             "..written # dirents: {}, total write size: {}",
-        //             idx, write_size
-        //         );
-        //         if self.writei(
-        //             leaf_slice,
-        //             (num_blocks + 1) * BSIZE,
-        //             write_size,
-        //             internals,
-        //             parent_inum,
-        //         )? != write_size
-        //         {
-        //             return Err(libc::EIO);
-        //         }
-        //     }
-
-        //     println!("..creating new hentry in index node");
-        //     // create a new hentry in the index node
-        //     let num_entries = index.entries as usize;
-
-        //     // sort old entries in index node
-        //     let mut ie_map: BTreeMap<u32, Htree_entry> = BTreeMap::new();
-        //     while let Some(ie) = leaf_vec.pop() {
-        //         ie_map.insert(ie.name_hash, ie);
-        //     }
-        //     let mut new_ie = Htree_entry::new();
-        //     new_ie.name_hash = leaf2_lower;
-        //     new_ie.block = num_blocks as u32 + 1;
-        //     ie_map.insert(new_ie.name_hash, new_ie);
-        //     println!(
-        //         "..new_ie hash: {}, block: {}",
-        //         new_ie.name_hash, new_ie.block
-        //     );
-        //     {
-        //         let keys: Vec<_> = ie_map.keys().cloned().collect();
-        //         for key in keys {
-        //             if let Some(val) = ie_map.remove(&key) {
-        //                 leaf_vec.push(val);
+        //             let keys: Vec<_> = rie_map.keys().cloned().collect();
+        //             for key in keys {
+        //                 if let Some(val) = rie_map.remove(&key) {
+        //                     index_vec.push(val);
+        //                 }
         //             }
         //         }
-        //     }
-        //     // enough space in current index node
-        //     if num_entries < (BSIZE - hindex_len) / hentry_len {
-        //         // // insert in sorted order
-        //         println!(".. inserting new_ie in current index node");
-        //         let mut index_vec: Vec<u8> = vec![0; BSIZE];
-        //         let index_slice = index_vec.as_mut_slice();
-        //         index.entries += 1;
-        //         let index_header_slice = &mut index_slice[de_len..hindex_len];
-        //         index.dump_into(index_header_slice).map_err(|_| libc::EIO)?;
-        //         let mut sorted_vec: Vec<Htree_entry> = Vec::with_capacity(leaf_vec.len());
-        //         while let Some(hen) = leaf_vec.pop() {
-        //             sorted_vec.push(hen);
-        //         }
-        //         let mut ie_idx = 0;
-        //         while let Some(ie) = sorted_vec.pop() {
-        //             let ie_slice = &mut index_slice[hindex_len + ie_idx as usize * hentry_len
-        //                 ..hindex_len + (ie_idx + 1) as usize * hentry_len];
-        //             ie.dump_into(ie_slice).map_err(|_| libc::EIO)?;
-        //             ie_idx += 1;
-        //         }
-        //         let write_size = ie_idx * hentry_len as usize;
-        //         if self.writei(
-        //             index_slice,
-        //             target_lblock as usize * BSIZE,
-        //             write_size,
-        //             internals,
-        //             parent_inum,
-        //         )? != write_size
+
         //         {
-        //             return Err(libc::EIO);
+        //             root.ind_entries += 1;
+        //             let root_header_slice = &mut root_arr_slice[0..hroot_len];
+        //             root.dump_into(root_header_slice).map_err(|_| libc::EIO)?;
+        //             let mut sorted_vec: Vec<Htree_entry> = Vec::with_capacity(index_vec.len());
+        //             while let Some(hen) = index_vec.pop() {
+        //                 sorted_vec.push(hen);
+        //             }
+        //             let mut rie_idx = 0;
+        //             while let Some(rie) = sorted_vec.pop() {
+        //                 let rie_slice = &mut root_arr_slice[hroot_len
+        //                     + rie_idx as usize * hentry_len
+        //                     ..hroot_len + (rie_idx + 1) as usize * hentry_len];
+        //                 rie.dump_into(rie_slice).map_err(|_| libc::EIO)?;
+        //                 rie_idx += 1;
+        //             }
+        //             let write_size = hroot_len + hentry_len * rie_idx as usize;
+        //             if self.writei(root_arr_slice, 0, write_size, internals, parent_inum)?
+        //                 != write_size
+        //             {
+        //                 return Err(libc::EIO);
+        //             }
         //         }
         //     } else {
-        //         // not enough space, need to split root index nodes
-
-        //         println!("..not enough space, create new hentry in root node");
-        //         if (root.ind_entries as usize) < (BSIZE - hroot_len) / hentry_len {
-        //             // new entries to add to root node
-        //             let mut new_rie = Htree_entry::new();
-        //             let mut new_index = Htree_index::new();
-
-        //             // split original index node and update previous index node
-        //             let mut ie2_vec = leaf_vec.split_off(leaf_vec.len() / 2);
-        //             {
-        //                 index.entries = leaf_vec.len() as u32;
-        //                 let mut index_vec: Vec<u8> = vec![0; BSIZE];
-        //                 let index_slice = index_vec.as_mut_slice();
-        //                 let index_header_slice = &mut index_slice[de_len..hindex_len];
-        //                 index.dump_into(index_header_slice).map_err(|_| libc::EIO)?;
-        //                 let mut sorted_vec: Vec<Htree_entry> = Vec::with_capacity(leaf_vec.len());
-        //                 while let Some(hen) = leaf_vec.pop() {
-        //                     sorted_vec.push(hen);
-        //                 }
-        //                 let mut ie_idx = 0;
-        //                 while let Some(ie) = sorted_vec.pop() {
-        //                     let ie_slice = &mut index_slice[hindex_len + ie_idx as usize * hentry_len
-        //                         ..hindex_len + (ie_idx + 1) as usize * hentry_len];
-        //                     ie.dump_into(ie_slice).map_err(|_| libc::EIO)?;
-        //                     ie_idx += 1;
-        //                 }
-        //                 let write_size = ie_idx * hentry_len as usize;
-        //                 if self.writei(
-        //                     index_slice,
-        //                     target_lblock as usize * BSIZE,
-        //                     write_size,
-        //                     internals,
-        //                     parent_inum,
-        //                 )? != write_size
-        //                 {
-        //                     return Err(libc::EIO);
-        //                 }
-        //             }
-
-        //             // create new index node with the remaining entries for root indeces
-
-        //             new_index.entries = ie2_vec.len() as u32;
-        //             // should be the same as leaf2_lower
-        //             let lower_bound = ie2_vec[0].name_hash;
-        //             new_rie.name_hash = lower_bound;
-        //             new_rie.block = num_blocks as u32 + 2;
-
-        //             {
-        //                 let mut index_vec: Vec<u8> = vec![0; BSIZE];
-        //                 let index_slice = index_vec.as_mut_slice();
-        //                 let index_header_slice = &mut index_slice[0..hindex_len];
-        //                 new_index
-        //                     .dump_into(index_header_slice)
-        //                     .map_err(|_| libc::EIO)?;
-        //                 let mut sorted_vec: Vec<Htree_entry> = Vec::with_capacity(ie2_vec.len());
-        //                 while let Some(hen) = ie2_vec.pop() {
-        //                     sorted_vec.push(hen);
-        //                 }
-        //                 let mut ie_idx = 0;
-        //                 while let Some(ie) = sorted_vec.pop() {
-        //                     let ie_slice = &mut index_slice[hindex_len + ie_idx as usize * hentry_len
-        //                         ..hindex_len + (ie_idx + 1) as usize * hentry_len];
-        //                     ie.dump_into(ie_slice).map_err(|_| libc::EIO)?;
-        //                     ie_idx += 1;
-        //                 }
-        //                 let write_size = ie_idx * hentry_len as usize;
-        //                 if self.writei(
-        //                     index_slice,
-        //                     num_blocks + 2 as usize * BSIZE,
-        //                     write_size,
-        //                     internals,
-        //                     parent_inum,
-        //                 )? != write_size
-        //                 {
-        //                     return Err(libc::EIO);
-        //                 }
-        //             }
-        //             // index_vec = index entries in the root node
-        //             // leaf_vec = hentries in index node
-
-        //             // udpate root
-        //             let mut rie_map: BTreeMap<u32, Htree_entry> = BTreeMap::new();
-        //             while let Some(ie) = index_vec.pop() {
-        //                 rie_map.insert(ie.name_hash, ie);
-        //             }
-        //             rie_map.insert(new_rie.name_hash, new_rie);
-        //             {
-        //                 let keys: Vec<_> = rie_map.keys().cloned().collect();
-        //                 for key in keys {
-        //                     if let Some(val) = rie_map.remove(&key) {
-        //                         index_vec.push(val);
-        //                     }
-        //                 }
-        //             }
-
-        //             {
-        //                 root.ind_entries += 1;
-        //                 let root_header_slice = &mut root_arr_slice[0..hroot_len];
-        //                 root.dump_into(root_header_slice).map_err(|_| libc::EIO)?;
-        //                 let mut sorted_vec: Vec<Htree_entry> = Vec::with_capacity(index_vec.len());
-        //                 while let Some(hen) = index_vec.pop() {
-        //                     sorted_vec.push(hen);
-        //                 }
-        //                 let mut rie_idx = 0;
-        //                 while let Some(rie) = sorted_vec.pop() {
-        //                     let rie_slice = &mut root_arr_slice[hroot_len
-        //                         + rie_idx as usize * hentry_len
-        //                         ..hroot_len + (rie_idx + 1) as usize * hentry_len];
-        //                     rie.dump_into(rie_slice).map_err(|_| libc::EIO)?;
-        //                     rie_idx += 1;
-        //                 }
-        //                 let write_size = hroot_len + hentry_len * rie_idx as usize;
-        //                 if self.writei(root_arr_slice, 0, write_size, internals, parent_inum)?
-        //                     != write_size
-        //                 {
-        //                     return Err(libc::EIO);
-        //                 }
-        //             }
-        //         } else {
-        //             // root is cannot contain more index entries
-        //             return Err(libc::EIO);
-        //         }
+        //         // root is cannot contain more index entries
+        //         println!("root cannot contain more index entries");
+        //         return Err(libc::EIO);
         //     }
+        // }
 
-        //     // END //
-        // return Ok(0);
+        // END //
+        println!("finish dirlink");
+        return Ok(0);
     }
 }
