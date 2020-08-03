@@ -157,6 +157,9 @@ impl Htree_entry {
 }
 
 pub fn find_lowerbound(arr: &[Htree_entry], len: usize, target: u32) -> Option<usize> {
+    if len < 1 {
+        return None;
+    }
     let mut lo: i8 = 0;
     let mut hi: i8 = len as i8 - 1;
 

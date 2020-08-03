@@ -647,7 +647,7 @@ impl BentoFilesystem for Xv6FileSystem {
 
                 // check dirents in leaf node
                 for de_off in (0..BSIZE).step_by(de_len) {
-                    println!("de_off: {}", de_off);
+                    // println!("de_off: {}", de_off);
                     let de_slice = &mut de_block_slice[de_off..de_off + de_len];
                     let mut de = Xv6fsDirent::new();
                     if de.extract_from(de_slice).is_err() {
