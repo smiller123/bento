@@ -34,13 +34,23 @@ pub struct SliceHasher {
 
 impl SliceHasher {
     pub fn new() -> Self {
-        SliceHasher { state: 0 as u32 }
+        SliceHasher { state: 5381 as u32 }
     }
 
-    // use dx_hack_hash
+    // // use dx_hack_hash
+    // pub fn write_u8(&mut self, i: u8) {
+    //     self.state ^= i as u32 * 31;
+    // }
+
+    // djb2_hash
     pub fn write_u8(&mut self, i: u8) {
-        self.state ^= i as u32 * 31;
+        self.state = ((self.state << 5) + self.state) + i as u32;
     }
+
+    // // sdbm_hash
+    // pub fn write_u8(&mut self, i: u8) {
+    //     self.state = i as u32 + (self.state << 6) + (self.state << 16) - self.state;
+    // }
 }
 impl Hasher for SliceHasher {
     fn finish(&self) -> u32 {
