@@ -926,6 +926,7 @@ impl Xv6FileSystem {
         // }
 
         // no hash collision, no entry found
+        println!("{} not found", search_name);
         return Err(libc::ENOENT);
     }
 
@@ -1457,7 +1458,8 @@ impl Xv6FileSystem {
                 de.dump_into(leaf_idx_slice).map_err(|_| libc::EIO)?;
                 idx += 1;
             }
-            let write_size = idx * de_len as usize;
+            // let write_size = idx * de_len as usize;
+            let write_size = BSIZE;
             println!(
                 "..written # dirents: {}, total write size: {}",
                 idx, write_size
@@ -1498,7 +1500,7 @@ impl Xv6FileSystem {
         {
             let mut keys: Vec<_> = ie_map.keys().cloned().collect();
             while let Some(key) = keys.pop() {
-                println!("key: {}", key);
+                // println!("key: {}", key);
                 if let Some(val) = ie_map.remove(&key) {
                     leaf_vec.push(val);
                 }
@@ -1552,138 +1554,139 @@ impl Xv6FileSystem {
                 return Err(libc::ENOENT);
             }
             println!("splitting root index entries");
-            if (root.ind_entries as usize) < (BSIZE - hroot_len) / hentry_len {
-                println!("splitting root index entries");
-                // new entries to add to root node
-                let mut new_rie = Htree_entry::new();
-                let mut new_index = Htree_index::new();
-
-                // leaf vec is in reverse order (i.e. 10, 9, 8, .. )
-                // split original index node and update original index node
-                // ie2_vec contains lower entries
-                let mut ie2_vec = leaf_vec.split_off(leaf_vec.len() / 2);
-                {
-                    index.entries = ie2_vec.len() as u32;
-                    let mut index_vec: Vec<u8> = vec![0; BSIZE];
-                    let index_slice = index_vec.as_mut_slice();
-                    let index_header_slice = &mut index_slice[0..hindex_len];
-                    index.dump_into(index_header_slice).map_err(|_| libc::EIO)?;
-                    let mut ie_idx = 0;
-                    while let Some(ie) = ie2_vec.pop() {
-                        println!("dumping entry in index node with hash: {}", ie.name_hash);
-                        let ie_slice = &mut index_slice[hindex_len + ie_idx as usize * hentry_len
-                            ..hindex_len + (ie_idx + 1) as usize * hentry_len];
-                        ie.dump_into(ie_slice).map_err(|_| libc::EIO)?;
-                        ie_idx += 1;
-                    }
-                    // let write_size = ie_idx * hentry_len as usize;
-                    // need to clear out possible trash values
-                    let write_size = BSIZE;
-                    if self.writei(
-                        index_slice,
-                        target_lblock as usize * BSIZE,
-                        write_size,
-                        internals,
-                        parent_inum,
-                    )? != write_size
-                    {
-                        println!("orig index node entries write failed");
-                        return Err(libc::EIO);
-                    }
-                }
-
-                // create new index node with the remaining entries for root indeces
-
-                new_index.entries = leaf_vec.len() as u32;
-                // should be the same as leaf2_lower
-
-                let lower_bound = leaf_vec[leaf_vec.len() - 1].name_hash;
-                println!("leaf2_lower: {}, lower_bound: {}", leaf2_lower, lower_bound);
-                new_rie.name_hash = lower_bound;
-                new_rie.block = num_blocks as u32 + 1;
-
-                {
-                    let mut index_vec: Vec<u8> = vec![0; BSIZE];
-                    let index_slice = index_vec.as_mut_slice();
-                    let index_header_slice = &mut index_slice[0..hindex_len];
-                    new_index
-                        .dump_into(index_header_slice)
-                        .map_err(|_| libc::EIO)?;
-
-                    let mut ie_idx = 0;
-                    while let Some(ie) = leaf_vec.pop() {
-                        println!(
-                            "dumping entry in new index node with hash: {}",
-                            ie.name_hash
-                        );
-                        let ie_slice = &mut index_slice[hindex_len + ie_idx as usize * hentry_len
-                            ..hindex_len + (ie_idx + 1) as usize * hentry_len];
-                        ie.dump_into(ie_slice).map_err(|_| libc::EIO)?;
-                        ie_idx += 1;
-                    }
-                    // let write_size = ie_idx * hentry_len as usize;
-                    // zero out possible thrash values
-                    let write_size = BSIZE;
-                    if self.writei(
-                        index_slice,
-                        (num_blocks + 1 as usize) * BSIZE,
-                        write_size,
-                        internals,
-                        parent_inum,
-                    )? != write_size
-                    {
-                        return Err(libc::EIO);
-                    }
-                }
-                // index_vec = index entries in the root node
-                // leaf_vec = hentries in index node
-
-                // udpate root
-                let mut rie_map: BTreeMap<u32, Htree_entry> = BTreeMap::new();
-                while let Some(ie) = index_vec.pop() {
-                    rie_map.insert(ie.name_hash, ie);
-                }
-                rie_map.insert(new_rie.name_hash, new_rie);
-                {
-                    let mut keys: Vec<_> = rie_map.keys().cloned().collect();
-                    // add index entries in reverse order
-                    while let Some(key) = keys.pop() {
-                        if let Some(val) = rie_map.remove(&key) {
-                            index_vec.push(val);
-                        }
-                    }
-                }
-
-                {
-                    root.ind_entries += 1;
-                    root.blocks += 2;
-                    let root_header_slice = &mut root_arr_slice[0..hroot_len];
-                    root.dump_into(root_header_slice).map_err(|_| libc::EIO)?;
-                    let mut rie_idx = 0;
-                    while let Some(rie) = index_vec.pop() {
-                        println!("dumping entry in root node with hash: {}", rie.name_hash);
-                        let rie_slice = &mut root_arr_slice[hroot_len
-                            + rie_idx as usize * hentry_len
-                            ..hroot_len + (rie_idx + 1) as usize * hentry_len];
-                        rie.dump_into(rie_slice).map_err(|_| libc::EIO)?;
-                        rie_idx += 1;
-                    }
-                    // let write_size = hroot_len + hentry_len * rie_idx as usize;
-                    // zero out possible trash values
-                    let write_size = BSIZE;
-                    if self.writei(root_arr_slice, 0, write_size, internals, parent_inum)?
-                        != write_size
-                    {
-                        println!("entry write in root node failed");
-                        return Err(libc::EIO);
-                    }
-                }
-            } else {
-                // root is cannot contain more index entries
-                println!("root cannot contain more index entries");
-                return Err(libc::EIO);
-            }
         }
+        //     if (root.ind_entries as usize) < (BSIZE - hroot_len) / hentry_len {
+        //         println!("splitting root index entries");
+        //         // new entries to add to root node
+        //         let mut new_rie = Htree_entry::new();
+        //         let mut new_index = Htree_index::new();
+
+        //         // leaf vec is in reverse order (i.e. 10, 9, 8, .. )
+        //         // split original index node and update original index node
+        //         // ie2_vec contains lower entries
+        //         let mut ie2_vec = leaf_vec.split_off(leaf_vec.len() / 2);
+        //         {
+        //             index.entries = ie2_vec.len() as u32;
+        //             let mut index_vec: Vec<u8> = vec![0; BSIZE];
+        //             let index_slice = index_vec.as_mut_slice();
+        //             let index_header_slice = &mut index_slice[0..hindex_len];
+        //             index.dump_into(index_header_slice).map_err(|_| libc::EIO)?;
+        //             let mut ie_idx = 0;
+        //             while let Some(ie) = ie2_vec.pop() {
+        //                 println!("dumping entry in index node with hash: {}", ie.name_hash);
+        //                 let ie_slice = &mut index_slice[hindex_len + ie_idx as usize * hentry_len
+        //                     ..hindex_len + (ie_idx + 1) as usize * hentry_len];
+        //                 ie.dump_into(ie_slice).map_err(|_| libc::EIO)?;
+        //                 ie_idx += 1;
+        //             }
+        //             // let write_size = ie_idx * hentry_len as usize;
+        //             // need to clear out possible trash values
+        //             let write_size = BSIZE;
+        //             if self.writei(
+        //                 index_slice,
+        //                 target_lblock as usize * BSIZE,
+        //                 write_size,
+        //                 internals,
+        //                 parent_inum,
+        //             )? != write_size
+        //             {
+        //                 println!("orig index node entries write failed");
+        //                 return Err(libc::EIO);
+        //             }
+        //         }
+
+        //         // create new index node with the remaining entries for root indeces
+
+        //         new_index.entries = leaf_vec.len() as u32;
+        //         // should be the same as leaf2_lower
+
+        //         let lower_bound = leaf_vec[leaf_vec.len() - 1].name_hash;
+        //         println!("leaf2_lower: {}, lower_bound: {}", leaf2_lower, lower_bound);
+        //         new_rie.name_hash = lower_bound;
+        //         new_rie.block = num_blocks as u32 + 1;
+
+        //         {
+        //             let mut index_vec: Vec<u8> = vec![0; BSIZE];
+        //             let index_slice = index_vec.as_mut_slice();
+        //             let index_header_slice = &mut index_slice[0..hindex_len];
+        //             new_index
+        //                 .dump_into(index_header_slice)
+        //                 .map_err(|_| libc::EIO)?;
+
+        //             let mut ie_idx = 0;
+        //             while let Some(ie) = leaf_vec.pop() {
+        //                 println!(
+        //                     "dumping entry in new index node with hash: {}",
+        //                     ie.name_hash
+        //                 );
+        //                 let ie_slice = &mut index_slice[hindex_len + ie_idx as usize * hentry_len
+        //                     ..hindex_len + (ie_idx + 1) as usize * hentry_len];
+        //                 ie.dump_into(ie_slice).map_err(|_| libc::EIO)?;
+        //                 ie_idx += 1;
+        //             }
+        //             // let write_size = ie_idx * hentry_len as usize;
+        //             // zero out possible thrash values
+        //             let write_size = BSIZE;
+        //             if self.writei(
+        //                 index_slice,
+        //                 (num_blocks + 1 as usize) * BSIZE,
+        //                 write_size,
+        //                 internals,
+        //                 parent_inum,
+        //             )? != write_size
+        //             {
+        //                 return Err(libc::EIO);
+        //             }
+        //         }
+        //         // index_vec = index entries in the root node
+        //         // leaf_vec = hentries in index node
+
+        //         // udpate root
+        //         let mut rie_map: BTreeMap<u32, Htree_entry> = BTreeMap::new();
+        //         while let Some(ie) = index_vec.pop() {
+        //             rie_map.insert(ie.name_hash, ie);
+        //         }
+        //         rie_map.insert(new_rie.name_hash, new_rie);
+        //         {
+        //             let mut keys: Vec<_> = rie_map.keys().cloned().collect();
+        //             // add index entries in reverse order
+        //             while let Some(key) = keys.pop() {
+        //                 if let Some(val) = rie_map.remove(&key) {
+        //                     index_vec.push(val);
+        //                 }
+        //             }
+        //         }
+
+        //         {
+        //             root.ind_entries += 1;
+        //             root.blocks += 2;
+        //             let root_header_slice = &mut root_arr_slice[0..hroot_len];
+        //             root.dump_into(root_header_slice).map_err(|_| libc::EIO)?;
+        //             let mut rie_idx = 0;
+        //             while let Some(rie) = index_vec.pop() {
+        //                 println!("dumping entry in root node with hash: {}", rie.name_hash);
+        //                 let rie_slice = &mut root_arr_slice[hroot_len
+        //                     + rie_idx as usize * hentry_len
+        //                     ..hroot_len + (rie_idx + 1) as usize * hentry_len];
+        //                 rie.dump_into(rie_slice).map_err(|_| libc::EIO)?;
+        //                 rie_idx += 1;
+        //             }
+        //             // let write_size = hroot_len + hentry_len * rie_idx as usize;
+        //             // zero out possible trash values
+        //             let write_size = BSIZE;
+        //             if self.writei(root_arr_slice, 0, write_size, internals, parent_inum)?
+        //                 != write_size
+        //             {
+        //                 println!("entry write in root node failed");
+        //                 return Err(libc::EIO);
+        //             }
+        //         }
+        //     } else {
+        //         // root is cannot contain more index entries
+        //         println!("root cannot contain more index entries");
+        //         return Err(libc::EIO);
+        //     }
+        // }
 
         // END
         println!("finish dirlink");
