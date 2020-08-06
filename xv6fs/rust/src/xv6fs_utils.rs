@@ -35,7 +35,7 @@ pub const NINODE: usize = 300;
 pub const MAXOPBLOCKS: usize = 32;
 pub const LOGSIZE: usize = MAXOPBLOCKS * 3;
 
-pub const HTREE_MAXDEPTH: u32 = 2;
+// pub const HTREE_MAXDEPTH: u32 = 2;
 pub const HTREE_MAXBLOCKS: u32 =
     (((BSIZE - mem::size_of::<Htree_root>()) / mem::size_of::<Htree_entry>())
         * ((BSIZE - mem::size_of::<Htree_index>()) / mem::size_of::<Htree_entry>())) as u32;
@@ -160,8 +160,8 @@ pub fn find_lowerbound(arr: &[Htree_entry], len: usize, target: u32) -> Option<u
     if len < 1 {
         return None;
     }
-    let mut lo: i8 = 0;
-    let mut hi: i8 = len as i8 - 1;
+    let mut lo: u32 = 0;
+    let mut hi: u32 = len as u32 - 1;
 
     while lo <= hi {
         let mid = ((hi - lo) / 2) + lo;

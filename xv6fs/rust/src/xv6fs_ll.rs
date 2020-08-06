@@ -1068,9 +1068,6 @@ impl Xv6FileSystem {
             return Ok(true);
         }
 
-        let mut rie_vec: Vec<u8> = vec![0; hentry_len];
-        let rie_slice = rie_vec.as_mut_slice();
-
         // check the index pointers stored in the root
         for off in (hroot_len..(num_indeces as usize * hentry_len) + hroot_len).step_by(hentry_len)
         {
@@ -1078,6 +1075,8 @@ impl Xv6FileSystem {
                 break;
             }
             let mut rie = Htree_entry::new();
+            let mut rie_vec: Vec<u8> = vec![0; hentry_len];
+            let rie_slice = rie_vec.as_mut_slice();
             match self.readi(rie_slice, off as usize, hentry_len, internals) {
                 Ok(x) if x != hentry_len => return Err(libc::EIO),
                 Err(x) => return Err(x),
@@ -1109,6 +1108,10 @@ impl Xv6FileSystem {
             for ine_idx in
                 (hindex_len..hindex_len + (hentry_len * index.entries as usize)).step_by(hentry_len)
             {
+                if ine_idx >= BSIZE {
+                    println!("too many entries in index block: {}", ine_idx);
+                    return Ok(false);
+                }
                 let ine_slice = &mut ind_arr_slice[ine_idx..ine_idx + hentry_len];
                 let mut ine = Htree_entry::new();
                 ine.extract_from(ine_slice).map_err(|_| libc::EIO)?;
@@ -1142,12 +1145,13 @@ impl Xv6FileSystem {
                 }
             }
         }
-        println!("");
+        println!("dir is empty");
         return Ok(true);
     }
 
     // TODO might want to coalesce adjacent block to reduce fragmentation
     fn dounlink(&self, nodeid: u64, name: &OsStr) -> Result<usize, libc::c_int> {
+        println!("dounlink");
         let parent = self.iget(nodeid)?;
         let icache = self.ilock_cache.as_ref().unwrap();
         let parent_inode_guard = self.ilock(parent.idx, &icache, parent.inum)?;
@@ -1157,6 +1161,7 @@ impl Xv6FileSystem {
             .map_err(|_| libc::EIO)?;
         let mut poff = 0;
         let name_str = name.to_str().unwrap();
+        println!("name: {}", name_str);
         if name_str == "." || name_str == ".." {
             return Err(libc::EIO);
         }
@@ -1200,6 +1205,7 @@ impl Xv6FileSystem {
         inode_internals.nlink -= 1;
         self.iupdate(&inode_internals, inode.inum)?;
 
+        println!("finished dounlink");
         return Ok(0);
     }
 }
