@@ -592,6 +592,7 @@ impl Xv6FileSystem {
         let mut off = _off;
         let i_size = internals.size as usize;
         if off > i_size || off + n < off {
+            println!("readi error1");
             return Err(libc::EIO);
         }
         if off + n > i_size {
@@ -877,6 +878,7 @@ impl Xv6FileSystem {
             };
             let de_name_trimmed = de_name.trim_end_matches('\0');
             if de_name_trimmed == search_name {
+                println!("found");
                 *poff = (leaf_idx as usize * BSIZE + de_idx * de_len) as u64;
                 return self.iget(de.inum as u64);
             }
