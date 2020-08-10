@@ -35,10 +35,6 @@ pub const NINODE: usize = 300;
 pub const MAXOPBLOCKS: usize = 32;
 pub const LOGSIZE: usize = MAXOPBLOCKS * 3;
 
-pub const HTREE_MAXBLOCKS: u32 =
-    (((BSIZE - mem::size_of::<Htree_root>()) / mem::size_of::<Htree_entry>())
-        * ((BSIZE - mem::size_of::<Htree_index>()) / mem::size_of::<Htree_entry>())) as u32;
-
 pub fn iblock(i: usize, sb: &Xv6fsSB) -> usize {
     i / IPB + sb.inodestart as usize
 }
@@ -97,90 +93,4 @@ impl Xv6fsDirent {
             name: [0; DIRSIZ as usize],
         }
     }
-}
-
-// Htree data structures
-
-#[repr(C)]
-#[derive(DataBlock)]
-pub struct Htree_root {
-    pub dot: Xv6fsDirent,
-    pub dotdot: Xv6fsDirent,
-    pub depth: u32,
-    pub blocks: u32,
-    pub ind_entries: u32,
-}
-
-impl Htree_root {
-    pub const fn new() -> Self {
-        Self {
-            dot: Xv6fsDirent::new(),
-            dotdot: Xv6fsDirent::new(),
-            depth: 0,
-            blocks: 0,
-            ind_entries: 0,
-        }
-    }
-}
-
-#[repr(C)]
-#[derive(DataBlock)]
-pub struct Htree_index {
-    pub fake_dirent: Xv6fsDirent,
-    pub entries: u32,
-}
-
-impl Htree_index {
-    pub const fn new() -> Self {
-        Self {
-            fake_dirent: Xv6fsDirent::new(),
-            entries: 0,
-        }
-    }
-}
-
-#[repr(C)]
-#[derive(DataBlock, Copy, Clone)]
-pub struct Htree_entry {
-    pub name_hash: u32,
-    pub block: u32,
-}
-
-impl Htree_entry {
-    pub const fn new() -> Self {
-        Self {
-            name_hash: 0,
-            block: 0,
-        }
-    }
-}
-
-pub fn find_lowerbound(arr: &[Htree_entry], len: usize, target: u32) -> Option<usize> {
-    if len < 1 {
-        return None;
-    }
-    let mut lo: u32 = 0;
-    let mut hi: u32 = len as u32 - 1;
-
-    while lo <= hi {
-        let mid = ((hi - lo) / 2) + lo;
-        let mid_index = mid as usize;
-        let val = &arr[mid_index].name_hash;
-        if lo == mid {
-            let val2 = &arr[hi as usize].name_hash;
-            if *val2 <= target {
-                return Some(hi as usize);
-            }
-            if *val > target {
-                return None;
-            }
-            return Some(lo as usize);
-        }
-        if *val <= target {
-            lo = mid;
-        } else {
-            hi = mid;
-        }
-    }
-    return None;
 }

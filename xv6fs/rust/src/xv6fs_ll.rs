@@ -42,6 +42,7 @@ use std::sync::RwLock;
 use time::*;
 
 use crate::xv6fs_file::*;
+use crate::xv6fs_htree::*;
 use crate::xv6fs_log::*;
 use crate::xv6fs_utils::*;
 

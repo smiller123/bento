@@ -32,6 +32,7 @@ use datablock::DataBlock;
 use fuse::{FileAttr, FileType};
 
 use crate::xv6fs_file::*;
+use crate::xv6fs_htree::*;
 use crate::xv6fs_ll::*;
 use crate::xv6fs_log::*;
 use crate::xv6fs_utils::*;
@@ -752,7 +753,7 @@ impl Xv6FileSystem {
             Err(_) => return Err(libc::EIO),
         };
         let osstr_name = OsStr::new(tmp_name);
-        let target_hash = osstr_name.calculate_hash();
+        let target_hash = calculate_hash(&osstr_name);
 
         // read in entire root block
         let root_arr_slice = hroot_arr_vec.as_mut_slice();
@@ -938,7 +939,7 @@ impl Xv6FileSystem {
             Err(_) => return Err(libc::EIO),
         };
         let osstr_name = OsStr::new(tmp_name);
-        let target_hash = osstr_name.calculate_hash();
+        let target_hash = calculate_hash(&osstr_name);
 
         // new directory, create root node
         if search_name == "." {
@@ -1233,7 +1234,7 @@ impl Xv6FileSystem {
                 Err(_) => return Err(libc::EIO),
             };
             let de_name_osstr = OsStr::new(de_name);
-            let de_hash = de_name_osstr.calculate_hash();
+            let de_hash = calculate_hash(&de_name_osstr);
 
             if !de_map.contains_key(&de_hash) {
                 de_map.insert(de_hash, Vec::with_capacity(3));
