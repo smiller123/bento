@@ -35,7 +35,6 @@ pub const NINODE: usize = 300;
 pub const MAXOPBLOCKS: usize = 32;
 pub const LOGSIZE: usize = MAXOPBLOCKS * 3;
 
-// pub const HTREE_MAXDEPTH: u32 = 2;
 pub const HTREE_MAXBLOCKS: u32 =
     (((BSIZE - mem::size_of::<Htree_root>()) / mem::size_of::<Htree_entry>())
         * ((BSIZE - mem::size_of::<Htree_index>()) / mem::size_of::<Htree_entry>())) as u32;

@@ -713,7 +713,6 @@ impl Xv6FileSystem {
         name: &OsStr,
         poff: &mut u64,
     ) -> Result<CachedInode<'a>, libc::c_int> {
-        println!("dirlookup");
         // Check if inode is directory
         if internals.inode_type != T_DIR {
             return Err(libc::ENOTDIR);
@@ -727,12 +726,9 @@ impl Xv6FileSystem {
 
         let search_name = match name.to_str() {
             Some(s) => s,
-            None => {
-                println!("name.to_str failed");
-                return Err(libc::ENOENT);
-            }
+            None => return Err(libc::ENOENT),
         };
-        println!("search_name: {}", search_name);
+
         let mut de = Xv6fsDirent::new();
         let mut de_vec: Vec<u8> = vec![0; de_len];
         let de_slice = de_vec.as_mut_slice();
@@ -757,10 +753,6 @@ impl Xv6FileSystem {
         };
         let osstr_name = OsStr::new(tmp_name);
         let target_hash = osstr_name.calculate_hash();
-        // get hash of target entry
-        // let target_hash = name.calculate_hash();
-
-        // Nodes should be in different logical blocks within the same file
 
         // read in entire root block
         let root_arr_slice = hroot_arr_vec.as_mut_slice();
@@ -787,7 +779,6 @@ impl Xv6FileSystem {
         }
 
         // all other entries are stored in leaf nodes
-
         // get all the index entries in a list and do binary search
         let num_indeces = root.ind_entries;
         let mut index_vec: Vec<Htree_entry> = Vec::with_capacity(num_indeces as usize);
@@ -805,12 +796,11 @@ impl Xv6FileSystem {
             index_vec.push(rie);
         }
 
-        // look for correct index node
+        // look for lowerbound of correct index node
         let ind_slice = index_vec.as_slice();
         let target_entry = match find_lowerbound(ind_slice, index_vec.len(), target_hash) {
             Some(index) => index,
             None => {
-                println!("find rie lower bound failed");
                 return Err(libc::ENOENT);
             }
         };
@@ -848,16 +838,14 @@ impl Xv6FileSystem {
             leaf_vec.push(hentry);
         }
 
-        // get correct leaf node
+        // get lowerbound of correct leaf node
         let leaf_slice = leaf_vec.as_slice();
         let target_leaf = match find_lowerbound(leaf_slice, leaf_vec.len(), target_hash) {
             Some(index) => index,
-            None => {
-                println!("find ine lowerbound failed");
-                return Err(libc::ENOENT);
-            }
+            None => return Err(libc::ENOENT),
         };
 
+        // read leafnode
         let leaf_idx = leaf_vec[target_leaf].block;
         let mut leaf_arr_vec: Vec<u8> = vec![0; BSIZE];
         let leaf_arr_slice = leaf_arr_vec.as_mut_slice();
@@ -878,58 +866,11 @@ impl Xv6FileSystem {
             };
             let de_name_trimmed = de_name.trim_end_matches('\0');
             if de_name_trimmed == search_name {
-                println!("found");
                 *poff = (leaf_idx as usize * BSIZE + de_idx * de_len) as u64;
                 return self.iget(de.inum as u64);
             }
         }
 
-        // nothing found in leaf node block
-        // there is still possibility of a hash collision
-        // check collision bit in hash
-        // let next_leaf = target_leaf + 1;
-        // let leaf_hash = leaf_vec[next_leaf].name_hash;
-
-        // // TODO: get lowest bit
-        // let collision = leaf_hash;
-        // if collision == 1 {
-        //     let leaf2_idx = leaf_vec[next_leaf].block;
-
-        //     let mut leaf2_arr_vec: Vec<u8> = vec![0; BSIZE];
-        //     let leaf2_arr_slice = leaf2_arr_vec.as_mut_slice();
-
-        //     self.readi(
-        //         leaf2_arr_slice,
-        //         BSIZE * leaf2_idx as usize,
-        //         BSIZE,
-        //         internals,
-        //     )?;
-
-        //     for de_idx in 0..BSIZE / de_len {
-        //         let mut de = Xv6fsDirent::new();
-        //         let de_slice = &mut leaf_arr_slice[de_idx * de_len..(de_idx + 1) * de_len];
-        //         de.extract_from(de_slice).map_err(|_| libc::EIO)?;
-
-        //         if (leaf2_idx as usize * BSIZE + de_idx * de_len) as u64 >= internals.size {
-        //             break;
-        //         }
-        //         if de.inum == 0 {
-        //             continue;
-        //         }
-        //         let de_name = match str::from_utf8(&de.name) {
-        //             Ok(x) => x,
-        //             Err(_) => break,
-        //         };
-        //         let de_name_trimmed = de_name.trim_end_matches('\0');
-        //         if de_name_trimmed == search_name {
-        //             *poff = (leaf2_idx as usize * BSIZE + de_idx * de_len) as u64;
-        //             return self.iget(de.inum as u64);
-        //         }
-        //     }
-        // }
-
-        // no hash collision, no entry found
-        println!("{} not found", search_name);
         return Err(libc::ENOENT);
     }
 
@@ -945,7 +886,7 @@ impl Xv6FileSystem {
         if internals.inode_type != T_DIR {
             return Err(libc::ENOTDIR);
         }
-        println!("\ndirlink..");
+
         let hroot_len = mem::size_of::<Htree_root>();
         let hindex_len = mem::size_of::<Htree_index>();
         let hentry_len = mem::size_of::<Htree_entry>();
@@ -960,8 +901,6 @@ impl Xv6FileSystem {
             }
         };
 
-        // Nodes should be in different logical blocks within the same file
-
         // read in entire root block
         let root_arr_slice = hroot_arr_vec.as_mut_slice();
         self.readi(root_arr_slice, 0, BSIZE, internals)?;
@@ -972,10 +911,6 @@ impl Xv6FileSystem {
         root.extract_from(root_slice).map_err(|_| libc::EIO)?;
         let num_indeces = root.ind_entries;
         let mut num_blocks = root.blocks as usize;
-        println!(
-            "extracted root node - depth: {}, num_indeces: {}, num_blocks: {}",
-            root.depth, num_indeces, num_blocks
-        );
 
         // dirent to be written to leaf node
         let mut de = Xv6fsDirent::new();
@@ -1004,10 +939,9 @@ impl Xv6FileSystem {
         };
         let osstr_name = OsStr::new(tmp_name);
         let target_hash = osstr_name.calculate_hash();
-        println!("search_name: {}, hash: {}", search_name, target_hash);
+
         // new directory, create root node
         if search_name == "." {
-            println!("..creating '.'");
             root.ind_entries = 0;
             root.blocks = 1;
             root.dump_into(root_slice).map_err(|_| libc::EIO)?;
@@ -1020,10 +954,8 @@ impl Xv6FileSystem {
 
             return Ok(0);
         } else if search_name == ".." {
-            println!("..creating '..'");
             let root_de_slice = &mut root_slice[de_len..2 * de_len];
             de.dump_into(root_de_slice).map_err(|_| libc::EIO)?;
-            println!("..writing at off: {}", de_len);
             if self.writei(root_de_slice, de_len, de_len, internals, parent_inum)? != de_len {
                 return Err(libc::EIO);
             }
@@ -1031,12 +963,10 @@ impl Xv6FileSystem {
             return Ok(0);
         }
 
-        println!("..regular dirent");
         // regular dirent
         de.dump_into(de_slice).map_err(|_| libc::EIO)?;
         // directory is empty
         if num_indeces == 0 {
-            println!("..empty directory");
             num_blocks = 1;
             let rie_offset = hroot_len;
             let index_offset = num_blocks * BSIZE;
@@ -1049,10 +979,7 @@ impl Xv6FileSystem {
             let rie_slice = rie_vec.as_mut_slice();
             rie.name_hash = target_hash;
             rie.block = (index_offset / BSIZE) as u32;
-            println!(
-                "..writing rie with hash: {}, block: {} at off: {}",
-                rie.name_hash, rie.block, rie_offset
-            );
+
             rie.dump_into(rie_slice).map_err(|_| libc::EIO)?;
             if self.writei(rie_slice, rie_offset, hentry_len, internals, parent_inum)? != hentry_len
             {
@@ -1064,10 +991,7 @@ impl Xv6FileSystem {
             let mut index_vec: Vec<u8> = vec![0; hindex_len];
             let index_slice = index_vec.as_mut_slice();
             index.entries = 1 as u32;
-            println!(
-                "..writing index with entries #: {} at off: {}",
-                index.entries, index_offset
-            );
+
             index.dump_into(index_slice).map_err(|_| libc::EIO)?;
 
             if self.writei(
@@ -1088,10 +1012,6 @@ impl Xv6FileSystem {
             ine.name_hash = target_hash;
             ine.block = (de_offset / BSIZE) as u32;
 
-            println!(
-                "..writing ine with hash: {}, block: {} at off: {}",
-                ine.name_hash, ine.block, ine_offset
-            );
             ine.dump_into(ine_slice).map_err(|_| libc::EIO)?;
 
             if self.writei(ine_slice, ine_offset, hentry_len, internals, parent_inum)? != hentry_len
@@ -1099,6 +1019,7 @@ impl Xv6FileSystem {
                 return Err(libc::EIO);
             }
 
+            // write dirent to leafnode
             if self.writei(de_slice, de_offset, de_len, internals, parent_inum)? != de_len {
                 return Err(libc::EIO);
             }
@@ -1107,55 +1028,42 @@ impl Xv6FileSystem {
             root.depth = 2;
             root.ind_entries = 1;
             root.blocks = 3;
-            println!(
-                "..updating root - depth: {}, ind_entries: {}",
-                root.depth, root.ind_entries
-            );
+
             root.dump_into(root_slice).map_err(|_| libc::EIO)?;
             if self.writei(root_slice, 0, hroot_len, internals, parent_inum)? != hroot_len {
                 return Err(libc::EIO);
             }
-            println!("..OK\n");
+
             return Ok(0);
         }
 
-        println!("..directory is not empty");
         // directory is not empty
+
+        // Add index entries in root node to a vec for binary search
         let mut index_vec: Vec<Htree_entry> = Vec::with_capacity((num_indeces + 1) as usize);
-        println!("..adding root indences to vec");
         for rie_idx in 0..num_indeces {
-            println!("rie_idx: {}", rie_idx);
             if hroot_len + rie_idx as usize * hentry_len >= BSIZE {
-                println!(
-                    "..breaking cuz outside block. {} >= {}",
-                    hroot_len + rie_idx as usize * hentry_len,
-                    BSIZE
-                );
                 break;
             }
             let mut ie = Htree_entry::new();
             let ie_slice = &mut root_arr_slice[hroot_len + (hentry_len * rie_idx as usize)
                 ..hroot_len + (hentry_len * (rie_idx as usize + 1))];
-            println!("..extracting ie from slice");
+
             ie.extract_from(ie_slice).map_err(|_| libc::EIO)?;
-            // println!(
-            //     "extracted - rie hash: {}, block: {}",
-            //     ie.name_hash, ie.block
-            // );
+
             if ie.block == 0 {
                 break;
             }
-            println!("..adding rie hash: {}, block: {}", ie.name_hash, ie.block);
             index_vec.push(ie);
         }
 
         // case: new hash < lowest hash value in root entries
+        // need to add new index entry in root, create a new index node, and create a leafnode
         if target_hash < index_vec[0].name_hash {
+            // directory reached maximum blocks allowed
             if num_blocks >= HTREE_MAXBLOCKS as usize - 2 {
-                println!("HTREE_MAXBLOCKS reached.. no more blocks can be used");
                 return Err(libc::ENOENT);
             }
-            let rie_offset = hroot_len;
             let index_offset = num_blocks * BSIZE;
             let ine_offset = index_offset + hindex_len;
             let de_offset = (num_blocks + 1) * BSIZE;
@@ -1165,10 +1073,6 @@ impl Xv6FileSystem {
             let mut index_bvec: Vec<u8> = vec![0; hindex_len];
             let index_slice = index_bvec.as_mut_slice();
             index.entries = 1 as u32;
-            println!(
-                "..writing index with entries #: {} at off: {}",
-                index.entries, index_offset
-            );
             index.dump_into(index_slice).map_err(|_| libc::EIO)?;
 
             if self.writei(
@@ -1188,11 +1092,6 @@ impl Xv6FileSystem {
             let ine_slice = ine_vec.as_mut_slice();
             ine.name_hash = target_hash;
             ine.block = (de_offset / BSIZE) as u32;
-
-            println!(
-                "..writing ine with hash: {}, block: {} at off: {}",
-                ine.name_hash, ine.block, ine_offset
-            );
             ine.dump_into(ine_slice).map_err(|_| libc::EIO)?;
 
             if self.writei(ine_slice, ine_offset, hentry_len, internals, parent_inum)? != hentry_len
@@ -1200,10 +1099,12 @@ impl Xv6FileSystem {
                 return Err(libc::EIO);
             }
 
+            // write dirent to leafnode
             if self.writei(de_slice, de_offset, de_len, internals, parent_inum)? != de_len {
                 return Err(libc::EIO);
             }
 
+            // add new index entry to previous entries in root node in sorted order
             let mut rie = Htree_entry::new();
             rie.name_hash = target_hash;
             rie.block = (index_offset / BSIZE) as u32;
@@ -1213,10 +1114,6 @@ impl Xv6FileSystem {
                 index_vec_rev.push(hen);
             }
             index_vec_rev.push(rie);
-            println!(
-                "..writing rie with hash: {}, block: {} at off: {}",
-                rie.name_hash, rie.block, rie_offset
-            );
 
             let mut rie_idx = 0;
             while let Some(rie) = index_vec_rev.pop() {
@@ -1231,8 +1128,8 @@ impl Xv6FileSystem {
 
                 rie_idx += 1;
             }
-            println!("rie_idx = {}", rie_idx);
-            // update root info and add new entry
+
+            // update root info
             let root2_slice = &mut root_arr_slice[0..hroot_len];
             root.ind_entries += 1;
             root.blocks += 2;
@@ -1243,17 +1140,14 @@ impl Xv6FileSystem {
             return Ok(0);
         }
 
-        // look for correct index node block
+        // look for correct lowerbound for index node
         let ind_slice = index_vec.as_slice();
         let target_entry = match find_lowerbound(ind_slice, index_vec.len(), target_hash) {
             Some(index) => index,
-            None => {
-                println!("find lowerbound for rie failed");
-                return Err(libc::ENOENT);
-            }
+            None => return Err(libc::ENOENT),
         };
-        println!("..found lowerbound for rie: {}", target_entry);
 
+        // read entire index block
         let target_lblock: u32 = index_vec[target_entry].block;
         let mut hindex_arr_vec: Vec<u8> = vec![0; BSIZE];
         let hindex_arr_slice = hindex_arr_vec.as_mut_slice();
@@ -1263,19 +1157,15 @@ impl Xv6FileSystem {
             BSIZE,
             internals,
         )?;
-        println!("..target_index_block: {}", target_lblock);
+
         // get index header
         let mut index = Htree_index::new();
         let hindex_slice = &mut hindex_arr_slice[0..hindex_len];
         index.extract_from(hindex_slice).map_err(|_| libc::EIO)?;
 
-        // create vec for binary search
+        // create vec of entries in index node for binary search
         let num_entries = index.entries;
         let mut leaf_vec: Vec<Htree_entry> = Vec::with_capacity((num_entries + 1) as usize);
-        println!(
-            "..num_entries in index: {}, finding lower bound",
-            num_entries
-        );
         for off in (hindex_len..hindex_len + hentry_len * num_entries as usize).step_by(hentry_len)
         {
             if off >= BSIZE {
@@ -1287,76 +1177,51 @@ impl Xv6FileSystem {
             if hentry.block == 0 {
                 break;
             }
-            println!(
-                "..adding entry hash: {}, block: {} ",
-                hentry.name_hash, hentry.block
-            );
             leaf_vec.push(hentry);
         }
 
-        println!(
-            "# elements in leaf_vec(index node entries): {} ",
-            leaf_vec.len()
-        );
-        // get correct leaf node
+        // get correct lowerbound for leaf node
         let leaf_slice = leaf_vec.as_slice();
         let target_leaf = match find_lowerbound(leaf_slice, leaf_vec.len(), target_hash) {
             Some(index) => index,
-            None => {
-                println!("target_leaf lowerbound not found");
-                return Err(libc::ENOENT);
-            }
+            None => return Err(libc::ENOENT),
         };
 
+        // read entire leaf node block
         let leaf_idx = leaf_vec[target_leaf].block;
-        println!(
-            "lowerbound for leafnode: {}, block: {}",
-            target_leaf, leaf_idx,
-        );
         let mut leaf_arr_vec: Vec<u8> = vec![0; BSIZE];
         let leaf_arr_slice = leaf_arr_vec.as_mut_slice();
         self.readi(leaf_arr_slice, BSIZE * leaf_idx as usize, BSIZE, internals)?;
 
-        // TODO need to check for collision, if so, add to next leaf node and set collision bit
+        // look for an entry space in leafnode
         let mut final_off = None;
         for de_idx in 0..BSIZE / de_len {
-            // println!("de_idx: {}", de_idx);
             let mut de_temp = Xv6fsDirent::new();
             let de_slice_temp = &mut leaf_arr_slice[de_idx * de_len..(de_idx + 1) * de_len];
             de_temp.extract_from(de_slice_temp).map_err(|_| libc::EIO)?;
             if de_temp.inum == 0 {
-                // println!("inum == 0");
                 final_off = Some((leaf_idx as usize * BSIZE + de_idx * de_len) as u64);
             }
 
             // there is enough space in the leaf node
             if final_off.is_some() {
-                println!("..found space in leafnode, inserting..");
                 let final_off = final_off.unwrap();
                 if self.writei(de_slice, final_off as usize, de_len, internals, parent_inum)?
                     != de_len
                 {
                     return Err(libc::EIO);
                 }
-                println!("..OK, inserted at off: {}\n", final_off);
                 return Ok(0);
             }
         }
-        println!("no space in current leaf node");
 
         // not enough space in the current leaf node
         // need to split leaf nodes
 
-        // final off should be internals.size
-        let final_off = num_blocks * BSIZE;
         let mut de_map: BTreeMap<u32, Vec<Xv6fsDirent>> = BTreeMap::new();
 
-        println!(
-            "..current leafnode is full. Splitting.. new leaf node at off: {}",
-            final_off
-        );
+        // add dirents with their hash value to map for sorting
         for de_idx in 0..BSIZE / de_len {
-            // println!("de_idx: {}", de_idx);
             let mut de_temp = Xv6fsDirent::new();
             let de_slice_temp = &mut leaf_arr_slice[de_idx * de_len..(de_idx + 1) * de_len];
             de_temp.extract_from(de_slice_temp).map_err(|_| libc::EIO)?;
@@ -1367,10 +1232,8 @@ impl Xv6FileSystem {
                 Ok(x) => x,
                 Err(_) => return Err(libc::EIO),
             };
-            // println!("de_name: {}", de_name);
             let de_name_osstr = OsStr::new(de_name);
             let de_hash = de_name_osstr.calculate_hash();
-            // println!("de_hash: {}", de_hash);
 
             if !de_map.contains_key(&de_hash) {
                 de_map.insert(de_hash, Vec::with_capacity(3));
@@ -1379,28 +1242,19 @@ impl Xv6FileSystem {
                 x.push(de_temp);
             }
         }
-        println!("..total number of dirents: {}", de_map.len());
+
         // get the new lower bounds for the leaf nodes
         let mut keys: Vec<_> = de_map.keys().cloned().collect();
         let keys2 = keys.split_off(keys.len() / 2);
         let mut de_map2 = de_map.split_off(&keys2[0]);
-        println!(
-            "de_map len: {}, de_map2 len: {}",
-            de_map.len(),
-            de_map2.len()
-        );
-        // let leaf1_lower = 0;
         let leaf2_lower = keys2[0];
-        println!("leaf2_lower bound: {}", leaf2_lower);
 
         // get vecs from the dirents maps
         let mut leaf1_dir_vec: Vec<Xv6fsDirent> = Vec::with_capacity(66);
         let mut leaf2_dir_vec: Vec<Xv6fsDirent> = Vec::with_capacity(66);
 
         {
-            // println!("map1 keys");
             for key in keys {
-                // println!("{}", key);
                 if let Some(mut val) = de_map.remove(&key) {
                     while let Some(dirent) = val.pop() {
                         leaf1_dir_vec.push(dirent);
@@ -1409,9 +1263,7 @@ impl Xv6FileSystem {
             }
         }
         {
-            // println!("map2 keys");
             for key in keys2 {
-                // println!("{}", key);
                 if let Some(mut val) = de_map2.remove(&key) {
                     while let Some(dirent) = val.pop() {
                         leaf2_dir_vec.push(dirent);
@@ -1419,27 +1271,20 @@ impl Xv6FileSystem {
                 }
             }
         }
-        println!("leaf1_dir_vec len: {}", leaf1_dir_vec.len());
-        println!("leaf2_dir_vec len: {}", leaf2_dir_vec.len());
 
         // keep half dirents into current leaf node
         {
             let mut leaf_vec: Vec<u8> = vec![0; BSIZE];
             let leaf_slice = leaf_vec.as_mut_slice();
             let mut idx = 0;
-            println!("..orig leafnode # dirents: {}", leaf1_dir_vec.len());
             while let Some(de) = leaf1_dir_vec.pop() {
                 let leaf_idx_slice = &mut leaf_slice[idx * de_len..(idx + 1) * de_len];
                 de.dump_into(leaf_idx_slice).map_err(|_| libc::EIO)?;
                 idx += 1;
             }
-            // let write_size = idx * de_len as usize;
-            // need overwrite prev dirents with 0's.
+
+            // need overwrite prev dirents with 0's
             let write_size = BSIZE;
-            println!(
-                "..written # dirents: {}, total write size: {}",
-                idx, write_size
-            );
             if self.writei(
                 leaf_slice,
                 leaf_idx as usize * BSIZE,
@@ -1448,32 +1293,29 @@ impl Xv6FileSystem {
                 parent_inum,
             )? != write_size
             {
-                println!("orig leafnode write failed");
                 return Err(libc::EIO);
             }
         }
 
+        // directory reached max blocks allowed
         if num_blocks >= HTREE_MAXBLOCKS as usize - 1 {
-            println!("HTREE_MAXBLOCKS reached.. no more blocks can be used");
             return Err(libc::ENOENT);
         }
+
         // write other half into a new leafnode
         {
             let mut leaf_vec: Vec<u8> = vec![0; BSIZE];
             let leaf_slice = leaf_vec.as_mut_slice();
             let mut idx = 0;
-            println!("..new leafnode # dirents: {}", leaf2_dir_vec.len());
+
             while let Some(de) = leaf2_dir_vec.pop() {
                 let leaf_idx_slice = &mut leaf_slice[idx * de_len..(idx + 1) * de_len];
                 de.dump_into(leaf_idx_slice).map_err(|_| libc::EIO)?;
                 idx += 1;
             }
-            // let write_size = idx * de_len as usize;
+
+            // zero out possible trash values
             let write_size = BSIZE;
-            println!(
-                "..written # dirents: {}, total write size: {}",
-                idx, write_size
-            );
             if self.writei(
                 leaf_slice,
                 num_blocks * BSIZE,
@@ -1482,65 +1324,53 @@ impl Xv6FileSystem {
                 parent_inum,
             )? != write_size
             {
-                println!("new leafnode write failed");
                 return Err(libc::EIO);
             }
         }
 
-        println!("..creating new hentry in index node");
         // create a new hentry in the index node
         let num_entries = index.entries as usize;
 
         // sort old entries in index node
         let mut ie_map: BTreeMap<u32, Htree_entry> = BTreeMap::new();
-        println!("leaf_vec len: {}", leaf_vec.len());
         while let Some(ie) = leaf_vec.pop() {
             ie_map.insert(ie.name_hash, ie);
         }
-        println!("ie_map len: {}", ie_map.len());
+
         let mut new_ie = Htree_entry::new();
         new_ie.name_hash = leaf2_lower;
         new_ie.block = num_blocks as u32;
         ie_map.insert(new_ie.name_hash, new_ie);
-        println!("ie_map len: {}", ie_map.len());
-        println!(
-            "..new_ie hash: {}, block: {}",
-            new_ie.name_hash, new_ie.block
-        );
+
         // store ie's in reverse order [10, 9, 8, ..]
         {
             let mut keys: Vec<_> = ie_map.keys().cloned().collect();
             while let Some(key) = keys.pop() {
-                // println!("key: {}", key);
                 if let Some(val) = ie_map.remove(&key) {
                     leaf_vec.push(val);
                 }
             }
         }
-        println!("leaf_vec sorted len: {}", leaf_vec.len());
-        println!("leaf_vec is sorted");
+
         // enough space in current index node
         if num_entries < ((BSIZE - hindex_len) / hentry_len) {
-            // // insert in sorted order
-            println!(".. inserting new_ie in current index node");
+            // insert in sorted order
             let mut index_vec: Vec<u8> = vec![0; BSIZE];
             let index_slice = index_vec.as_mut_slice();
             index.entries += 1;
             let index_header_slice = &mut index_slice[0..hindex_len];
             index.dump_into(index_header_slice).map_err(|_| libc::EIO)?;
-            println!("new index entries number: {}", index.entries);
+
             let mut ie_idx = 0;
             while let Some(ie) = leaf_vec.pop() {
-                // println!("dumping ine with hash: {}", ie.name_hash);
                 let ie_slice = &mut index_slice[hindex_len + ie_idx as usize * hentry_len
                     ..hindex_len + (ie_idx + 1) as usize * hentry_len];
                 ie.dump_into(ie_slice).map_err(|_| libc::EIO)?;
                 ie_idx += 1;
             }
-            // let write_size = ie_idx * hentry_len as usize;
+
             // zero out any possible trash value
             let write_size = BSIZE;
-            println!("writing ie_idx elements: {}", ie_idx);
             if self.writei(
                 index_slice,
                 target_lblock as usize * BSIZE,
@@ -1549,9 +1379,10 @@ impl Xv6FileSystem {
                 parent_inum,
             )? != write_size
             {
-                println!("write index_slice failed");
                 return Err(libc::EIO);
             }
+
+            // update root info
             let root2_slice = &mut root_arr_slice[0..hroot_len];
             root.blocks += 1;
             root.dump_into(root2_slice).map_err(|_| libc::EIO)?;
@@ -1560,15 +1391,15 @@ impl Xv6FileSystem {
             }
         } else {
             // not enough space, need to split root index nodes
+
+            // directory reached maximum blocks allowed
             if num_blocks >= HTREE_MAXBLOCKS as usize - 2 {
-                println!("HTREE_MAXBLOCKS reached.. no more blocks can be used");
                 return Err(libc::ENOENT);
             }
-            println!("splitting root index entries");
 
             if (root.ind_entries as usize) < (BSIZE - hroot_len) / hentry_len {
-                println!("splitting root index entries");
-                // new entries to add to root node
+                // enough space for new index entry in root node
+
                 let mut new_rie = Htree_entry::new();
                 let mut new_index = Htree_index::new();
 
@@ -1584,13 +1415,12 @@ impl Xv6FileSystem {
                     index.dump_into(index_header_slice).map_err(|_| libc::EIO)?;
                     let mut ie_idx = 0;
                     while let Some(ie) = ie2_vec.pop() {
-                        println!("dumping entry in index node with hash: {}", ie.name_hash);
                         let ie_slice = &mut index_slice[hindex_len + ie_idx as usize * hentry_len
                             ..hindex_len + (ie_idx + 1) as usize * hentry_len];
                         ie.dump_into(ie_slice).map_err(|_| libc::EIO)?;
                         ie_idx += 1;
                     }
-                    // let write_size = ie_idx * hentry_len as usize;
+
                     // need to clear out possible trash values
                     let write_size = BSIZE;
                     if self.writei(
@@ -1601,7 +1431,6 @@ impl Xv6FileSystem {
                         parent_inum,
                     )? != write_size
                     {
-                        println!("orig index node entries write failed");
                         return Err(libc::EIO);
                     }
                 }
@@ -1610,9 +1439,7 @@ impl Xv6FileSystem {
 
                 new_index.entries = leaf_vec.len() as u32;
                 // should be the same as leaf2_lower
-
                 let lower_bound = leaf_vec[leaf_vec.len() - 1].name_hash;
-                println!("leaf2_lower: {}, lower_bound: {}", leaf2_lower, lower_bound);
                 new_rie.name_hash = lower_bound;
                 new_rie.block = num_blocks as u32 + 1;
 
@@ -1626,16 +1453,12 @@ impl Xv6FileSystem {
 
                     let mut ie_idx = 0;
                     while let Some(ie) = leaf_vec.pop() {
-                        println!(
-                            "dumping entry in new index node with hash: {}",
-                            ie.name_hash
-                        );
                         let ie_slice = &mut index_slice[hindex_len + ie_idx as usize * hentry_len
                             ..hindex_len + (ie_idx + 1) as usize * hentry_len];
                         ie.dump_into(ie_slice).map_err(|_| libc::EIO)?;
                         ie_idx += 1;
                     }
-                    // let write_size = ie_idx * hentry_len as usize;
+
                     // zero out possible thrash values
                     let write_size = BSIZE;
                     if self.writei(
@@ -1668,6 +1491,7 @@ impl Xv6FileSystem {
                     }
                 }
 
+                // update root info and add new index entry to root node
                 {
                     root.ind_entries += 1;
                     root.blocks += 2;
@@ -1675,32 +1499,28 @@ impl Xv6FileSystem {
                     root.dump_into(root_header_slice).map_err(|_| libc::EIO)?;
                     let mut rie_idx = 0;
                     while let Some(rie) = index_vec.pop() {
-                        println!("dumping entry in root node with hash: {}", rie.name_hash);
                         let rie_slice = &mut root_arr_slice[hroot_len
                             + rie_idx as usize * hentry_len
                             ..hroot_len + (rie_idx + 1) as usize * hentry_len];
                         rie.dump_into(rie_slice).map_err(|_| libc::EIO)?;
                         rie_idx += 1;
                     }
-                    // let write_size = hroot_len + hentry_len * rie_idx as usize;
+
                     // zero out possible trash values
                     let write_size = BSIZE;
                     if self.writei(root_arr_slice, 0, write_size, internals, parent_inum)?
                         != write_size
                     {
-                        println!("entry write in root node failed");
                         return Err(libc::EIO);
                     }
                 }
             } else {
                 // root is cannot contain more index entries
-                println!("root cannot contain more index entries");
                 return Err(libc::EIO);
             }
         }
 
         // END
-        println!("finish dirlink");
         return Ok(0);
     }
 }
