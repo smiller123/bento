@@ -18,6 +18,8 @@ use crate::std;
 #[cfg(not(feature = "user"))]
 use crate::time;
 
+use alloc::collections::btree_map::BTreeMap;
+
 use alloc::string::String;
 use alloc::string::ToString;
 use alloc::sync::Arc;
@@ -61,6 +63,7 @@ pub struct Xv6FileSystem {
     pub sb: Option<Xv6fsSB>,
     pub disk: Option<Arc<Disk>>,
     pub ilock_cache: Option<Vec<RwLock<Inode>>>,
+    pub icache_map: Option<RwLock<BTreeMap<u64, usize>>>,
     pub ialloc_lock: Option<RwLock<usize>>,
     pub balloc_lock: Option<RwLock<usize>>,
     pub diskname: Option<String>,

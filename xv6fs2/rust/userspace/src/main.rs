@@ -50,6 +50,7 @@ fn main() {
         sb: None,
         disk: Some(Arc::new(disk)),
         ilock_cache: None,
+        icache_map: None,
         ialloc_lock: None,
         balloc_lock: None,
         diskname: Some(disk_name.to_str().unwrap().to_string()),

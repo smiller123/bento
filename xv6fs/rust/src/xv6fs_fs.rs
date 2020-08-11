@@ -18,6 +18,7 @@ use crate::std;
 #[cfg(not(feature = "user"))]
 use crate::time;
 
+use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
@@ -180,6 +181,7 @@ impl Xv6FileSystem {
             inode_vec.push(RwLock::new(Inode::new()));
         }
         self.ilock_cache = Some(inode_vec);
+        self.icache_map = Some(RwLock::new(BTreeMap::new()));
 
         self.ialloc_lock = Some(RwLock::new(0));
         self.balloc_lock = Some(RwLock::new(0));
@@ -274,6 +276,24 @@ impl Xv6FileSystem {
         let mut final_idx = None;
     
         let icache = self.ilock_cache.as_ref().unwrap();
+        let mut map = self.icache_map.as_ref().unwrap().write().unwrap();
+        if map.contains_key(&inum) {
+            let idx = map.get(&inum).unwrap();
+            let inode_lock = icache.get(*idx).unwrap();
+            let inode = inode_lock.read().unwrap();
+            let disk = self.disk.as_ref().unwrap();
+            let dev_id = disk.as_raw_fd();
+            let mut inode_nref = inode.nref.write().unwrap();
+            if *inode_nref > 0 && inode.dev == dev_id as u32 && inode.inum == inum as u32 {
+                *inode_nref += 1;
+   
+                return Ok(CachedInode {
+                    idx: *idx,
+                    inum: inum as u32,
+                    fs: self,
+                });
+            }
+        }
         for (idx, inode_lock) in icache.iter().enumerate() {
             let mut inode = match inode_lock.try_write() {
                 Ok(x) => x,
@@ -281,24 +301,17 @@ impl Xv6FileSystem {
             };
             let disk = self.disk.as_ref().unwrap();
             let dev_id = disk.as_raw_fd();
-            if inode.nref > 0 && inode.dev == dev_id as u32 && inode.inum == inum as u32 {
-                inode.nref += 1;
-    
-                return Ok(CachedInode {
-                    idx: idx,
-                    inum: inum as u32,
-                    fs: self,
-                });
-            }
-            if final_idx.is_none() && inode.nref == 0 {
+            if final_idx.is_none() && *inode.nref.read().unwrap() == 0 {
                 {
                     let mut new_inode_int = inode.internals.write().map_err(|_| {libc::EIO})?;
                     new_inode_int.valid = 0;
                 }
                 inode.dev = dev_id as u32;
                 inode.inum = inum as u32;
-                inode.nref = 1;
+                *inode.nref.write().unwrap() = 1;
                 final_idx = Some(idx);
+                map.insert(inum, idx);
+                break;
             }
         }
     
@@ -365,7 +378,7 @@ impl Xv6FileSystem {
                 {
                     let dinode_lock = icache.get(inode.idx).ok_or(libc::EIO)?;
                     let dinode = dinode_lock.read().map_err(|_| { libc::EIO })?;
-                    r = dinode.nref;
+                    r = *dinode.nref.read().unwrap();
                 }
                 if r == 1 {
                     self.itrunc(inode, &mut internals)?;
@@ -377,8 +390,13 @@ impl Xv6FileSystem {
         }
     
         let dinode_lock = icache.get(inode.idx).ok_or(libc::EIO)?;
-        let mut dinode = dinode_lock.write().map_err(|_| {libc::EIO})?;
-        dinode.nref -= 1;
+        let dinode = dinode_lock.read().map_err(|_| {libc::EIO})?;
+        let mut map = self.icache_map.as_ref().unwrap().write().unwrap();
+        let mut dinode_nref = dinode.nref.write().unwrap();
+        *dinode_nref -= 1;
+        if *dinode_nref == 0 {
+            map.remove(&(inode.inum as u64));
+        }
         return Ok(());
     }
     

@@ -38,6 +38,7 @@ pub static XV6FS: Xv6FileSystem = Xv6FileSystem {
     sb: None,
     disk: None,
     ilock_cache: None,
+    icache_map: None,
     ialloc_lock: None,
     balloc_lock: None,
     diskname: None,
@@ -47,7 +48,7 @@ pub static XV6FS: Xv6FileSystem = Xv6FileSystem {
 #[no_mangle]
 pub fn rust_main() {
     println!("Hello from Rust");
-    XV6FS.reregister();
+    XV6FS.register();
 }
 
 #[no_mangle]
