@@ -38,6 +38,7 @@ pub static XV6FS: Xv6FileSystem = Xv6FileSystem {
     sb: None,
     disk: None,
     ilock_cache: None,
+    icache_map: None,
     ialloc_lock: None,
     balloc_lock: None,
     diskname: None,

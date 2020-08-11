@@ -30,7 +30,7 @@ impl Drop for CachedInode<'_> {
 pub struct Inode {
     pub dev: u32,
     pub inum: u32,
-    pub nref: i32,
+    pub nref: RwLock<i32>,
     pub internals: RwLock<InodeInternal>,
 }
 
@@ -39,7 +39,7 @@ impl Inode {
         Inode {
             dev: 0,
             inum: 0,
-            nref: 0,
+            nref: RwLock::new(0),
             internals: RwLock::new(InodeInternal::new()),
         }
     }
