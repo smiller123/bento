@@ -11,14 +11,15 @@ extern crate env_logger;
 extern crate libc;
 #[macro_use]
 extern crate log;
-extern crate time;
 extern crate thread_scoped;
+extern crate time;
 
 #[macro_use]
 pub mod xv6fs_ll;
 pub mod fuse;
 pub mod xv6fs_file;
 pub mod xv6fs_fs;
+pub mod xv6fs_htree;
 pub mod xv6fs_log;
 pub mod xv6fs_utils;
 #[macro_use]
@@ -31,10 +32,10 @@ use std::ffi::OsStr;
 use xv6fs_ll::Xv6FileSystem;
 use xv6fs_utils::BSIZE;
 
-use fuse::*;
 use bento_utils::*;
-use time::Timespec;
+use fuse::*;
 use std::path::Path;
+use time::Timespec;
 
 impl_filesystem!(Xv6FileSystem);
 
