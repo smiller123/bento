@@ -14,7 +14,6 @@ extern crate log;
 extern crate serde;
 extern crate time;
 extern crate thread_scoped;
-extern crate time;
 
 #[macro_use]
 pub mod xv6fs_ll;
