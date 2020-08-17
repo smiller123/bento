@@ -113,7 +113,7 @@ pub fn find_lowerbound(arr: &[Htree_entry], len: usize, target: u32) -> Option<u
     return None;
 }
 
-// Calculates the hash value for a given OsStr kernel fs
+// Calculates the hash value for a given OsStr
 pub fn calculate_hash(target: &OsStr) -> u32 {
     let mut s = SliceHasher::new();
     target.hash(&mut s);
