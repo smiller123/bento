@@ -21,43 +21,9 @@ impl Slice {
     }
 }
 
-// Hash for Slice
-impl Hash for Slice {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.inner.hash(state);
-    }
-}
-
-pub struct SliceHasher {
-    state: u32,
-}
-
-impl SliceHasher {
-    pub fn new() -> Self {
-        SliceHasher { state: 5381 as u32 }
-    }
-
-    // djb2_hash
-    pub fn write_u8(&mut self, i: u8) {
-        self.state = ((self.state << 5) + self.state) + i as u32;
-    }
-}
-
-impl Hasher for SliceHasher {
-    fn finish(&self) -> u32 {
-        self.state
-    }
-
-    fn write(&mut self, bytes: &[u8]) {
-        for i in bytes {
-            self.write_u8(*i);
-        }
-    }
-}
-
 /// Copy of Rust libstd OsStr
 pub struct OsStr {
-    pub inner: Slice,
+    inner: Slice,
 }
 
 impl OsStr {
@@ -75,6 +41,16 @@ impl OsStr {
 
     pub fn len(&self) -> usize {
         self.inner.inner.len()
+    }
+
+    fn bytes(&self) -> &[u8] {
+        unsafe { &*(&self.inner as *const Slice as *const [u8]) }
+    }
+}
+
+impl Hash for OsStr {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.bytes().hash(state);
     }
 }
 
