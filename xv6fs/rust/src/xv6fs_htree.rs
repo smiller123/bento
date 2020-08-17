@@ -8,15 +8,20 @@
 */
 
 #[cfg(not(feature = "user"))]
+use crate::hash32::{Hash, Hasher};
+#[cfg(not(feature = "user"))]
 use crate::std;
 
 use core::mem;
 use datablock::DataBlock;
 
-use crate::hash32::{Hash, Hasher};
 use crate::xv6fs_utils::*;
 
 use std::ffi::OsStr;
+#[cfg(feature = "user")]
+use std::hash::{Hash, Hasher};
+
+#[cfg(not(feature = "user"))]
 use std::ffi::SliceHasher;
 
 pub const HTREE_MAXBLOCKS: u32 =
@@ -112,8 +117,51 @@ pub fn find_lowerbound(arr: &[Htree_entry], len: usize, target: u32) -> Option<u
 }
 
 // Calculates the hash value for a given OsStr
+#[cfg(not(feature = "user"))]
 pub fn calculate_hash(target: &OsStr) -> u32 {
     let mut s = SliceHasher::new();
     target.inner.hash(&mut s);
     s.finish()
+}
+
+#[cfg(feature = "user")]
+pub fn calculate_hash(target: &OsStr) -> u32 {
+    let mut s = SliceHasher::new();
+    target.hash(&mut s);
+    s.finish() as u32
+    // return 0;
+}
+
+#[cfg(feature = "user")]
+pub struct SliceHasher {
+    state: u32,
+}
+
+#[cfg(feature = "user")]
+impl SliceHasher {
+    #[cfg(feature = "user")]
+    pub fn new() -> Self {
+        SliceHasher { state: 5381 as u32 }
+    }
+
+    // djb2_hash
+    #[cfg(feature = "user")]
+    pub fn write_u8(&mut self, i: u8) {
+        self.state = ((self.state << 5) + self.state) + i as u32;
+    }
+}
+
+#[cfg(feature = "user")]
+impl Hasher for SliceHasher {
+    #[cfg(feature = "user")]
+    fn finish(&self) -> u64 {
+        self.state as u64
+    }
+
+    #[cfg(feature = "user")]
+    fn write(&mut self, bytes: &[u8]) {
+        for i in bytes {
+            self.write_u8(*i);
+        }
+    }
 }
