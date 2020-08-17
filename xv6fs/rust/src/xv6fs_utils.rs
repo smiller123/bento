@@ -1,11 +1,11 @@
 /*
- * SPDX-License-Identifier: GPL-2.0 OR MIT
- *
- * Copyright (C) 2020 Samantha Miller, Kaiyuan Zhang, Danyang Zhuo, Tom
-      Anderson, Ang Chen, University of Washington
- * Copyright (C) 2006-2018 Frans Kaashoek, Robert Morris, Russ Cox,
- *                      Massachusetts Institute of Technology
- */
+* SPDX-License-Identifier: GPL-2.0 OR MIT
+*
+* Copyright (C) 2020 Samantha Miller, Kaiyuan Zhang, Danyang Zhuo, Tom
+     Anderson, Ang Chen, University of Washington
+* Copyright (C) 2006-2018 Frans Kaashoek, Robert Morris, Russ Cox,
+*                      Massachusetts Institute of Technology
+*/
 
 use core::mem;
 use datablock::DataBlock;
