@@ -16,6 +16,7 @@
 
 #[macro_use]
 extern crate alloc;
+extern crate serde;
 
 use bento::bento_utils;
 use bento::fuse;
@@ -30,7 +31,8 @@ use hello_ll::HelloFS;
 use bento_utils::BentoFilesystem;
 
 pub static HELLO_FS: HelloFS = HelloFS {
-    disk: None
+    disk: None,
+    diskname: None,
 };
 
 #[no_mangle]

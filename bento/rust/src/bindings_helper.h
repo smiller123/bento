@@ -15,6 +15,13 @@
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 #include <linux/version.h>
+#include <linux/in.h>
+#include <linux/in6.h>
+#include <linux/net.h>
+#include <uapi/linux/tcp.h>
+#include <linux/uio.h>
+#include <linux/socket.h>
+#include <linux/kthread.h>
 
 // Bindgen gets confused at certain things
 //

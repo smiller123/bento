@@ -11,6 +11,8 @@ extern crate env_logger;
 extern crate libc;
 #[macro_use]
 extern crate log;
+extern crate serde;
+extern crate time;
 extern crate thread_scoped;
 extern crate time;
 
@@ -50,8 +52,10 @@ fn main() {
         sb: None,
         disk: Some(Arc::new(disk)),
         ilock_cache: None,
+        icache_map: None,
         ialloc_lock: None,
         balloc_lock: None,
+        diskname: Some(disk_name.to_str().unwrap().to_string()),
     };
 
     let mountpoint = env::args_os().nth(2).unwrap();

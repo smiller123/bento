@@ -1,0 +1,31 @@
+[package]
+name = "hello_client"
+version = "0.1.0"
+build = "build.rs"
+authors = ["Danyang Zhuo <danyangz@cs.washington.edu>",
+           "Kaiyuan Zhang <kaiyuanz@cs.washington.edu>",
+           "Samantha Miller <sm237@cs.washington.edu>"]
+
+[build-dependencies]
+pkg-config = "0.3"
+capnp = "*"
+capnpc = "*"
+
+[features]
+user = []
+
+[dependencies]
+datablock = { path = "../../../datablock-rs/datablock" }
+libc = "0.2.5"
+arr_macro = "0.1.0"
+fuse = "0.3.1"
+env_logger = "0.7.1"
+thread-scoped = "1.0.2"
+time = "0.1"
+log = "0.3"
+capnp = "*"
+capnpc = "*"
+
+[dependencies.serde]
+version = "*"
+features = ["derive"]

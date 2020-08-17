@@ -5,6 +5,9 @@ authors = ["Danyang Zhuo <danyangz@cs.washington.edu>",
            "Kaiyuan Zhang <kaiyuanz@cs.washington.edu>",
            "Samantha Miller <sm237@cs.washington.edu>"]
 
+[features]
+default = []
+capnproto = [ "capnp" ]
 
 [build-dependencies]
 bindgen = "*"
@@ -15,3 +18,13 @@ shlex = "0.1"
 rlibc = "1.0"
 datablock = { path = "../../datablock-rs/datablock" }
 hash32 = "0.1.1"
+
+[dependencies.capnp]
+version = "0.13.3"
+optional = true
+default-features = false
+
+[dependencies.serde]
+version = "*"
+default-features = false
+features = ["alloc", "derive"]
