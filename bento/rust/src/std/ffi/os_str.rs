@@ -1,3 +1,4 @@
+use crate::hash32::{Hash, Hasher};
 use core::mem;
 use core::str;
 
@@ -40,6 +41,16 @@ impl OsStr {
 
     pub fn len(&self) -> usize {
         self.inner.inner.len()
+    }
+
+    fn bytes(&self) -> &[u8] {
+        unsafe { &*(&self.inner as *const Slice as *const [u8]) }
+    }
+}
+
+impl Hash for OsStr {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.bytes().hash(state);
     }
 }
 

@@ -20,6 +20,7 @@ pub mod xv6fs_ll;
 pub mod fuse;
 pub mod xv6fs_file;
 pub mod xv6fs_fs;
+pub mod xv6fs_htree;
 pub mod xv6fs_log;
 pub mod xv6fs_utils;
 #[macro_use]
@@ -32,10 +33,10 @@ use std::ffi::OsStr;
 use xv6fs_ll::Xv6FileSystem;
 use xv6fs_utils::BSIZE;
 
-use fuse::*;
 use bento_utils::*;
-use time::Timespec;
+use fuse::*;
 use std::path::Path;
+use time::Timespec;
 
 impl_filesystem!(Xv6FileSystem);
 

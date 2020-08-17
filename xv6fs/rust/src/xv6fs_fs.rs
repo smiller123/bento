@@ -1,11 +1,11 @@
 /*
- * SPDX-License-Identifier: GPL-2.0 OR MIT
- *
- * Copyright (C) 2020 Samantha Miller, Kaiyuan Zhang, Danyang Zhuo, Tom
-      Anderson, Ang Chen, University of Washington
- * Copyright (C) 2006-2018 Frans Kaashoek, Robert Morris, Russ Cox,
- *                      Massachusetts Institute of Technology
- */
+* SPDX-License-Identifier: GPL-2.0 OR MIT
+*
+* Copyright (C) 2020 Samantha Miller, Kaiyuan Zhang, Danyang Zhuo, Tom
+     Anderson, Ang Chen, University of Washington
+* Copyright (C) 2006-2018 Frans Kaashoek, Robert Morris, Russ Cox,
+*                      Massachusetts Institute of Technology
+*/
 
 #[cfg(not(feature = "user"))]
 use crate::fuse;
@@ -29,15 +29,16 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 
 use datablock::DataBlock;
 
-use fuse::{FileAttr,FileType};
+use fuse::{FileAttr, FileType};
 
 use crate::xv6fs_file::*;
+use crate::xv6fs_htree::*;
 use crate::xv6fs_ll::*;
-use crate::xv6fs_utils::*;
 use crate::xv6fs_log::*;
+use crate::xv6fs_utils::*;
 
-use std::os::unix::io::AsRawFd;
 use std::ffi::OsStr;
+use std::os::unix::io::AsRawFd;
 use std::sync::*;
 
 use time::Timespec;
@@ -51,7 +52,8 @@ impl Xv6FileSystem {
         let disk = self.disk.as_ref().unwrap();
         let bh = disk.bread(1)?;
         let b_slice = bh.data();
-        sb.extract_from(&b_slice[0..mem::size_of::<Xv6fsSB>()]).map_err(|_| libc::EIO)?;
+        sb.extract_from(&b_slice[0..mem::size_of::<Xv6fsSB>()])
+            .map_err(|_| libc::EIO)?;
         return Ok(());
     }
 
@@ -200,7 +202,7 @@ impl Xv6FileSystem {
             sb.bmapstart
             );
     }
-    
+
     pub fn ialloc<'a>(&'a self, i_type: u16) -> Result<CachedInode<'a>, libc::c_int> {
         let sb = self.sb.as_ref().unwrap();
         let num_inodes = sb.ninodes;
@@ -217,10 +219,10 @@ impl Xv6FileSystem {
                 }
                 // Get the specific inode offset
                 let inode_offset = (inum as usize % IPB) * mem::size_of::<Xv6fsInode>();
-    
+
                 let inode_slice =
                     &mut data_slice[inode_offset..inode_offset + mem::size_of::<Xv6fsInode>()];
-    
+
                 let mut dinode = Xv6fsInode::new();
                 dinode.extract_from(inode_slice).map_err(|_| libc::EIO)?;
                 // Check if inode is free
@@ -242,7 +244,7 @@ impl Xv6FileSystem {
         }
         return Err(libc::EIO);
     }
-    
+
     pub fn iupdate(&self, internals: &InodeInternal, inum: u32) -> Result<(), libc::c_int> {
         let log = self.log.as_ref().unwrap();
         let disk = self.disk.as_ref().unwrap();
@@ -250,11 +252,12 @@ impl Xv6FileSystem {
         let iblock = iblock(inum as usize, &sb);
         let mut bh = disk.bread(iblock as u64)?;
         let data_slice = bh.data_mut();
-    
+
         // Get the specific inode offset
         let inode_offset = (inum as usize % IPB) * mem::size_of::<Xv6fsInode>();
-        let inode_slice = &mut data_slice[inode_offset..inode_offset + mem::size_of::<Xv6fsInode>()];
-    
+        let inode_slice =
+            &mut data_slice[inode_offset..inode_offset + mem::size_of::<Xv6fsInode>()];
+
         let mut disk_inode = Xv6fsInode::new();
         disk_inode
             .extract_from(inode_slice)
@@ -266,15 +269,15 @@ impl Xv6FileSystem {
         disk_inode.size = internals.size;
         disk_inode.addrs.copy_from_slice(&internals.addrs);
         disk_inode.dump_into(inode_slice).map_err(|_| libc::EIO)?;
-    
+
         bh.mark_buffer_dirty();
         log.log_write(iblock as u32);
         return Ok(());
     }
-    
+
     pub fn iget<'a>(&'a self, inum: u64) -> Result<CachedInode<'a>, libc::c_int> {
         let mut final_idx = None;
-    
+
         let icache = self.ilock_cache.as_ref().unwrap();
         let mut map = self.icache_map.as_ref().unwrap().write().unwrap();
         if map.contains_key(&inum) {
@@ -303,7 +306,7 @@ impl Xv6FileSystem {
             let dev_id = disk.as_raw_fd();
             if final_idx.is_none() && *inode.nref.read().unwrap() == 0 {
                 {
-                    let mut new_inode_int = inode.internals.write().map_err(|_| {libc::EIO})?;
+                    let mut new_inode_int = inode.internals.write().map_err(|_| libc::EIO)?;
                     new_inode_int.valid = 0;
                 }
                 inode.dev = dev_id as u32;
@@ -314,9 +317,9 @@ impl Xv6FileSystem {
                 break;
             }
         }
-    
+
         let new_inode_idx = final_idx.ok_or(libc::EIO)?;
-    
+
         let ret = Ok(CachedInode {
             idx: new_inode_idx,
             inum: inum as u32,
@@ -324,33 +327,34 @@ impl Xv6FileSystem {
         });
         return ret;
     }
-    
-    pub fn ilock<'a>(&self, 
+
+    pub fn ilock<'a>(
+        &self,
         inode_idx: usize,
         icache: &'a Vec<RwLock<Inode>>,
         inum: u32,
     ) -> Result<RwLockReadGuard<'a, Inode>, libc::c_int> {
         let inode_outer_lock = icache.get(inode_idx).ok_or(libc::EIO)?;
-        let inode_outer = inode_outer_lock.read().map_err(|_| { libc::EIO})?;
+        let inode_outer = inode_outer_lock.read().map_err(|_| libc::EIO)?;
         {
-            let mut internals = inode_outer.internals.write().map_err(|_| {libc::EIO})?;
-    
+            let mut internals = inode_outer.internals.write().map_err(|_| libc::EIO)?;
+
             if internals.valid == 0 {
                 let disk = self.disk.as_ref().unwrap();
                 let sb = self.sb.as_ref().unwrap();
                 let bh = disk.bread(iblock(inum as usize, &sb) as u64)?;
                 let data_slice = bh.data();
-    
+
                 // Get the specific inode offset
                 let inode_offset = (inum as usize % IPB) * mem::size_of::<Xv6fsInode>();
-    
+
                 let inode_slice =
                     &data_slice[inode_offset..inode_offset + mem::size_of::<Xv6fsInode>()];
                 let mut disk_inode = Xv6fsInode::new();
                 disk_inode
                     .extract_from(inode_slice)
                     .map_err(|_| libc::EIO)?;
-    
+
                 internals.valid = 0;
                 internals.inode_type = disk_inode.inode_type;
                 internals.major = disk_inode.major;
@@ -362,17 +366,16 @@ impl Xv6FileSystem {
                 if internals.inode_type == 0 {
                     return Err(libc::EIO);
                 }
-                
             }
         }
         return Ok(inode_outer);
     }
-    
+
     pub fn iput(&self, inode: &mut CachedInode) -> Result<(), libc::c_int> {
         let icache = self.ilock_cache.as_ref().unwrap();
         {
             let inode_guard = self.ilock(inode.idx, &icache, inode.inum)?;
-            let mut internals = inode_guard.internals.write().map_err(|_| {libc::EIO})?;
+            let mut internals = inode_guard.internals.write().map_err(|_| libc::EIO)?;
             if internals.valid != 0 && internals.nlink == 0 {
                 let r;
                 {
@@ -388,7 +391,7 @@ impl Xv6FileSystem {
                 }
             }
         }
-    
+
         let dinode_lock = icache.get(inode.idx).ok_or(libc::EIO)?;
         let dinode = dinode_lock.read().map_err(|_| {libc::EIO})?;
         let mut map = self.icache_map.as_ref().unwrap().write().unwrap();
@@ -399,7 +402,7 @@ impl Xv6FileSystem {
         }
         return Ok(());
     }
-    
+
     fn bmap(&self, inode: &mut InodeInternal, blk_idx: usize) -> Result<u32, libc::c_int> {
         let log = self.log.as_ref().unwrap();
         let mut idx = blk_idx;
@@ -413,7 +416,7 @@ impl Xv6FileSystem {
             }
             return Ok(*addr);
         }
-    
+
         idx -= NDIRECT as usize;
         if idx < NINDIRECT as usize {
             // indirect block
@@ -423,14 +426,14 @@ impl Xv6FileSystem {
                     *ind_blk_id = blk_id;
                 })?;
             }
-    
+
             let result_blk_id: u32;
             let disk = self.disk.as_ref().unwrap();
             let mut bh = disk.bread(*ind_blk_id as u64)?;
             let b_data = bh.data_mut();
-    
+
             let mut cell_data = [0; 4];
-            let cell_segment = &mut b_data[idx * 4 .. (idx + 1) * 4];
+            let cell_segment = &mut b_data[idx * 4..(idx + 1) * 4];
             cell_data.copy_from_slice(cell_segment);
             let cell = u32::from_ne_bytes(cell_data);
             if cell == 0 {
@@ -444,33 +447,30 @@ impl Xv6FileSystem {
                 // just return the blk
                 result_blk_id = cell;
             }
-    
+
             return Ok(result_blk_id);
         }
-    
+
         if idx < (MAXFILE - NDIRECT) as usize {
             idx -= NINDIRECT as usize;
             // double indirect block
-            let dind_blk_id = inode
-                .addrs
-                .get_mut(NDIRECT as usize + 1)
-                .ok_or(libc::EIO)?;
+            let dind_blk_id = inode.addrs.get_mut(NDIRECT as usize + 1).ok_or(libc::EIO)?;
             if *dind_blk_id == 0 {
                 self.balloc().map(|blk_id| {
                     *dind_blk_id = blk_id;
                 })?;
             }
-    
+
             let disk = self.disk.as_ref().unwrap();
             let mut bh = disk.bread(*dind_blk_id as u64)?;
             let b_data = bh.data_mut();
             let dind_idx = idx / NINDIRECT as usize;
-    
+
             let mut cell_data = [0; 4];
-            let cell_segment = &mut b_data[dind_idx * 4 .. (dind_idx + 1) * 4];
+            let cell_segment = &mut b_data[dind_idx * 4..(dind_idx + 1) * 4];
             cell_data.copy_from_slice(cell_segment);
             let cell = u32::from_ne_bytes(cell_data);
-    
+
             if cell == 0 {
                 let result_blk_id = self.balloc()?;
                 let result_blk_data = result_blk_id.to_ne_bytes();
@@ -478,14 +478,14 @@ impl Xv6FileSystem {
                 bh.mark_buffer_dirty();
                 log.log_write(*dind_blk_id);
             }
-    
+
             let mut dbh = disk.bread(cell as u64)?;
             let db_data = dbh.data_mut();
             let dblock_idx = idx % NINDIRECT as usize;
-    
+
             let result_blk_id: u32;
             let mut dcell_data = [0; 4];
-            let dcell_segment = &mut db_data[dblock_idx * 4 .. (dblock_idx + 1) * 4];
+            let dcell_segment = &mut db_data[dblock_idx * 4..(dblock_idx + 1) * 4];
             dcell_data.copy_from_slice(dcell_segment);
             let dcell = u32::from_ne_bytes(dcell_data);
             if dcell == 0 {
@@ -499,11 +499,15 @@ impl Xv6FileSystem {
             }
             return Ok(result_blk_id);
         }
-    
+
         return Err(libc::EIO);
     }
-    
-    pub fn itrunc(&self, inode: &mut CachedInode, internals: &mut InodeInternal) -> Result<(), libc::c_int> {
+
+    pub fn itrunc(
+        &self,
+        inode: &mut CachedInode,
+        internals: &mut InodeInternal,
+    ) -> Result<(), libc::c_int> {
         for i in 0..NDIRECT as usize {
             let addr = internals.addrs.get_mut(i).ok_or(libc::EIO)?;
             if *addr != 0 {
@@ -511,16 +515,13 @@ impl Xv6FileSystem {
                 *addr = 0;
             }
         }
-    
+
         let disk = self.disk.as_ref().unwrap();
-        let ind_blk_id = internals
-            .addrs
-            .get_mut(NDIRECT as usize)
-            .ok_or(libc::EIO)?;
+        let ind_blk_id = internals.addrs.get_mut(NDIRECT as usize).ok_or(libc::EIO)?;
         if *ind_blk_id != 0 {
             let bh = disk.bread(*ind_blk_id as u64)?;
             let b_data = bh.data();
-    
+
             let mut addr_slice = [0; 4];
             for i in 0..NINDIRECT as usize {
                 addr_slice.copy_from_slice(&b_data[i * 4..(i + 1) * 4]);
@@ -539,7 +540,7 @@ impl Xv6FileSystem {
         if *dind_blk_id != 0 {
             let mut bh = disk.bread(*dind_blk_id as u64)?;
             let b_data = bh.data_mut();
-    
+
             let mut ind_addr_slice = [0; 4];
             for i in 0..NINDIRECT as usize {
                 let ind_region = &mut b_data[i * 4..(i + 1) * 4];
@@ -549,7 +550,7 @@ impl Xv6FileSystem {
                     let dbh = disk.bread(ind_blk_id as u64)?;
                     let db_data = dbh.data();
                     let mut daddr_slice = [0; 4];
-    
+
                     for j in 0..NINDIRECT as usize {
                         let daddr_region = &db_data[j * 4..(j + 1) * 4];
                         daddr_slice.copy_from_slice(&daddr_region);
@@ -565,11 +566,11 @@ impl Xv6FileSystem {
             self.bfree(*dind_blk_id as usize)?;
             *dind_blk_id = 0;
         }
-    
+
         internals.size = 0;
         return self.iupdate(&internals, inode.inum);
     }
-    
+
     pub fn stati(&self, ino: u64, internals: &InodeInternal) -> Result<FileAttr, libc::c_int> {
         if internals.inode_type == 0 {
             return Err(libc::ENOENT);
@@ -597,9 +598,9 @@ impl Xv6FileSystem {
         };
         return Ok(attr);
     }
-    
+
     pub fn readi(
-        &self, 
+        &self,
         buf: &mut [u8],
         _off: usize,
         _n: usize,
@@ -609,6 +610,7 @@ impl Xv6FileSystem {
         let mut off = _off;
         let i_size = internals.size as usize;
         if off > i_size || off + n < off {
+            println!("readi error1");
             return Err(libc::EIO);
         }
         if off + n > i_size {
@@ -617,28 +619,29 @@ impl Xv6FileSystem {
         let mut m;
         let mut dst = 0;
         let mut tot = 0;
-    
+
         while tot < n {
             let block_no = self.bmap(internals, off / BSIZE)?;
             m = min(n - tot, BSIZE - off % BSIZE);
             let disk = self.disk.as_ref().unwrap();
             let bh = disk.bread(block_no as u64)?;
             let data_slice = bh.data();
-    
+
             let data_off = off % BSIZE;
             let data_region = &data_slice[data_off..data_off + m];
-    
+
             let copy_region = &mut buf[dst..dst + m];
             copy_region.copy_from_slice(data_region);
-    
+
             tot += m;
             off += m;
             dst += m;
         }
         return Ok(n);
     }
-    
-    pub fn writei(&self, 
+
+    pub fn writei(
+        &self,
         buf: &[u8],
         _off: usize,
         n: usize,
@@ -654,11 +657,11 @@ impl Xv6FileSystem {
         if off + n > (MAXFILE as usize) * BSIZE {
             return Err(libc::EIO);
         }
-    
+
         let max_blocks = (MAXOPBLOCKS - 1 - 1 - 2) / 2;
         let mut written_blocks = 0;
         let mut end_size = i_size;
-    
+
         if off > i_size {
             let mut start_off = i_size;
             while start_off < off {
@@ -668,9 +671,9 @@ impl Xv6FileSystem {
                 let block_no = self.bmap(internals, start_off / BSIZE)?;
                 let disk = self.disk.as_ref().unwrap();
                 let mut bh = disk.bread(block_no as u64)?;
-    
+
                 let b_data = bh.data_mut();
-    
+
                 let m = min(off - start_off, BSIZE - start_off % BSIZE);
                 for i in start_off..start_off + m {
                     let idx = b_data.get_mut(i % BSIZE).ok_or(libc::EIO)?;
@@ -679,49 +682,51 @@ impl Xv6FileSystem {
                 bh.mark_buffer_dirty();
                 written_blocks += 1;
                 log.log_write(block_no);
-    
+
                 start_off += m;
                 end_size = start_off;
             }
         }
-    
+
         let mut src = 0;
         let mut tot = 0;
-    
+
         while tot < n {
             if written_blocks >= max_blocks {
                 break;
             }
             let block_no = self.bmap(internals, off / BSIZE)?;
             let m = min(n - tot, BSIZE - off % BSIZE);
-    
+
             let disk = self.disk.as_ref().unwrap();
             let mut bh = disk.bread(block_no as u64)?;
-    
+
             let data_slice = bh.data_mut();
             let data_off = off % BSIZE;
             let data_region = &mut data_slice[data_off..data_off + m];
-    
+
             let copy_region = &buf[src..src + m];
             data_region.copy_from_slice(copy_region);
             bh.mark_buffer_dirty();
             log.log_write(block_no);
             written_blocks += 1;
-    
+
             tot += m;
             off += m;
             src += m;
             end_size = off;
         }
-    
+
         if n > 0 && end_size > i_size {
             internals.size = end_size as u64;
             self.iupdate(internals, inum)?;
         }
         return Ok(n);
     }
-    
-    pub fn dirlookup<'a>(&'a self, 
+
+    // entry lookup
+    pub fn dirlookup<'a>(
+        &'a self,
         internals: &mut InodeInternal,
         name: &OsStr,
         poff: &mut u64,
@@ -730,122 +735,810 @@ impl Xv6FileSystem {
         if internals.inode_type != T_DIR {
             return Err(libc::ENOTDIR);
         }
-        let de_size = mem::size_of::<Xv6fsDirent>();
-        let mut de_arr_vec: Vec<u8> = vec![0; BSIZE];
-    
-        let num_blocks = match internals.size {
-            0 => 0,
-            _ => (internals.size as usize - 1) / BSIZE + 1,
-        };
+        let hroot_len = mem::size_of::<Htree_root>();
+        let hindex_len = mem::size_of::<Htree_index>();
+        let hentry_len = mem::size_of::<Htree_entry>();
+        let de_len = mem::size_of::<Xv6fsDirent>();
+
+        let mut hroot_arr_vec: Vec<u8> = vec![0; BSIZE];
+
         let search_name = match name.to_str() {
             Some(s) => s,
-            None => {
-                return Err(libc::ENOENT);
-            },
+            None => return Err(libc::ENOENT),
         };
-    
-        for block_idx in 0..num_blocks {
-            let de_arr_slice = de_arr_vec.as_mut_slice();
-            self.readi(de_arr_slice, BSIZE * block_idx, BSIZE, internals)?;
-            // resolve all dirent entries in the current data block.
-            for de_idx in 0..BSIZE / de_size {
-                let mut de = Xv6fsDirent::new();
-                let de_slice = &mut de_arr_slice[de_idx * de_size..(de_idx + 1) * de_size];
-                de.extract_from(de_slice).map_err(|_| libc::EIO)?;
-    
-                if (block_idx * BSIZE + de_idx * de_size) as u64 >= internals.size {
-                    break;
-                }
-                if de.inum == 0 {
-                    continue;
-                }
-                let de_name = match str::from_utf8(&de.name) {
-                    Ok(x) => x,
-                    Err(_) => break,
-                };
-                let de_name_trimmed = de_name.trim_end_matches('\0');
-                if de_name_trimmed == search_name {
-                    *poff = (block_idx * BSIZE + de_idx * de_size) as u64;
-                    return self.iget(de.inum as u64);
-                }
-            }
-        }
-    
-        return Err(libc::ENOENT);
-    }
-    
-    // create subdirectory with 'name' under the directory pointed to by 'internals'
-    pub fn dirlink(&self, 
-        internals: &mut InodeInternal,
-        name: &OsStr,
-        child_inum: u32,
-        parent_inum: u32,
-    ) -> Result<usize, libc::c_int> {
-        // Check if inode is directory
-        if internals.inode_type != T_DIR {
-            return Err(libc::ENOTDIR);
-        }
-    
-        let de_size = mem::size_of::<Xv6fsDirent>();
-        let mut de_arr_vec: Vec<u8> = vec![0; BSIZE];
-        let mut final_off = None;
-    
-        let num_blocks = match internals.size {
-            0 => 0,
-            _ => (internals.size as usize - 1) / BSIZE + 1,
-        };
-        for block_idx in 0..num_blocks {
-            let de_arr_slice = de_arr_vec.as_mut_slice();
-            self.readi(de_arr_slice, BSIZE * block_idx, BSIZE, internals)?;
-    
-            for de_idx in 0..BSIZE / de_size {
-                if (block_idx * BSIZE + de_idx * de_size) >= internals.size as usize {
-                    break;
-                }
-                let mut de = Xv6fsDirent::new();
-                let de_slice = &mut de_arr_slice[de_idx * de_size..(de_idx + 1) * de_size];
-                de.extract_from(de_slice).map_err(|_| libc::EIO)?;
-                if de.inum == 0 {
-                    final_off = Some((block_idx * BSIZE + de_idx * de_size) as u64);
-                    break;
-                }
-            }
-            if final_off.is_some() {
-                break;
-            }
-        }
-        let final_off = final_off.unwrap_or(internals.size);
-        let mut de_vec: Vec<u8> = vec![0; de_size];
-    
+
         let mut de = Xv6fsDirent::new();
+        let mut de_vec: Vec<u8> = vec![0; de_len];
         let de_slice = de_vec.as_mut_slice();
         de.extract_from(de_slice).map_err(|_| libc::EIO)?;
-    
+
         let name_slice = name.to_str().unwrap().as_bytes();
         if name_slice.len() > DIRSIZ as usize {
             return Err(libc::EIO);
         }
+
         for (idx, ch) in de.name.iter_mut().enumerate() {
             *ch = match name_slice.get(idx) {
                 Some(x) => *x,
                 None => 0,
             };
         }
-    
-        de.inum = child_inum as u32;
-        de.dump_into(de_slice).map_err(|_| libc::EIO)?;
-    
-        if self.writei(
-            de_slice,
-            final_off as usize,
-            de_size,
+
+        // get hash of target entry
+        let tmp_name = match str::from_utf8(&de.name) {
+            Ok(x) => x,
+            Err(_) => return Err(libc::EIO),
+        };
+        let osstr_name = OsStr::new(tmp_name);
+        let target_hash = calculate_hash(&osstr_name);
+
+        // read in entire root block
+        let root_arr_slice = hroot_arr_vec.as_mut_slice();
+        self.readi(root_arr_slice, 0, BSIZE, internals)?;
+
+        // extract root of dir
+        let mut root = Htree_root::new();
+        let root_slice = &mut root_arr_slice[0..hroot_len];
+        root.extract_from(root_slice).map_err(|_| libc::EIO)?;
+
+        // '.' and '..' are always the first two entries in a directory
+        if search_name == "." {
+            let mut de = Xv6fsDirent::new();
+            let de_slice = &mut root_slice[0..de_len];
+            de.extract_from(de_slice).map_err(|_| libc::EIO)?;
+            *poff = 0;
+            return self.iget(de.inum as u64);
+        } else if search_name == ".." {
+            let mut de = Xv6fsDirent::new();
+            let de_slice = &mut root_slice[de_len..2 * de_len];
+            de.extract_from(de_slice).map_err(|_| libc::EIO)?;
+            *poff = de_len as u64;
+            return self.iget(de.inum as u64);
+        }
+
+        // all other entries are stored in leaf nodes
+        // get all the index entries in a list and do binary search
+        let num_indeces = root.ind_entries;
+        let mut index_vec: Vec<Htree_entry> = Vec::with_capacity(num_indeces as usize);
+        for rie_idx in 0..num_indeces {
+            if hroot_len + rie_idx as usize * hentry_len >= BSIZE {
+                break;
+            }
+            let mut rie = Htree_entry::new();
+            let rie_slice = &mut root_arr_slice[hroot_len + (hentry_len * rie_idx as usize)
+                ..hroot_len + (hentry_len * (rie_idx as usize + 1))];
+            rie.extract_from(rie_slice).map_err(|_| libc::EIO)?;
+            if rie.block == 0 {
+                break;
+            }
+            index_vec.push(rie);
+        }
+
+        // look for lowerbound of correct index node
+        let ind_slice = index_vec.as_slice();
+        let target_entry = match find_lowerbound(ind_slice, index_vec.len(), target_hash) {
+            Some(index) => index,
+            None => {
+                return Err(libc::ENOENT);
+            }
+        };
+
+        // get index block
+        let target_lblock: u32 = index_vec[target_entry].block;
+        let mut hindex_arr_vec: Vec<u8> = vec![0; BSIZE];
+        let hindex_arr_slice = hindex_arr_vec.as_mut_slice();
+        self.readi(
+            hindex_arr_slice,
+            target_lblock as usize * BSIZE,
+            BSIZE,
             internals,
-            parent_inum,
-        )? != de_size
+        )?;
+
+        // get index header
+        let mut index = Htree_index::new();
+        let hindex_slice = &mut hindex_arr_slice[0..hindex_len];
+        index.extract_from(hindex_slice).map_err(|_| libc::EIO)?;
+
+        // create vec for binary search
+        let num_entries = index.entries;
+        let mut leaf_vec: Vec<Htree_entry> = Vec::with_capacity(num_entries as usize);
+        for off in (hindex_len..hindex_len + num_entries as usize * hentry_len).step_by(hentry_len)
         {
+            if off >= BSIZE {
+                break;
+            }
+            let mut hentry = Htree_entry::new();
+            let hentry_slice = &mut hindex_arr_slice[off..off + hentry_len];
+            hentry.extract_from(hentry_slice).map_err(|_| libc::EIO)?;
+            if hentry.block == 0 {
+                break;
+            }
+            leaf_vec.push(hentry);
+        }
+
+        // get lowerbound of correct leaf node
+        let leaf_slice = leaf_vec.as_slice();
+        let target_leaf = match find_lowerbound(leaf_slice, leaf_vec.len(), target_hash) {
+            Some(index) => index,
+            None => return Err(libc::ENOENT),
+        };
+
+        // read leafnode
+        let leaf_idx = leaf_vec[target_leaf].block;
+        let mut leaf_arr_vec: Vec<u8> = vec![0; BSIZE];
+        let leaf_arr_slice = leaf_arr_vec.as_mut_slice();
+        self.readi(leaf_arr_slice, BSIZE * leaf_idx as usize, BSIZE, internals)?;
+
+        // look through the entries in the leafnode
+        for de_idx in 0..BSIZE / de_len {
+            let mut de = Xv6fsDirent::new();
+            let de_slice = &mut leaf_arr_slice[de_idx * de_len..(de_idx + 1) * de_len];
+            de.extract_from(de_slice).map_err(|_| libc::EIO)?;
+
+            if de.inum == 0 {
+                continue;
+            }
+            let de_name = match str::from_utf8(&de.name) {
+                Ok(x) => x,
+                Err(_) => break,
+            };
+            let de_name_trimmed = de_name.trim_end_matches('\0');
+            if de_name_trimmed == search_name {
+                *poff = (leaf_idx as usize * BSIZE + de_idx * de_len) as u64;
+                return self.iget(de.inum as u64);
+            }
+        }
+
+        return Err(libc::ENOENT);
+    }
+
+    // create subdirectory with 'name' under the directory pointed to by 'internals'
+    pub fn dirlink(
+        &self,
+        internals: &mut InodeInternal,
+        name: &OsStr,
+        child_inum: u32,
+        parent_inum: u32,
+    ) -> Result<usize, libc::c_int> {
+        // check if inode is directory
+        if internals.inode_type != T_DIR {
+            return Err(libc::ENOTDIR);
+        }
+
+        let hroot_len = mem::size_of::<Htree_root>();
+        let hindex_len = mem::size_of::<Htree_index>();
+        let hentry_len = mem::size_of::<Htree_entry>();
+        let de_len = mem::size_of::<Xv6fsDirent>();
+
+        let mut hroot_arr_vec: Vec<u8> = vec![0; BSIZE];
+
+        let search_name = match name.to_str() {
+            Some(s) => s,
+            None => {
+                return Err(libc::ENOENT);
+            }
+        };
+
+        // read in entire root block
+        let root_arr_slice = hroot_arr_vec.as_mut_slice();
+        self.readi(root_arr_slice, 0, BSIZE, internals)?;
+
+        // extract root of dir
+        let mut root = Htree_root::new();
+        let root_slice = &mut root_arr_slice[0..hroot_len];
+        root.extract_from(root_slice).map_err(|_| libc::EIO)?;
+        let num_indeces = root.ind_entries;
+        let mut num_blocks = root.blocks as usize;
+
+        // dirent to be written to leaf node
+        let mut de = Xv6fsDirent::new();
+        let mut de_vec: Vec<u8> = vec![0; de_len];
+        let de_slice = de_vec.as_mut_slice();
+        de.extract_from(de_slice).map_err(|_| libc::EIO)?;
+
+        let name_slice = name.to_str().unwrap().as_bytes();
+        if name_slice.len() > DIRSIZ as usize {
             return Err(libc::EIO);
         }
-    
+
+        for (idx, ch) in de.name.iter_mut().enumerate() {
+            *ch = match name_slice.get(idx) {
+                Some(x) => *x,
+                None => 0,
+            };
+        }
+
+        de.inum = child_inum as u32;
+
+        // get hash of target entry
+        let tmp_name = match str::from_utf8(&de.name) {
+            Ok(x) => x,
+            Err(_) => return Err(libc::EIO),
+        };
+        let osstr_name = OsStr::new(tmp_name);
+        let target_hash = calculate_hash(&osstr_name);
+
+        // new directory, create root node
+        if search_name == "." {
+            root.ind_entries = 0;
+            root.blocks = 1;
+            root.dump_into(root_slice).map_err(|_| libc::EIO)?;
+            let root_de_slice = &mut root_slice[0..de_len];
+            de.dump_into(root_de_slice).map_err(|_| libc::EIO)?;
+
+            if self.writei(root_slice, 0, hroot_len, internals, parent_inum)? != hroot_len {
+                return Err(libc::EIO);
+            }
+
+            return Ok(0);
+        } else if search_name == ".." {
+            let root_de_slice = &mut root_slice[de_len..2 * de_len];
+            de.dump_into(root_de_slice).map_err(|_| libc::EIO)?;
+            if self.writei(root_de_slice, de_len, de_len, internals, parent_inum)? != de_len {
+                return Err(libc::EIO);
+            }
+
+            return Ok(0);
+        }
+
+        // regular dirent
+        de.dump_into(de_slice).map_err(|_| libc::EIO)?;
+        // directory is empty
+        if num_indeces == 0 {
+            num_blocks = 1;
+            let rie_offset = hroot_len;
+            let index_offset = num_blocks * BSIZE;
+            let ine_offset = index_offset + hindex_len;
+            let de_offset = (num_blocks + 1) * BSIZE;
+
+            // create new index entry in root node
+            let mut rie = Htree_entry::new();
+            let mut rie_vec: Vec<u8> = vec![0; hentry_len];
+            let rie_slice = rie_vec.as_mut_slice();
+            rie.name_hash = target_hash;
+            rie.block = (index_offset / BSIZE) as u32;
+
+            rie.dump_into(rie_slice).map_err(|_| libc::EIO)?;
+            if self.writei(rie_slice, rie_offset, hentry_len, internals, parent_inum)? != hentry_len
+            {
+                return Err(libc::EIO);
+            }
+
+            // create index node
+            let mut index = Htree_index::new();
+            let mut index_vec: Vec<u8> = vec![0; hindex_len];
+            let index_slice = index_vec.as_mut_slice();
+            index.entries = 1 as u32;
+
+            index.dump_into(index_slice).map_err(|_| libc::EIO)?;
+
+            if self.writei(
+                index_slice,
+                index_offset,
+                hindex_len,
+                internals,
+                parent_inum,
+            )? != hindex_len
+            {
+                return Err(libc::EIO);
+            }
+
+            // create entry in index node
+            let mut ine = Htree_entry::new();
+            let mut ine_vec: Vec<u8> = vec![0; hentry_len];
+            let ine_slice = ine_vec.as_mut_slice();
+            ine.name_hash = target_hash;
+            ine.block = (de_offset / BSIZE) as u32;
+
+            ine.dump_into(ine_slice).map_err(|_| libc::EIO)?;
+
+            if self.writei(ine_slice, ine_offset, hentry_len, internals, parent_inum)? != hentry_len
+            {
+                return Err(libc::EIO);
+            }
+
+            // write dirent to leafnode
+            if self.writei(de_slice, de_offset, de_len, internals, parent_inum)? != de_len {
+                return Err(libc::EIO);
+            }
+
+            // update root info
+            root.depth = 2;
+            root.ind_entries = 1;
+            root.blocks = 3;
+
+            root.dump_into(root_slice).map_err(|_| libc::EIO)?;
+            if self.writei(root_slice, 0, hroot_len, internals, parent_inum)? != hroot_len {
+                return Err(libc::EIO);
+            }
+
+            return Ok(0);
+        }
+
+        // directory is not empty
+
+        // Add index entries in root node to a vec for binary search
+        let mut index_vec: Vec<Htree_entry> = Vec::with_capacity((num_indeces + 1) as usize);
+        for rie_idx in 0..num_indeces {
+            if hroot_len + rie_idx as usize * hentry_len >= BSIZE {
+                break;
+            }
+            let mut ie = Htree_entry::new();
+            let ie_slice = &mut root_arr_slice[hroot_len + (hentry_len * rie_idx as usize)
+                ..hroot_len + (hentry_len * (rie_idx as usize + 1))];
+
+            ie.extract_from(ie_slice).map_err(|_| libc::EIO)?;
+
+            if ie.block == 0 {
+                break;
+            }
+            index_vec.push(ie);
+        }
+
+        // case: new hash < lowest hash value in root entries
+        // need to add new index entry in root, create a new index node, and create a leafnode
+        if target_hash < index_vec[0].name_hash {
+            // directory reached maximum blocks allowed
+            if num_blocks >= HTREE_MAXBLOCKS as usize - 2 {
+                return Err(libc::ENOENT);
+            }
+            let index_offset = num_blocks * BSIZE;
+            let ine_offset = index_offset + hindex_len;
+            let de_offset = (num_blocks + 1) * BSIZE;
+
+            // create index node
+            let mut index = Htree_index::new();
+            let mut index_bvec: Vec<u8> = vec![0; hindex_len];
+            let index_slice = index_bvec.as_mut_slice();
+            index.entries = 1 as u32;
+            index.dump_into(index_slice).map_err(|_| libc::EIO)?;
+
+            if self.writei(
+                index_slice,
+                index_offset,
+                hindex_len,
+                internals,
+                parent_inum,
+            )? != hindex_len
+            {
+                return Err(libc::EIO);
+            }
+
+            // create entry in index node
+            let mut ine = Htree_entry::new();
+            let mut ine_vec: Vec<u8> = vec![0; hentry_len];
+            let ine_slice = ine_vec.as_mut_slice();
+            ine.name_hash = target_hash;
+            ine.block = (de_offset / BSIZE) as u32;
+            ine.dump_into(ine_slice).map_err(|_| libc::EIO)?;
+
+            if self.writei(ine_slice, ine_offset, hentry_len, internals, parent_inum)? != hentry_len
+            {
+                return Err(libc::EIO);
+            }
+
+            // write dirent to leafnode
+            if self.writei(de_slice, de_offset, de_len, internals, parent_inum)? != de_len {
+                return Err(libc::EIO);
+            }
+
+            // add new index entry to previous entries in root node in sorted order
+            let mut rie = Htree_entry::new();
+            rie.name_hash = target_hash;
+            rie.block = (index_offset / BSIZE) as u32;
+
+            let mut index_vec_rev: Vec<Htree_entry> = Vec::with_capacity(index_vec.len());
+            while let Some(hen) = index_vec.pop() {
+                index_vec_rev.push(hen);
+            }
+            index_vec_rev.push(rie);
+
+            let mut rie_idx = 0;
+            while let Some(rie) = index_vec_rev.pop() {
+                let mut rie_vec: Vec<u8> = vec![0; hentry_len];
+                let rie_slice = rie_vec.as_mut_slice();
+                rie.dump_into(rie_slice).map_err(|_| libc::EIO)?;
+                let offset = hroot_len + rie_idx * hentry_len;
+                if self.writei(rie_slice, offset, hentry_len, internals, parent_inum)? != hentry_len
+                {
+                    return Err(libc::EIO);
+                }
+
+                rie_idx += 1;
+            }
+
+            // update root info
+            let root2_slice = &mut root_arr_slice[0..hroot_len];
+            root.ind_entries += 1;
+            root.blocks += 2;
+            root.dump_into(root2_slice).map_err(|_| libc::EIO)?;
+            if self.writei(root2_slice, 0, hroot_len, internals, parent_inum)? != hroot_len {
+                return Err(libc::EIO);
+            }
+            return Ok(0);
+        }
+
+        // look for correct lowerbound for index node
+        let ind_slice = index_vec.as_slice();
+        let target_entry = match find_lowerbound(ind_slice, index_vec.len(), target_hash) {
+            Some(index) => index,
+            None => return Err(libc::ENOENT),
+        };
+
+        // read entire index block
+        let target_lblock: u32 = index_vec[target_entry].block;
+        let mut hindex_arr_vec: Vec<u8> = vec![0; BSIZE];
+        let hindex_arr_slice = hindex_arr_vec.as_mut_slice();
+        self.readi(
+            hindex_arr_slice,
+            target_lblock as usize * BSIZE,
+            BSIZE,
+            internals,
+        )?;
+
+        // get index header
+        let mut index = Htree_index::new();
+        let hindex_slice = &mut hindex_arr_slice[0..hindex_len];
+        index.extract_from(hindex_slice).map_err(|_| libc::EIO)?;
+
+        // create vec of entries in index node for binary search
+        let num_entries = index.entries;
+        let mut leaf_vec: Vec<Htree_entry> = Vec::with_capacity((num_entries + 1) as usize);
+        for off in (hindex_len..hindex_len + hentry_len * num_entries as usize).step_by(hentry_len)
+        {
+            if off >= BSIZE {
+                break;
+            }
+            let mut hentry = Htree_entry::new();
+            let hentry_slice = &mut hindex_arr_slice[off..off + hentry_len];
+            hentry.extract_from(hentry_slice).map_err(|_| libc::EIO)?;
+            if hentry.block == 0 {
+                break;
+            }
+            leaf_vec.push(hentry);
+        }
+
+        // get correct lowerbound for leaf node
+        let leaf_slice = leaf_vec.as_slice();
+        let target_leaf = match find_lowerbound(leaf_slice, leaf_vec.len(), target_hash) {
+            Some(index) => index,
+            None => return Err(libc::ENOENT),
+        };
+
+        // read entire leaf node block
+        let leaf_idx = leaf_vec[target_leaf].block;
+        let mut leaf_arr_vec: Vec<u8> = vec![0; BSIZE];
+        let leaf_arr_slice = leaf_arr_vec.as_mut_slice();
+        self.readi(leaf_arr_slice, BSIZE * leaf_idx as usize, BSIZE, internals)?;
+
+        // look for an entry space in leafnode
+        let mut final_off = None;
+        for de_idx in 0..BSIZE / de_len {
+            let mut de_temp = Xv6fsDirent::new();
+            let de_slice_temp = &mut leaf_arr_slice[de_idx * de_len..(de_idx + 1) * de_len];
+            de_temp.extract_from(de_slice_temp).map_err(|_| libc::EIO)?;
+            if de_temp.inum == 0 {
+                final_off = Some((leaf_idx as usize * BSIZE + de_idx * de_len) as u64);
+            }
+
+            // there is enough space in the leaf node
+            if final_off.is_some() {
+                let final_off = final_off.unwrap();
+                if self.writei(de_slice, final_off as usize, de_len, internals, parent_inum)?
+                    != de_len
+                {
+                    return Err(libc::EIO);
+                }
+                return Ok(0);
+            }
+        }
+
+        // not enough space in the current leaf node
+        // need to split leaf nodes
+
+        let mut de_map: BTreeMap<u32, Vec<Xv6fsDirent>> = BTreeMap::new();
+
+        // add dirents with their hash value to map for sorting
+        for de_idx in 0..BSIZE / de_len {
+            let mut de_temp = Xv6fsDirent::new();
+            let de_slice_temp = &mut leaf_arr_slice[de_idx * de_len..(de_idx + 1) * de_len];
+            de_temp.extract_from(de_slice_temp).map_err(|_| libc::EIO)?;
+            if de_temp.inum == 0 {
+                continue;
+            }
+            let de_name = match str::from_utf8(&de_temp.name) {
+                Ok(x) => x,
+                Err(_) => return Err(libc::EIO),
+            };
+            let de_name_osstr = OsStr::new(de_name);
+            let de_hash = calculate_hash(&de_name_osstr);
+
+            if !de_map.contains_key(&de_hash) {
+                de_map.insert(de_hash, Vec::with_capacity(3));
+            }
+            if let Some(x) = de_map.get_mut(&de_hash) {
+                x.push(de_temp);
+            }
+        }
+
+        // get the new lower bounds for the leaf nodes
+        let mut keys: Vec<_> = de_map.keys().cloned().collect();
+        let keys2 = keys.split_off(keys.len() / 2);
+        let mut de_map2 = de_map.split_off(&keys2[0]);
+        let leaf2_lower = keys2[0];
+
+        // get vecs from the dirents maps
+        let mut leaf1_dir_vec: Vec<Xv6fsDirent> = Vec::with_capacity(66);
+        let mut leaf2_dir_vec: Vec<Xv6fsDirent> = Vec::with_capacity(66);
+
+        {
+            for key in keys {
+                if let Some(mut val) = de_map.remove(&key) {
+                    while let Some(dirent) = val.pop() {
+                        leaf1_dir_vec.push(dirent);
+                    }
+                }
+            }
+        }
+        {
+            for key in keys2 {
+                if let Some(mut val) = de_map2.remove(&key) {
+                    while let Some(dirent) = val.pop() {
+                        leaf2_dir_vec.push(dirent);
+                    }
+                }
+            }
+        }
+
+        // keep half dirents into current leaf node
+        {
+            let mut leaf_vec: Vec<u8> = vec![0; BSIZE];
+            let leaf_slice = leaf_vec.as_mut_slice();
+            let mut idx = 0;
+            while let Some(de) = leaf1_dir_vec.pop() {
+                let leaf_idx_slice = &mut leaf_slice[idx * de_len..(idx + 1) * de_len];
+                de.dump_into(leaf_idx_slice).map_err(|_| libc::EIO)?;
+                idx += 1;
+            }
+
+            // need overwrite prev dirents with 0's
+            let write_size = BSIZE;
+            if self.writei(
+                leaf_slice,
+                leaf_idx as usize * BSIZE,
+                write_size,
+                internals,
+                parent_inum,
+            )? != write_size
+            {
+                return Err(libc::EIO);
+            }
+        }
+
+        // directory reached max blocks allowed
+        if num_blocks >= HTREE_MAXBLOCKS as usize - 1 {
+            return Err(libc::ENOENT);
+        }
+
+        // write other half into a new leafnode
+        {
+            let mut leaf_vec: Vec<u8> = vec![0; BSIZE];
+            let leaf_slice = leaf_vec.as_mut_slice();
+            let mut idx = 0;
+
+            while let Some(de) = leaf2_dir_vec.pop() {
+                let leaf_idx_slice = &mut leaf_slice[idx * de_len..(idx + 1) * de_len];
+                de.dump_into(leaf_idx_slice).map_err(|_| libc::EIO)?;
+                idx += 1;
+            }
+
+            // zero out possible trash values
+            let write_size = BSIZE;
+            if self.writei(
+                leaf_slice,
+                num_blocks * BSIZE,
+                write_size,
+                internals,
+                parent_inum,
+            )? != write_size
+            {
+                return Err(libc::EIO);
+            }
+        }
+
+        // create a new hentry in the index node
+        let num_entries = index.entries as usize;
+
+        // sort old entries in index node
+        let mut ie_map: BTreeMap<u32, Htree_entry> = BTreeMap::new();
+        while let Some(ie) = leaf_vec.pop() {
+            ie_map.insert(ie.name_hash, ie);
+        }
+
+        let mut new_ie = Htree_entry::new();
+        new_ie.name_hash = leaf2_lower;
+        new_ie.block = num_blocks as u32;
+        ie_map.insert(new_ie.name_hash, new_ie);
+
+        // store ie's in reverse order [10, 9, 8, ..]
+        {
+            let mut keys: Vec<_> = ie_map.keys().cloned().collect();
+            while let Some(key) = keys.pop() {
+                if let Some(val) = ie_map.remove(&key) {
+                    leaf_vec.push(val);
+                }
+            }
+        }
+
+        // enough space in current index node
+        if num_entries < ((BSIZE - hindex_len) / hentry_len) {
+            // insert in sorted order
+            let mut index_vec: Vec<u8> = vec![0; BSIZE];
+            let index_slice = index_vec.as_mut_slice();
+            index.entries += 1;
+            let index_header_slice = &mut index_slice[0..hindex_len];
+            index.dump_into(index_header_slice).map_err(|_| libc::EIO)?;
+
+            let mut ie_idx = 0;
+            while let Some(ie) = leaf_vec.pop() {
+                let ie_slice = &mut index_slice[hindex_len + ie_idx as usize * hentry_len
+                    ..hindex_len + (ie_idx + 1) as usize * hentry_len];
+                ie.dump_into(ie_slice).map_err(|_| libc::EIO)?;
+                ie_idx += 1;
+            }
+
+            // zero out any possible trash value
+            let write_size = BSIZE;
+            if self.writei(
+                index_slice,
+                target_lblock as usize * BSIZE,
+                write_size,
+                internals,
+                parent_inum,
+            )? != write_size
+            {
+                return Err(libc::EIO);
+            }
+
+            // update root info
+            let root2_slice = &mut root_arr_slice[0..hroot_len];
+            root.blocks += 1;
+            root.dump_into(root2_slice).map_err(|_| libc::EIO)?;
+            if self.writei(root2_slice, 0, hroot_len, internals, parent_inum)? != hroot_len {
+                return Err(libc::EIO);
+            }
+        } else {
+            // not enough space, need to split root index nodes
+
+            // directory reached maximum blocks allowed
+            if num_blocks >= HTREE_MAXBLOCKS as usize - 2 {
+                return Err(libc::ENOENT);
+            }
+
+            if (root.ind_entries as usize) < (BSIZE - hroot_len) / hentry_len {
+                // enough space for new index entry in root node
+
+                let mut new_rie = Htree_entry::new();
+                let mut new_index = Htree_index::new();
+
+                // leaf vec is in reverse order (i.e. 10, 9, 8, .. )
+                // split original index node and update original index node
+                // ie2_vec contains lower entries
+                let mut ie2_vec = leaf_vec.split_off(leaf_vec.len() / 2);
+                {
+                    index.entries = ie2_vec.len() as u32;
+                    let mut index_vec: Vec<u8> = vec![0; BSIZE];
+                    let index_slice = index_vec.as_mut_slice();
+                    let index_header_slice = &mut index_slice[0..hindex_len];
+                    index.dump_into(index_header_slice).map_err(|_| libc::EIO)?;
+                    let mut ie_idx = 0;
+                    while let Some(ie) = ie2_vec.pop() {
+                        let ie_slice = &mut index_slice[hindex_len + ie_idx as usize * hentry_len
+                            ..hindex_len + (ie_idx + 1) as usize * hentry_len];
+                        ie.dump_into(ie_slice).map_err(|_| libc::EIO)?;
+                        ie_idx += 1;
+                    }
+
+                    // need to clear out possible trash values
+                    let write_size = BSIZE;
+                    if self.writei(
+                        index_slice,
+                        target_lblock as usize * BSIZE,
+                        write_size,
+                        internals,
+                        parent_inum,
+                    )? != write_size
+                    {
+                        return Err(libc::EIO);
+                    }
+                }
+
+                // create new index node with the remaining entries for root indeces
+
+                new_index.entries = leaf_vec.len() as u32;
+                // should be the same as leaf2_lower
+                let lower_bound = leaf_vec[leaf_vec.len() - 1].name_hash;
+                new_rie.name_hash = lower_bound;
+                new_rie.block = num_blocks as u32 + 1;
+
+                {
+                    let mut index_vec: Vec<u8> = vec![0; BSIZE];
+                    let index_slice = index_vec.as_mut_slice();
+                    let index_header_slice = &mut index_slice[0..hindex_len];
+                    new_index
+                        .dump_into(index_header_slice)
+                        .map_err(|_| libc::EIO)?;
+
+                    let mut ie_idx = 0;
+                    while let Some(ie) = leaf_vec.pop() {
+                        let ie_slice = &mut index_slice[hindex_len + ie_idx as usize * hentry_len
+                            ..hindex_len + (ie_idx + 1) as usize * hentry_len];
+                        ie.dump_into(ie_slice).map_err(|_| libc::EIO)?;
+                        ie_idx += 1;
+                    }
+
+                    // zero out possible thrash values
+                    let write_size = BSIZE;
+                    if self.writei(
+                        index_slice,
+                        (num_blocks + 1 as usize) * BSIZE,
+                        write_size,
+                        internals,
+                        parent_inum,
+                    )? != write_size
+                    {
+                        return Err(libc::EIO);
+                    }
+                }
+                // index_vec = index entries in the root node
+                // leaf_vec = hentries in index node
+
+                // udpate root
+                let mut rie_map: BTreeMap<u32, Htree_entry> = BTreeMap::new();
+                while let Some(ie) = index_vec.pop() {
+                    rie_map.insert(ie.name_hash, ie);
+                }
+                rie_map.insert(new_rie.name_hash, new_rie);
+                {
+                    let mut keys: Vec<_> = rie_map.keys().cloned().collect();
+                    // add index entries in reverse order
+                    while let Some(key) = keys.pop() {
+                        if let Some(val) = rie_map.remove(&key) {
+                            index_vec.push(val);
+                        }
+                    }
+                }
+
+                // update root info and add new index entry to root node
+                {
+                    root.ind_entries += 1;
+                    root.blocks += 2;
+                    let root_header_slice = &mut root_arr_slice[0..hroot_len];
+                    root.dump_into(root_header_slice).map_err(|_| libc::EIO)?;
+                    let mut rie_idx = 0;
+                    while let Some(rie) = index_vec.pop() {
+                        let rie_slice = &mut root_arr_slice[hroot_len
+                            + rie_idx as usize * hentry_len
+                            ..hroot_len + (rie_idx + 1) as usize * hentry_len];
+                        rie.dump_into(rie_slice).map_err(|_| libc::EIO)?;
+                        rie_idx += 1;
+                    }
+
+                    // zero out possible trash values
+                    let write_size = BSIZE;
+                    if self.writei(root_arr_slice, 0, write_size, internals, parent_inum)?
+                        != write_size
+                    {
+                        return Err(libc::EIO);
+                    }
+                }
+            } else {
+                // root is cannot contain more index entries
+                return Err(libc::EIO);
+            }
+        }
+
+        // END
         return Ok(0);
     }
 }
