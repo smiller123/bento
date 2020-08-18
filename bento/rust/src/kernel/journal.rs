@@ -11,7 +11,7 @@ use kernel::ffi::*;
 use kernel::kobj::*;
 use kernel::raw::*;
 
-use core::cell::{RefCell, Cell};
+use core::cell::RefCell;
 use alloc::vec::Vec;
 
 use kernel::fs::*;
@@ -26,9 +26,7 @@ pub struct Journal {
 pub struct Handle {
     handle: UnsafeCell<RsHandle>,
     requested: u32,
-    written: Cell<u32>,
     blocks: RefCell<Vec<u64>>,
-    desc: &'static str,
 }
 
 impl Journal {
@@ -60,7 +58,7 @@ impl Journal {
     }
 
     // begin transaction of size blocks
-    pub fn begin_op(&self, blocks: u32, desc: &'static str) -> Handle {
+    pub fn begin_op(&self, blocks: u32) -> Handle {
         let handle;
         //println!("begin {}", blocks);
         unsafe {
@@ -73,9 +71,7 @@ impl Journal {
                 return Handle {
                     handle: UnsafeCell::new(RsHandle::from_raw(handle as *const c_void)),
                     requested: blocks,
-                    written: Cell::new(0),
                     blocks: RefCell::new(Vec::new()),
-                    desc,
                 };
             }
         }
@@ -111,15 +107,13 @@ impl Handle {
 
     // register a block as part of the transaction associated with this handle
     pub fn journal_write(&self, bh: &BufferHead) -> i32 {
-        self.written.set(self.written.get() + 1);
-
         let blocknr = bh.blocknr();
         let vec: &mut Vec<u64> = &mut self.blocks.borrow_mut();
         if !vec.contains(&blocknr) {
             vec.push(blocknr);
         }
         if vec.len() > self.requested as usize {
-            println!("too many unique blocks written: {} / {}, {}", vec.len(), self.requested, self.desc);
+            println!("too many unique blocks written: {} / {}", vec.len(), self.requested);
         }
 
         unsafe {

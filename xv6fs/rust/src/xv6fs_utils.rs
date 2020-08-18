@@ -33,6 +33,7 @@ pub const BPB: usize = BSIZE * 8;
 pub const NINODE: usize = 300;
 
 pub const MAXOPBLOCKS: usize = 32;
+#[allow(dead_code)]
 pub const LOGSIZE: usize = 1032;
 
 pub fn iblock(i: usize, sb: &Xv6fsSB) -> usize {

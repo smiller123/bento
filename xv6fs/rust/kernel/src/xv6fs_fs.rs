@@ -374,7 +374,7 @@ impl Xv6FileSystem {
                     r = dinode.nref;
                 }
                 if r == 1 {
-                    let handle = self.log.as_ref().unwrap().begin_op(MAXOPBLOCKS as u32, "free inode");
+                    let handle = self.log.as_ref().unwrap().begin_op(MAXOPBLOCKS as u32);
                     self.itrunc(inode, &mut internals, &handle)?;
                     internals.inode_type = 0;
                     self.iupdate(&internals, inode.inum, &handle)?;
@@ -401,7 +401,7 @@ impl Xv6FileSystem {
             if *addr == 0 {
                 let h = match handle {
                     Some(_) => handle.unwrap(),
-                    None => new_tx.get_or_insert_with(|| self.log.as_ref().unwrap().begin_op(2, "bmap")),
+                    None => new_tx.get_or_insert_with(|| self.log.as_ref().unwrap().begin_op(2)),
                 };
                 return self.balloc(h).map(|blk_id| {
                     *addr = blk_id;
@@ -418,7 +418,7 @@ impl Xv6FileSystem {
             if *ind_blk_id == 0 {
                 let h = match handle {
                     Some(_) => handle.unwrap(),
-                    None => new_tx.get_or_insert_with(|| self.log.as_ref().unwrap().begin_op(5, "bmap")),
+                    None => new_tx.get_or_insert_with(|| self.log.as_ref().unwrap().begin_op(5)),
                 };
                 self.balloc(h).map(|blk_id| {
                     *ind_blk_id = blk_id;
@@ -438,7 +438,7 @@ impl Xv6FileSystem {
                 // need to allocate blk
                 let h = match handle {
                     Some(_) => handle.unwrap(),
-                    None => new_tx.get_or_insert_with(|| self.log.as_ref().unwrap().begin_op(3, "bmap")),
+                    None => new_tx.get_or_insert_with(|| self.log.as_ref().unwrap().begin_op(3)),
                 };
                 h.get_write_access(&bh);
                 let b_data = bh.data_mut();
@@ -466,7 +466,7 @@ impl Xv6FileSystem {
             if *dind_blk_id == 0 {
                 let h = match handle {
                     Some(_) => handle.unwrap(),
-                    None => new_tx.get_or_insert_with(|| self.log.as_ref().unwrap().begin_op(2, "bmap")),
+                    None => new_tx.get_or_insert_with(|| self.log.as_ref().unwrap().begin_op(2)),
                 };
                 self.balloc(h).map(|blk_id| {
                     *dind_blk_id = blk_id;
@@ -486,7 +486,7 @@ impl Xv6FileSystem {
             if cell == 0 {
                 let h = match handle {
                     Some(_) => handle.unwrap(),
-                    None => new_tx.get_or_insert_with(|| self.log.as_ref().unwrap().begin_op(6, "bmap")),
+                    None => new_tx.get_or_insert_with(|| self.log.as_ref().unwrap().begin_op(6)),
                 };
                 h.get_write_access(&bh);
                 let b_data = bh.data_mut();
@@ -510,7 +510,7 @@ impl Xv6FileSystem {
             if dcell == 0 {
                 let h = match handle {
                     Some(_) => handle.unwrap(),
-                    None => new_tx.get_or_insert_with(|| self.log.as_ref().unwrap().begin_op(3, "bmap")),
+                    None => new_tx.get_or_insert_with(|| self.log.as_ref().unwrap().begin_op(3)),
                 };
                 h.get_write_access(&dbh);
                 let db_data = dbh.data_mut();

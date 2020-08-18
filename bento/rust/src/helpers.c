@@ -123,9 +123,6 @@ journal_t* rs_jbd2_journal_init_dev(struct block_device *bdev,
     journal_t *journal = jbd2_journal_init_dev(bdev, fs_dev, start, len, bsize);
     journal->j_max_transaction_buffers = journal->j_maxlen / 4;
 
-    printk(KERN_INFO "journal max_len: %u\n", journal->j_maxlen);
-    printk(KERN_INFO "journal max transactions: %u\n", journal->j_max_transaction_buffers);
-
     return journal; 
 }
 
@@ -159,29 +156,4 @@ int rs_jbd2_journal_dirty_metadata (handle_t *handle, struct buffer_head *bh) {
 
 int rs_jbd2_journal_force_commit(journal_t *journal) {
     return jbd2_journal_force_commit(journal);
-}
-
-int journal_get_superblock(journal_t *journal)
-{
-	struct buffer_head *bh;
-	journal_superblock_t *sb;
-
-    printk(KERN_INFO "in get_sb\n");
-
-	bh = journal->j_sb_buffer;
-
-	J_ASSERT(bh != NULL);
-	if (!buffer_uptodate(bh)) {
-		ll_rw_block(REQ_OP_READ, 0, 1, &bh);
-		wait_on_buffer(bh);
-		if (!buffer_uptodate(bh)) {
-			printk(KERN_ERR
-				"JBD2: IO error reading journal superblock\n");
-		}
-	}
-    printk(KERN_INFO "magic num: %u\n", sb->s_header.h_magic);
-    printk(KERN_INFO "s_blocksize num: %u\n", sb->s_blocksize);
-    printk(KERN_INFO "sb start - sb first : %u - %u\n", sb->s_start, sb->s_first);
-
-    return 0;
 }

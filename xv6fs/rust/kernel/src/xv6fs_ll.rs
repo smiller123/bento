@@ -35,8 +35,6 @@ use fuse::consts::*;
 use fuse::*;
 
 #[cfg(not(feature = "user"))]
-use bento::kernel::fs::*;
-#[cfg(not(feature = "user"))]
 use bento::kernel::journal::*;
 
 #[cfg(not(feature = "user"))]
@@ -163,7 +161,7 @@ impl BentoFilesystem for Xv6FileSystem {
         }
 
         if flags & libc::O_TRUNC as u32 != 0 {
-            let handle = log.begin_op(2, "open");
+            let handle = log.begin_op(2);
             internals.size = 0;
             if let Err(x) = self.iupdate(&internals, inode.inum, &handle) {
                 reply.error(x);
@@ -438,10 +436,10 @@ impl BentoFilesystem for Xv6FileSystem {
         let n = data.len();
         let mut off = offset as usize;
         let mut file_off = 0;
-        let nblocks = 1 + 1 + 2 + (off + n + BSIZE - 1)/BSIZE - off/BSIZE;
+        //let nblocks = 1 + 1 + 2 + (off + n + BSIZE - 1)/BSIZE - off/BSIZE;
         while i < n {
             let log = self.log.as_ref().unwrap();
-            let handle = log.begin_op(MAXOPBLOCKS as u32, "write");
+            let handle = log.begin_op(MAXOPBLOCKS as u32);
             let inode = match self.iget(nodeid) {
                 Ok(x) => x,
                 Err(x) => {
@@ -626,7 +624,7 @@ impl BentoFilesystem for Xv6FileSystem {
     ) {
         // Check if the file already exists
         let log = self.log.as_ref().unwrap();
-        let handle = log.begin_op(5, "create");
+        let handle = log.begin_op(5);
         let child = match self.create_internal(parent, T_FILE, name, &handle) {
             Ok(x) => x,
             Err(x) => {
@@ -676,7 +674,7 @@ impl BentoFilesystem for Xv6FileSystem {
     ) {
         let log = self.log.as_ref().unwrap();
         //println!("mkdir");
-        let handle = log.begin_op(MAXOPBLOCKS as u32, "mkdir");
+        let handle = log.begin_op(MAXOPBLOCKS as u32);
         let child = match self.create_internal(parent, T_DIR, &name, &handle) {
             Ok(x) => x,
             Err(x) => {
@@ -724,7 +722,7 @@ impl BentoFilesystem for Xv6FileSystem {
     ) {
         let log = self.log.as_ref().unwrap();
         //println!("rmdir");
-        let handle = log.begin_op(MAXOPBLOCKS as u32, "rmdir");
+        let handle = log.begin_op(MAXOPBLOCKS as u32);
         match self.dounlink(parent, name, &handle) {
             Ok(_) => reply.ok(),
             Err(x) => reply.error(x),
@@ -740,7 +738,7 @@ impl BentoFilesystem for Xv6FileSystem {
     ) {
         let log = self.log.as_ref().unwrap();
         //println!("unlink");
-        let handle = log.begin_op(MAXOPBLOCKS as u32, "unlink");
+        let handle = log.begin_op(MAXOPBLOCKS as u32);
         match self.dounlink(parent, name, &handle) {
             Ok(_) => reply.ok(),
             Err(x) => reply.error(x),
@@ -771,7 +769,7 @@ impl BentoFilesystem for Xv6FileSystem {
     ) {
         let log = self.log.as_ref().unwrap();
         //println!("symlink");
-        let handle = log.begin_op(MAXOPBLOCKS as u32, "symlink");
+        let handle = log.begin_op(MAXOPBLOCKS as u32);
         // Create new file
         let child = match self.create_internal(nodeid, T_LNK, name, &handle) {
             Ok(x) => x,
