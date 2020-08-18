@@ -5,14 +5,10 @@
 
 extern crate alloc;
 extern crate fuse;
-//extern crate arr_macro;
 extern crate core;
-//extern crate datablock;
-//extern crate env_logger;
 extern crate libc;
-//extern crate log;
+extern crate serde;
 extern crate time;
-//extern crate thread_scoped;
 
 #[macro_use]
 pub mod bento_utils;
@@ -41,7 +37,8 @@ fn main() {
     let fsname_arg = fsname_arg_str.as_str();
     let disk = Disk::new(disk_name.to_str().unwrap(), 4096);
     let fs = HelloFS {
-        disk: Some(RwLock::new(disk))
+        disk: Some(RwLock::new(disk)),
+        diskname: Some(disk_name.to_str().unwrap().to_string()),
     };
 
     let mountpoint = env::args_os().nth(2).unwrap();

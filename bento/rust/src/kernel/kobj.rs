@@ -11,7 +11,6 @@ use kernel::raw::*;
 
 use core::slice;
 
-
 use crate::libc;
 
 // /// A wrapper around the kernel `super_block` type.
@@ -63,7 +62,6 @@ def_kobj_immut_op!(RsWaitQueueHead, wake_up_all, rs_wake_up_all, ());
 impl RsBlockDevice {
     pub fn new(name: &str) -> Self {
         unsafe {
-            //Self::from_raw(get_bdev_helper(name.as_ptr() as *const c_char, FMODE_READ | FMODE_WRITE | FMODE_EXCL))
             Self::from_raw(lookup_bdev(name.as_ptr() as *const c_char, FMODE_READ | FMODE_WRITE | FMODE_EXCL))
         }
     }
@@ -81,9 +79,9 @@ impl RsBlockDevice {
     }
 
     pub fn put(&self) {
-        unsafe {
-            blkdev_put(self.get_raw(), 0x80);
-        }
+        //unsafe {
+        //    blkdev_put(self.get_raw(), 0x80);
+        //}
     }
 }
 
@@ -101,23 +99,6 @@ impl Drop for RsRwSemaphore {
         self.put();
     }
 }
-
-//#[repr(C)]
-//pub struct QStr {
-//    hash: u32,
-//    len: u32,
-//    name: *const c_char,
-//}
-//
-//impl QStr {
-//    pub fn len(&self) -> usize {
-//        self.len as usize
-//    }
-//
-//    pub fn get_ref(&self) -> &[u8] {
-//        unsafe { core::slice::from_raw_parts(self.name as *const u8, self.len()) }
-//    }
-//}
 
 /// A Rust representation of a C-style, null-terminated string.
 ///

@@ -15,7 +15,11 @@ use crate::libc;
 use crate::std;
 #[cfg(not(feature="user"))]
 use crate::time;
+//#[cfg(not(feature="user"))]
+//use crate::println;
 
+use alloc::string::String;
+use alloc::string::ToString;
 use alloc::vec::Vec;
 
 use bento_utils::*;
@@ -25,7 +29,7 @@ use core::str;
 
 use fuse::*;
 
-//use crate::println;
+use serde::{Serialize, Deserialize};
 
 use std::ffi::OsStr;
 use std::sync::RwLock;
@@ -37,8 +41,15 @@ pub const PAGE_SIZE: usize = 4096;
 static LEN: atomic::AtomicUsize = atomic::AtomicUsize::new(13);
 static HELLO_NAME: &str = "hello";
 
+#[derive(Serialize, Deserialize)]
+pub struct HelloState {
+    pub len: usize,
+    pub diskname: String, 
+}
+
 pub struct HelloFS {
-    pub disk: Option<RwLock<Disk>>
+    pub disk: Option<RwLock<Disk>>,
+    pub diskname: Option<String>,
 }
 
 impl HelloFS {
@@ -82,7 +93,7 @@ impl HelloFS {
     }
 }
 
-impl BentoFilesystem for HelloFS {
+impl BentoFilesystem<'_,i32,HelloState> for HelloFS {
     fn get_name(&self) -> &'static str {
         Self::NAME
     }
@@ -109,6 +120,9 @@ impl BentoFilesystem for HelloFS {
         if self.disk.is_none() {
             let devname_str = devname.to_str().unwrap();
             let disk = RwLock::new(Disk::new(devname_str, 4096));
+            let mut disk_string = devname_str.to_string();
+            disk_string.push('\0');
+            self.diskname = Some(disk_string);
             self.disk = Some(disk);
         }
 
@@ -304,5 +318,13 @@ impl BentoFilesystem for HelloFS {
         } else {
             reply.ok();
         }
+    }
+
+    fn bento_update_prepare(&mut self) -> Option<HelloState> {
+        let state = HelloState {
+            len: LEN.load(atomic::Ordering::SeqCst),
+            diskname: self.diskname.as_ref().unwrap().clone(),
+        };
+        return Some(state);
     }
 }
