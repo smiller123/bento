@@ -85,7 +85,7 @@ impl Journal {
     }
 
     pub fn destroy(&self) {
-        println!("destroy journal");
+        println!("cleaning up journal");
         unsafe {
             //self.force_commit();
             rs_jbd2_journal_destroy((*self.journal.get()).get_raw() as *const c_void);

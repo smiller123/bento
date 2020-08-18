@@ -331,32 +331,11 @@ void init_journal_sb() {
   jsb.s_max_trans_data = htonl(32);
 
   jsb.s_feature_compat = htonl(JBD2_FEATURE_COMPAT_CHECKSUM);
-  //jsb.s_feature_incompat = htonl(JBD2_FEATURE_INCOMPAT_ASYNC_COMMIT);
-  //jsb.s_checksum = 
-  //jsb.s_checksum_type = JBD2_CRC32C_CHKSUM;
-  //jsb.s_checksum = htonl(journal_sb_checksum(&jsb));
 
   memset(buf, 0, sizeof(buf));
   memmove(buf, &jsb,sizeof(jsb));
   
   wsect(2, buf);
 }
-
-/*int journal_sb_checksum(journal_superblock_t *jsb) {
-  struct {
-		struct shash_desc shash;
-		char ctx[JBD_MAX_CHECKSUM_SIZE];
-	} desc;
-
-  struct crypto_shash driver = crypto_alloc_shash("crc32c", 0, 0);
-
-  desc.shash.tfm = 0;//TODO;
-	*(uint32_t *)desc.ctx = ~0;
-
-	crypto_shash_update(&desc.shash, jsb, sizeof(journal_superblock_t));
-	return *(uint32_t *) desc.ctx;
-  //u32 crc = crc32c(crc, jsb, sizeof(journal_superblock_t));
-  //return crc;
-}*/
 
 
