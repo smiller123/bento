@@ -7,8 +7,7 @@
 #include <arpa/inet.h>
 
 #define stat xv6_stat  // avoid clash with host struct stat
-#include "xv6fs.h"
-#include "jbd2structs.h"
+#include "xv6fs_user.h"
 
 #ifndef static_assert
 #define static_assert(a, b) do { switch (0) case 0: case (a): ; } while (0)
@@ -182,7 +181,7 @@ main(int argc, char *argv[])
   winode(rootino, &din);
 
   balloc(freeblock);
-  init_journal_sb();
+  //init_journal_sb();
   
 
   exit(0);
@@ -314,28 +313,6 @@ iappend(uint inum, void *xp, int n)
   }
   din.size = xlonglong(off);
   winode(inum, &din);
-}
-
-void init_journal_sb() {
-  char buf[BSIZE];
-  journal_superblock_t jsb;
-  jsb.s_header.h_magic = htonl(JBD2_MAGIC_NUMBER);
-  jsb.s_header.h_blocktype = htonl(JBD2_SUPERBLOCK_V2);
-
-  jsb.s_blocksize = htonl(BSIZE);
-  jsb.s_maxlen = htonl(1032);
-  jsb.s_first = htonl(8);
-  jsb.s_sequence = htonl(1);
-  jsb.s_nr_users = htonl(1);
-  jsb.s_max_transaction = htonl(32);
-  jsb.s_max_trans_data = htonl(32);
-
-  jsb.s_feature_compat = htonl(JBD2_FEATURE_COMPAT_CHECKSUM);
-
-  memset(buf, 0, sizeof(buf));
-  memmove(buf, &jsb,sizeof(jsb));
-  
-  wsect(2, buf);
 }
 
 

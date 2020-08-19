@@ -247,6 +247,7 @@ extern "C" {
     // fs
     pub fn rs_buffer_head_get_b_data(bh: *const raw::c_void) -> *const raw::c_void;
     pub fn rs_buffer_head_get_b_size(bh: *const raw::c_void) -> raw::c_size_t;
+    pub fn rs_buffer_head_get_b_blocknr(bh: *const raw::c_void) -> raw::c_size_t;
 
     pub fn rs_block_device_get_bd_dev(bdev: *const raw::c_void) -> u32;
 
@@ -261,6 +262,18 @@ extern "C" {
     pub fn down_write_trylock(sem: *const raw::c_void) -> i32;
     pub fn down_read_trylock(sem: *const raw::c_void) -> i32;
     pub fn up_write(sem: *const raw::c_void);
+
+    // journal
+    pub fn rs_jbd2_journal_init_dev(bdev: *const raw::c_void, fs_dev: *const raw::c_void, 
+        start: u64, len: i32, bsize: i32) -> *const raw::c_void;
+    pub fn rs_jbd2_journal_load(journal: *const raw::c_void) -> i32;
+    pub fn rs_jbd2_journal_destroy(journal: *const raw::c_void) -> i32; 
+    pub fn rs_jbd2_journal_start(journal: *const raw::c_void, nblocks: i32) -> *const raw::c_void;
+    pub fn rs_jbd2_journal_stop(handle: *const raw::c_void) -> i32;
+    pub fn rs_jbd2_journal_get_write_access(handle: *const raw::c_void, bh: *const raw::c_void) -> i32;
+    pub fn rs_jbd2_journal_dirty_metadata(handle: *const raw::c_void, bh: *const raw::c_void) -> i32;
+    pub fn rs_jbd2_journal_force_commit(journal: *const raw::c_void) -> i32;
+
 
     // string
     pub fn strnlen(s: *const raw::c_char, max_len: u64) -> u64;

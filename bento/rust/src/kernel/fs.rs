@@ -63,8 +63,9 @@ pub fn blkdev_issue_flush_rust(
     }
 }
 
+#[derive(Debug)]
 pub struct BlockDevice {
-    bdev: RsBlockDevice,
+    pub bdev: RsBlockDevice,
     bsize: u32,
 }
 

@@ -27,8 +27,15 @@ def_kernel_obj_type!(RsWaitQueueHead);
 // /// A wrapper around the kernel `block_device` type.
 def_kernel_obj_type!(RsBlockDevice);
 
+// /// A wrapper around the kernel journal_t type TODO
+def_kernel_obj_type!(RsJournal);
+// /// A wrapper around the kernel handle_t type
+def_kernel_obj_type!(RsHandle);
+
 def_kernel_val_getter!(BufferHead, b_data, buffer_head, *const c_void);
 def_kernel_val_getter!(BufferHead, b_size, buffer_head, c_size_t);
+def_kernel_val_getter!(BufferHead, b_blocknr, buffer_head, c_size_t);
+
 
 use kernel::ffi::*;
 
@@ -169,6 +176,10 @@ impl BufferHead {
         unsafe {
             return slice::from_raw_parts_mut::<c_uchar>(b_data as *mut c_uchar, size as usize);
         }
+    }
+
+    pub fn blocknr(&self) -> u64 {
+        return self.b_blocknr();
     }
 }
 
