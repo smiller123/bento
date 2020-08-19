@@ -62,7 +62,7 @@ test_user_xv6fs:
   script:
     - git submodule update --init --recursive
     - (cd xv6fs/rust && make userspace)
-    - (cd xv6fs/mkfs && gcc mkfs.c && ./a.out fs.img)
+    - (cd xv6fs/mkfs && gcc mkfs_user.c && ./a.out fs.img)
     - sudo mkdir -p /mnt/xv6fs
     - sudo xv6fs/rust/userspace/target/release/user_xv6fs xv6fs/mkfs/fs.img /mnt/xv6fs &
     - sleep 1
