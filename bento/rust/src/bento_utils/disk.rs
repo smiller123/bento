@@ -10,7 +10,7 @@ use crate::std::os::unix::fs::*;
 use core::cmp::min;
 
 pub struct Disk {
-    bdev: BlockDevice,
+    pub bdev: BlockDevice,
 }
 
 impl Disk {

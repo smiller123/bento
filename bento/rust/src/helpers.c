@@ -11,6 +11,7 @@
 #include <linux/fs.h>
 #include <linux/backing-dev.h>
 #include <linux/module.h>
+#include <linux/jbd2.h>
 #include <linux/namei.h>
 #include <linux/path.h>
 #include <linux/mount.h>
@@ -93,6 +94,12 @@ rs_buffer_head_get_b_size(void* bh) {
     return buffer_head->b_size;
 }
 
+size_t
+rs_buffer_head_get_b_blocknr(void* bh) {
+    struct buffer_head* buffer_head = (struct buffer_head*) bh;
+    return buffer_head->b_blocknr;
+}
+
 struct wait_queue_head* rs_get_wait_queue_head(void) {
 	struct wait_queue_head* wq_head = kmalloc(sizeof(struct wait_queue_head), GFP_KERNEL);
 	init_waitqueue_head(wq_head);
@@ -127,4 +134,50 @@ void rs_put_semaphore(struct rw_semaphore *sem) {
 
 void rs_ndelay(unsigned long x) {
     ndelay(x);
+}
+
+int journal_get_superblock(journal_t *journal);
+
+// TODO journal
+journal_t* rs_jbd2_journal_init_dev(struct block_device *bdev, 
+                                    struct block_device *fs_dev, 
+                                    unsigned long long start, 
+                                    int len, 
+                                    int bsize) {
+    journal_t *journal = jbd2_journal_init_dev(bdev, fs_dev, start, len, bsize);
+    journal->j_max_transaction_buffers = journal->j_maxlen / 4;
+
+    return journal; 
+}
+
+int rs_jbd2_journal_load(journal_t *journal) {
+    return jbd2_journal_load(journal);
+}
+
+int rs_jbd2_journal_destroy(journal_t *journal) {
+    return jbd2_journal_destroy(journal);
+}
+
+handle_t *rs_jbd2_journal_start(journal_t * journal, int nblocks) {
+    /*printk(KERN_INFO "begin_op\n\tjournal %p\n\tmax_len %u\n\tmax_transaction_buffers %u\n",
+                                                journal,
+                                                journal->j_maxlen,
+                                                journal->j_max_transaction_buffers);*/
+    return jbd2_journal_start(journal, nblocks);
+}
+
+int rs_jbd2_journal_stop(handle_t * handle) {
+    return jbd2_journal_stop(handle);
+}
+
+int rs_jbd2_journal_get_write_access(handle_t * handle, struct buffer_head * bh) {
+    return jbd2_journal_get_write_access(handle, bh);
+}
+
+int rs_jbd2_journal_dirty_metadata (handle_t *handle, struct buffer_head *bh) {
+    return jbd2_journal_dirty_metadata(handle, bh);
+}
+
+int rs_jbd2_journal_force_commit(journal_t *journal) {
+    return jbd2_journal_force_commit(journal);
 }

@@ -6,7 +6,7 @@
 #define T_DEV  3   // Device
 
 #define MAXOPBLOCKS 	32
-#define LOGSIZE 	1032
+#define LOGSIZE 	96
 #define FSSIZE       	2000000
 
 /*
