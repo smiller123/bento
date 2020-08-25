@@ -40,6 +40,8 @@ use crate::xv6fs_utils::*;
 use bento::kernel::fs::*;
 #[cfg(not(feature = "user"))]
 use bento::kernel::journal::*;
+#[cfg(feature = "user")]
+use crate::xv6fs_log::*;
 
 use std::ffi::OsStr;
 use std::os::unix::io::AsRawFd;
@@ -71,7 +73,7 @@ impl Xv6FileSystem {
             *byte = 0;
         }
 
-        handle.journal_write(&bh);
+        handle.journal_write(&mut bh);
 
         return Ok(());
     }
@@ -141,7 +143,7 @@ impl Xv6FileSystem {
 
             // Write buffer
             if changed {
-                handle.journal_write(&bh);
+                handle.journal_write(&mut bh);
             }
             // extract new block ID x
             if let Some(x) = allocated_block {
@@ -184,7 +186,7 @@ impl Xv6FileSystem {
         *mut_byte &= !(1 << bit_in_byte);
 
         // Write buffer
-        handle.journal_write(&bh);
+        handle.journal_write(&mut bh);
 
         return Ok(());
     }
@@ -206,8 +208,11 @@ impl Xv6FileSystem {
 
         let sb = self.sb.as_mut().unwrap();
         
-        let bdev: &BlockDevice = &self.disk.as_ref().unwrap().bdev;
-        let log = Journal::new(bdev, bdev, sb.logstart as u64, sb.nlog as i32, BSIZE as i32).unwrap();
+        let disk_ref = Arc::clone(self.disk.as_ref().unwrap());
+        let disk_ref2 = Arc::clone(self.disk.as_ref().unwrap());
+        //let bdev: &BlockDevice = &self.disk.as_ref().unwrap().bdev;
+        //let log = Journal::new(bdev, bdev, sb.logstart as u64, sb.nlog as i32, BSIZE as i32).unwrap();
+        let log = Journal::new_from_disk(disk_ref, disk_ref2, sb.logstart as u64, sb.nlog as i32, BSIZE as i32).unwrap();
         self.log = Some(log);
         println!(
             "sb: size {}, nblocks {}, ninodes {}, nlog {}, logstart {} inodestart {}, bmap start {}",
@@ -254,7 +259,7 @@ impl Xv6FileSystem {
                     dinode.inode_type = i_type;
                     dinode.nlink = 1;
                     dinode.dump_into(inode_slice).map_err(|_| libc::EIO)?;
-                    handle.journal_write(&bh);
+                    handle.journal_write(&mut bh);
                     return self.iget(inum as u64);
                 }
             }
@@ -287,7 +292,7 @@ impl Xv6FileSystem {
         disk_inode.addrs.copy_from_slice(&internals.addrs);
         disk_inode.dump_into(inode_slice).map_err(|_| libc::EIO)?;
     
-        handle.journal_write(&bh);
+        handle.journal_write(&mut bh);
         return Ok(());
     }
 
@@ -410,8 +415,8 @@ impl Xv6FileSystem {
         }
 
         let dinode_lock = icache.get(inode.idx).ok_or(libc::EIO)?;
-        let dinode = dinode_lock.read().map_err(|_| {libc::EIO})?;
         let mut map = self.icache_map.as_ref().unwrap().write().unwrap();
+        let dinode = dinode_lock.read().map_err(|_| {libc::EIO})?;
         let mut dinode_nref = dinode.nref.write().unwrap();
         *dinode_nref -= 1;
         if *dinode_nref == 0 {
@@ -478,7 +483,7 @@ impl Xv6FileSystem {
                 result_blk_id = self.balloc(h)?;
                 let blk_data = result_blk_id.to_ne_bytes();
                 cell_segment.copy_from_slice(&blk_data);
-                h.journal_write(&bh);
+                h.journal_write(&mut bh);
             } else {
                 // just return the blk
                 result_blk_id = cell;
@@ -523,7 +528,7 @@ impl Xv6FileSystem {
                 let result_blk_id = self.balloc(h)?;
                 let result_blk_data = result_blk_id.to_ne_bytes();
                 cell_segment.copy_from_slice(&result_blk_data);
-                h.journal_write(&bh);
+                h.journal_write(&mut bh);
             }
 
             let mut dbh = disk.bread(cell as u64)?;
@@ -547,7 +552,7 @@ impl Xv6FileSystem {
                 result_blk_id = self.balloc(h)?;
                 let result_blk_data = result_blk_id.to_ne_bytes();
                 dcell_segment.copy_from_slice(&result_blk_data);
-                h.journal_write(&dbh);
+                h.journal_write(&mut dbh);
             } else {
                 result_blk_id = dcell;
             }
@@ -661,7 +666,6 @@ impl Xv6FileSystem {
         let mut off = _off;
         let i_size = internals.size as usize;
         if off > i_size || off + n < off {
-            println!("readi error1");
             return Err(libc::EIO);
         }
         if off + n > i_size {
@@ -732,7 +736,7 @@ impl Xv6FileSystem {
                     *idx = 0;
                 }
                 written_blocks += 1;
-                handle.journal_write(&bh);
+                handle.journal_write(&mut bh);
     
                 start_off += m;
                 end_size = start_off;
@@ -759,7 +763,7 @@ impl Xv6FileSystem {
 
             let copy_region = &buf[src..src + m];
             data_region.copy_from_slice(copy_region);
-            handle.journal_write(&bh);
+            handle.journal_write(&mut bh);
             written_blocks += 1;
 
             tot += m;
@@ -795,7 +799,9 @@ impl Xv6FileSystem {
 
         let search_name = match name.to_str() {
             Some(s) => s,
-            None => return Err(libc::ENOENT),
+            None => {
+                return Err(libc::ENOENT);
+            },
         };
 
         let mut de = Xv6fsDirent::new();
@@ -911,7 +917,9 @@ impl Xv6FileSystem {
         let leaf_slice = leaf_vec.as_slice();
         let target_leaf = match find_lowerbound(leaf_slice, leaf_vec.len(), target_hash) {
             Some(index) => index,
-            None => return Err(libc::ENOENT),
+            None => {
+                return Err(libc::ENOENT)
+            },
         };
 
         // read leafnode
@@ -1216,7 +1224,9 @@ impl Xv6FileSystem {
         let ind_slice = index_vec.as_slice();
         let target_entry = match find_lowerbound(ind_slice, index_vec.len(), target_hash) {
             Some(index) => index,
-            None => return Err(libc::ENOENT),
+            None => {
+                return Err(libc::ENOENT);
+            },
         };
 
         // read entire index block
@@ -1256,7 +1266,9 @@ impl Xv6FileSystem {
         let leaf_slice = leaf_vec.as_slice();
         let target_leaf = match find_lowerbound(leaf_slice, leaf_vec.len(), target_hash) {
             Some(index) => index,
-            None => return Err(libc::ENOENT),
+            None => {
+                return Err(libc::ENOENT);
+            },
         };
 
         // read entire leaf node block
@@ -1313,6 +1325,13 @@ impl Xv6FileSystem {
             if let Some(x) = de_map.get_mut(&de_hash) {
                 x.push(de_temp);
             }
+        }
+
+        if !de_map.contains_key(&target_hash) {
+            de_map.insert(target_hash, Vec::with_capacity(3));
+        }
+        if let Some(x) = de_map.get_mut(&target_hash) {
+            x.push(de);
         }
 
         // get the new lower bounds for the leaf nodes

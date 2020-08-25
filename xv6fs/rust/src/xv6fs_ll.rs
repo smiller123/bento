@@ -40,6 +40,8 @@ use fuse::*;
 
 #[cfg(not(feature = "user"))]
 use bento::kernel::journal::*;
+#[cfg(feature = "user")]
+use crate::xv6fs_log::*;
 
 #[cfg(not(feature = "user"))]
 use crate::println;
@@ -52,10 +54,8 @@ use time::*;
 
 use serde::{Serialize, Deserialize};
 
-use crate::xv6fs_log::*;
 use crate::xv6fs_file::*;
 use crate::xv6fs_htree::*;
-use crate::xv6fs_log::*;
 use crate::xv6fs_utils::*;
 
 #[derive(Serialize, Deserialize)]
@@ -778,7 +778,6 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
         reply: ReplyEntry,
     ) {
         let log = self.log.as_ref().unwrap();
-        //println!("mkdir");
         let handle = log.begin_op(MAXOPBLOCKS as u32);
         let child = match self.create_internal(parent, T_DIR, &name, &handle) {
             Ok(x) => x,
@@ -821,7 +820,6 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
 
     fn bento_rmdir(&self, _req: &Request, parent: u64, name: &OsStr, reply: ReplyEmpty) {
         let log = self.log.as_ref().unwrap();
-        //println!("rmdir");
         let handle = log.begin_op(MAXOPBLOCKS as u32);
         match self.dounlink(parent, name, &handle) {
             Ok(_) => reply.ok(),
@@ -831,7 +829,6 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
 
     fn bento_unlink(&self, _req: &Request, parent: u64, name: &OsStr, reply: ReplyEmpty) {
         let log = self.log.as_ref().unwrap();
-        //println!("unlink");
         let handle = log.begin_op(MAXOPBLOCKS as u32);
         match self.dounlink(parent, name, &handle) {
             Ok(_) => reply.ok(),
@@ -854,7 +851,6 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
         reply: ReplyEntry,
     ) {
         let log = self.log.as_ref().unwrap();
-        //println!("symlink");
         let handle = log.begin_op(MAXOPBLOCKS as u32);
         // Create new file
         let child = match self.create_internal(nodeid, T_LNK, name, &handle) {

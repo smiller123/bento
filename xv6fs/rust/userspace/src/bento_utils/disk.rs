@@ -72,14 +72,16 @@ impl Drop for ArrWrapper {
 }
 
 pub struct BufferHead {
-    buffer: Arc<ArrWrapper>
+    buffer: Arc<ArrWrapper>,
+    pub blk_no: u64
 }
 
 /// Currently not thread-safe. Multiple threads can mutate the same block at the same time.
 impl BufferHead {
-    fn new(buffer: Arc<ArrWrapper>) -> Self {
+    fn new(buffer: Arc<ArrWrapper>, blk_no: u64) -> Self {
         Self {
             buffer: buffer, 
+            blk_no: blk_no,
         }
     }
 
@@ -169,13 +171,13 @@ impl BufferCache {
         let mut cache_lock = self.cache.write().unwrap();
         if let Some(weak) = cache_lock.get_mut(&blockno) {
             if let Some(buf_lock) = weak.upgrade() {
-                return Ok(BufferHead::new(Arc::clone(&buf_lock)));
+                return Ok(BufferHead::new(Arc::clone(&buf_lock), blockno));
             }
         }
         let bh_buf = ArrWrapper::new(blockno, Arc::clone(&self.file), self.bsize)?;
         let new_arc = Arc::new(bh_buf);
         cache_lock.insert(blockno, Arc::downgrade(&new_arc));
-        return Ok(BufferHead::new(new_arc));
+        return Ok(BufferHead::new(new_arc, blockno));
     }
 }
 

@@ -14,7 +14,7 @@
 #define static_assert(a, b) do { switch (0) case 0: case (a): ; } while (0)
 #endif
 
-#define NINODES 50000
+#define NINODES 90000
 
 // Disk layout:
 // [ boot block | sb block | log | inode blocks | free bit map | data blocks ]

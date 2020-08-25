@@ -27,7 +27,6 @@ mod xv6fs_file;
 mod xv6fs_fs;
 mod xv6fs_htree;
 mod xv6fs_ll;
-mod xv6fs_log;
 mod xv6fs_utils;
 
 use bento_utils::BentoFilesystem;
