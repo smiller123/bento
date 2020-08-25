@@ -13,6 +13,7 @@ use core::mem;
 use core::sync::atomic::{AtomicBool, Ordering};
 
 use bento_utils::Disk;
+use bento_utils::BufferHead;
 
 use std::sync::Mutex;
 use std::sync::Condvar;
@@ -21,6 +22,91 @@ use datablock::DataBlock;
 
 use crate::xv6fs_utils::*;
 const LOGSIZE: usize = 128;
+
+#[repr(C)]
+#[derive(DataBlock)]
+pub struct journal_header_t
+{
+    h_magic: u32,
+    h_blocktype: u32,
+    h_sequence: u32,
+}
+
+impl journal_header_t {
+    pub fn new() -> journal_header_t {
+        journal_header_t {
+            h_magic: 0,
+            h_blocktype: 0,
+            h_sequence: 0,
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(DataBlock)]
+pub struct journal_superblock_t {
+    s_header: journal_header_t,
+
+    s_blocksize: u32,
+    s_maxlen: u32,
+    s_first: u32,
+
+    s_sequence: u32,
+    s_start: u32,
+
+    s_errno: u32,
+
+    s_feature_compat: u32,
+    s_feature_incompat: u32,
+    s_feature_ro_compat: u32,
+    s_uuid: [u8; 16],
+
+    s_nr_users: u32,
+
+    s_dynsuper: u32,
+
+    s_max_transaction: u32,
+    s_max_trans_data: u32,
+
+    s_checksum_type: u8,
+    s_padding2: [u8; 3],
+    s_padding: [u32; 42],
+    s_checksum: u32,
+
+    s_users: [u8; 16*48],
+    n: u32,
+    block: [u32; LOGSIZE],
+}
+
+impl journal_superblock_t {
+    pub fn new() -> journal_superblock_t {
+        journal_superblock_t {
+            s_header: journal_header_t::new(),
+            s_blocksize: 0,
+            s_maxlen: 0,
+            s_first: 0,
+            s_sequence: 0,
+            s_start: 0,
+            s_errno: 0,
+            s_feature_compat: 0,
+            s_feature_incompat: 0,
+            s_feature_ro_compat: 0,
+            s_uuid: [0 as u8; 16],
+            s_nr_users: 0,
+            s_dynsuper: 0,
+            s_max_transaction: 0,
+            s_max_trans_data: 0,
+            s_checksum_type: 0,
+            s_padding2: [0 as u8; 3],
+            s_padding: [0 as u32; 42],
+            s_checksum: 0,
+            s_users: [0 as u8; 16*48],
+            n: 0,
+            block: [0 as u32; LOGSIZE],
+        }
+    }
+}
+
 
 #[repr(C)]
 #[derive(DataBlock)]
@@ -53,17 +139,17 @@ fn wait_cont(_l: &mut Log) -> bool {
     return BLOCKER.load(Ordering::SeqCst);
 }
 
-pub struct Xv6Log {
+pub struct Journal {
     log_globl: Mutex<Log>,
     wait_q: Condvar,
     disk: Arc<Disk>,
 }
 
 
-impl Xv6Log {
+impl Journal {
     #[allow(dead_code)]
-    pub fn new(disk: Arc<Disk>) -> Self {
-        Self {
+    pub fn new_from_disk(disk: Arc<Disk>, _disk2: Arc<Disk>, start: u64, len: i32, bsize: i32) -> Option<Journal> {
+        let new_journal = Self {
             log_globl: Mutex::new(Log {
                 start: 0,
                 size: 0,
@@ -76,22 +162,26 @@ impl Xv6Log {
             }),
             wait_q: Condvar::new(),
             disk: disk,
-        }
+        };
+        new_journal.initlog(start, len, bsize);
+        return Some(new_journal);
     }
+
+    pub fn destroy(&self) {}
 
     // xv6_sb is the xv6 filesystem superblock.
     #[allow(dead_code)]
-    pub fn initlog(&self, xv6_sb: &mut Xv6fsSB) -> Result<(), libc::c_int> {
+    pub fn initlog(&self, start: u64, len: i32, _bsize: i32) -> Result<(), libc::c_int> {
         let mut log = &mut self.log_globl.lock().unwrap();
-        log.start = xv6_sb.logstart;
-        log.size = xv6_sb.nlog;
+        log.start = start as u32;
+        log.size = len as u32;
         println!("initlog: logstart {}, nlog: {}", log.start, log.size);
         self.recover_from_log(&mut log)
     }
 
     // Begin of a tx, must call begin_op in a filesystem syscall
     #[allow(dead_code)]
-    pub fn begin_op<'log>(&'log self) -> LogOpGuard<'log> {
+    pub fn begin_op<'log>(&'log self, _size: u32) -> Handle<'log> {
         let mut waiting = false;
         loop {
             let mut guard = self.log_globl.lock().unwrap();
@@ -110,7 +200,7 @@ impl Xv6Log {
             }
         }
     
-        LogOpGuard {
+        Handle {
             xv6_log: self
         }
     }
@@ -164,12 +254,14 @@ impl Xv6Log {
         //let disk = self.disk.as_ref().unwrap();
         let bh = self.disk.bread(log.start as u64)?;
         let bh_slice = bh.data();
-        let lh_slice = &bh_slice[0..mem::size_of::<logheader>()];
-        let mut lh = logheader::new();
-        lh.extract_from(&lh_slice).map_err(|_| libc::EIO)?;
-        log.lh.n = lh.n;
-        for i in 0..(lh.n as usize) {
-            lh.block
+        let jsuper_slice = &bh_slice[0..mem::size_of::<journal_superblock_t>()];
+        let mut jsuper = journal_superblock_t::new();
+        jsuper.extract_from(&jsuper_slice).map_err(|_| libc::EIO)?;
+        //let mut lh = logheader::new();
+        //lh.extract_from(&lh_slice).map_err(|_| libc::EIO)?;
+        log.lh.n = jsuper.n;
+        for i in 0..(jsuper.n as usize) {
+            jsuper.block
                 .get(i)
                 .and_then(|b| {
                     log.lh.block.get_mut(i).and_then(|r| {
@@ -188,23 +280,26 @@ impl Xv6Log {
         //let disk = XV6FS.disk.as_ref().unwrap();
         let mut bh = self.disk.bread(log.start as u64)?;
         let bh_slice = bh.data_mut();
-        let lh_slice = &mut bh_slice[0..mem::size_of::<logheader>()];
-        let mut lh = logheader::new();
-        lh.extract_from(lh_slice).map_err(|_| libc::EIO)?;
-        lh.n = log.lh.n;
-        for i in 0..(lh.n as usize) {
+        let jsuper_slice = &mut bh_slice[0..mem::size_of::<journal_superblock_t>()];
+        let mut jsuper = journal_superblock_t::new();
+        jsuper.extract_from(&jsuper_slice).map_err(|_| libc::EIO)?;
+        //let lh_slice = &mut bh_slice[0..mem::size_of::<logheader>()];
+        //let mut lh = logheader::new();
+        //lh.extract_from(lh_slice).map_err(|_| libc::EIO)?;
+        jsuper.n = log.lh.n;
+        for i in 0..(jsuper.n as usize) {
             log.lh
                 .block
                 .get(i)
                 .and_then(|b| {
-                    lh.block.get_mut(i).and_then(|r| {
+                    jsuper.block.get_mut(i).and_then(|r| {
                         *r = *b;
                         Some(())
                     })
                 })
                 .ok_or(libc::EIO)?;
         }
-        lh.dump_into(lh_slice).map_err(|_| libc::EIO)?;
+        jsuper.dump_into(jsuper_slice).map_err(|_| libc::EIO)?;
         bh.mark_buffer_dirty();
         
         Ok(())
@@ -268,11 +363,23 @@ impl Xv6Log {
 }
 
 // Implements 'end_op' in original xv6, but does not need to be explicitly called.
-pub struct LogOpGuard<'log> {
-    xv6_log: &'log Xv6Log,
+pub struct Handle<'log> {
+    xv6_log: &'log Journal,
 }
 
-impl Drop for LogOpGuard<'_> {
+impl Handle<'_> {
+    pub fn get_write_access(&self, bh: &BufferHead) -> i32 {
+        return 0;
+    }
+
+    pub fn journal_write(&self, bh: &mut BufferHead) -> i32 {
+        bh.mark_buffer_dirty();
+        self.xv6_log.log_write(bh.blk_no as u32);
+        0
+    }
+}
+
+impl Drop for Handle<'_> {
     fn drop(&mut self) {
         let mut do_commit = 0;
         {

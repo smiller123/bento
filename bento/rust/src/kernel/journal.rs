@@ -12,9 +12,12 @@ use kernel::kobj::*;
 use kernel::raw::*;
 
 use core::cell::RefCell;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 
 use kernel::fs::*;
+
+use crate::bento_utils::Disk;
 
 /// Wrapper around the kernel `journal_t`.
 #[derive(Debug)]
@@ -55,6 +58,10 @@ impl Journal {
                 });
             }
         }
+    }
+
+    pub fn new_from_disk(disk: Arc<Disk>, fs_disk: Arc<Disk>, start: u64, len: i32, bsize: i32) -> Option<Journal> {
+        Journal::new(&disk.bdev, &fs_disk.bdev, start, len, bsize)
     }
 
     // begin transaction of size blocks
@@ -106,7 +113,7 @@ impl Handle {
     }
 
     // register a block as part of the transaction associated with this handle
-    pub fn journal_write(&self, bh: &BufferHead) -> i32 {
+    pub fn journal_write(&self, bh: &mut BufferHead) -> i32 {
         let blocknr = bh.blocknr();
         let vec: &mut Vec<u64> = &mut self.blocks.borrow_mut();
         if !vec.contains(&blocknr) {
