@@ -36,12 +36,12 @@ use crate::xv6fs_htree::*;
 use crate::xv6fs_ll::*;
 use crate::xv6fs_utils::*;
 
+#[cfg(feature = "user")]
+use crate::xv6fs_log::*;
 #[cfg(not(feature = "user"))]
 use bento::kernel::fs::*;
 #[cfg(not(feature = "user"))]
 use bento::kernel::journal::*;
-#[cfg(feature = "user")]
-use crate::xv6fs_log::*;
 
 use std::ffi::OsStr;
 use std::os::unix::io::AsRawFd;
@@ -207,12 +207,19 @@ impl Xv6FileSystem {
         self.balloc_lock = Some(RwLock::new(0));
 
         let sb = self.sb.as_mut().unwrap();
-        
+
         let disk_ref = Arc::clone(self.disk.as_ref().unwrap());
         let disk_ref2 = Arc::clone(self.disk.as_ref().unwrap());
         //let bdev: &BlockDevice = &self.disk.as_ref().unwrap().bdev;
         //let log = Journal::new(bdev, bdev, sb.logstart as u64, sb.nlog as i32, BSIZE as i32).unwrap();
-        let log = Journal::new_from_disk(disk_ref, disk_ref2, sb.logstart as u64, sb.nlog as i32, BSIZE as i32).unwrap();
+        let log = Journal::new_from_disk(
+            disk_ref,
+            disk_ref2,
+            sb.logstart as u64,
+            sb.nlog as i32,
+            BSIZE as i32,
+        )
+        .unwrap();
         self.log = Some(log);
         println!(
             "sb: size {}, nblocks {}, ninodes {}, nlog {}, logstart {} inodestart {}, bmap start {}",
@@ -225,8 +232,12 @@ impl Xv6FileSystem {
             sb.bmapstart
             );
     }
-    
-    pub fn ialloc<'a>(&'a self, i_type: u16, handle: &Handle) -> Result<CachedInode<'a>, libc::c_int> {
+
+    pub fn ialloc<'a>(
+        &'a self,
+        i_type: u16,
+        handle: &Handle,
+    ) -> Result<CachedInode<'a>, libc::c_int> {
         let sb = self.sb.as_ref().unwrap();
         let num_inodes = sb.ninodes;
         for block_inum in (0..num_inodes as usize).step_by(IPB) {
@@ -248,8 +259,13 @@ impl Xv6FileSystem {
 
                 let mut dinode = Xv6fsInode::new();
                 dinode.extract_from(inode_slice).map_err(|_| libc::EIO)?;
+
                 // Check if inode is free
                 if dinode.inode_type == 0 {
+                    println!("inum: {} is free", inum);
+                    if inum == 2 {
+                        println!("block_inum: {}, inum_idx: {}", block_inum, inum_idx);
+                    }
                     dinode.major = 0;
                     dinode.minor = 0;
                     dinode.size = 0;
@@ -266,8 +282,13 @@ impl Xv6FileSystem {
         }
         return Err(libc::EIO);
     }
-    
-    pub fn iupdate(&self, internals: &InodeInternal, inum: u32, handle: &Handle) -> Result<(), libc::c_int> {
+
+    pub fn iupdate(
+        &self,
+        internals: &InodeInternal,
+        inum: u32,
+        handle: &Handle,
+    ) -> Result<(), libc::c_int> {
         let disk = self.disk.as_ref().unwrap();
         let sb = self.sb.as_ref().unwrap();
         let iblock = iblock(inum as usize, &sb);
@@ -291,7 +312,7 @@ impl Xv6FileSystem {
         disk_inode.size = internals.size;
         disk_inode.addrs.copy_from_slice(&internals.addrs);
         disk_inode.dump_into(inode_slice).map_err(|_| libc::EIO)?;
-    
+
         handle.journal_write(&mut bh);
         return Ok(());
     }
@@ -310,7 +331,7 @@ impl Xv6FileSystem {
             let mut inode_nref = inode.nref.write().unwrap();
             if *inode_nref > 0 && inode.dev == dev_id as u32 && inode.inum == inum as u32 {
                 *inode_nref += 1;
-   
+
                 return Ok(CachedInode {
                     idx: *idx,
                     inum: inum as u32,
@@ -401,7 +422,7 @@ impl Xv6FileSystem {
                 let r;
                 {
                     let dinode_lock = icache.get(inode.idx).ok_or(libc::EIO)?;
-                    let dinode = dinode_lock.read().map_err(|_| { libc::EIO })?;
+                    let dinode = dinode_lock.read().map_err(|_| libc::EIO)?;
                     r = *dinode.nref.read().unwrap();
                 }
                 if r == 1 {
@@ -416,7 +437,7 @@ impl Xv6FileSystem {
 
         let dinode_lock = icache.get(inode.idx).ok_or(libc::EIO)?;
         let mut map = self.icache_map.as_ref().unwrap().write().unwrap();
-        let dinode = dinode_lock.read().map_err(|_| {libc::EIO})?;
+        let dinode = dinode_lock.read().map_err(|_| libc::EIO)?;
         let mut dinode_nref = dinode.nref.write().unwrap();
         *dinode_nref -= 1;
         if *dinode_nref == 0 {
@@ -424,12 +445,17 @@ impl Xv6FileSystem {
         }
         return Ok(());
     }
-    
+
     // handle should be Some(_) if this bmap is part of a transaction, None otherwise
     // bmap may have to write to disk during some read operation
-    fn bmap(&self, inode: &mut InodeInternal, blk_idx: usize, handle: Option<&Handle>) -> Result<u32, libc::c_int> {
+    fn bmap(
+        &self,
+        inode: &mut InodeInternal,
+        blk_idx: usize,
+        handle: Option<&Handle>,
+    ) -> Result<u32, libc::c_int> {
         let mut idx = blk_idx;
-        
+
         let mut new_tx: Option<Handle> = None;
 
         if idx < NDIRECT as usize {
@@ -465,9 +491,9 @@ impl Xv6FileSystem {
             let disk = self.disk.as_ref().unwrap();
             let mut bh = disk.bread(*ind_blk_id as u64)?;
             let b_data = bh.data();
-    
+
             let mut cell_data = [0; 4];
-            let cell_segment = &b_data[idx * 4 .. (idx + 1) * 4];
+            let cell_segment = &b_data[idx * 4..(idx + 1) * 4];
             cell_data.copy_from_slice(cell_segment);
             let cell = u32::from_ne_bytes(cell_data);
             if cell == 0 {
@@ -478,7 +504,7 @@ impl Xv6FileSystem {
                 };
                 h.get_write_access(&bh);
                 let b_data = bh.data_mut();
-                let cell_segment = &mut b_data[idx * 4 .. (idx + 1) * 4];
+                let cell_segment = &mut b_data[idx * 4..(idx + 1) * 4];
 
                 result_blk_id = self.balloc(h)?;
                 let blk_data = result_blk_id.to_ne_bytes();
@@ -512,7 +538,7 @@ impl Xv6FileSystem {
             let dind_idx = idx / NINDIRECT as usize;
 
             let mut cell_data = [0; 4];
-            let cell_segment = &b_data[dind_idx * 4 .. (dind_idx + 1) * 4];
+            let cell_segment = &b_data[dind_idx * 4..(dind_idx + 1) * 4];
             cell_data.copy_from_slice(cell_segment);
             let cell = u32::from_ne_bytes(cell_data);
 
@@ -523,7 +549,7 @@ impl Xv6FileSystem {
                 };
                 h.get_write_access(&bh);
                 let b_data = bh.data_mut();
-                let cell_segment = &mut b_data[dind_idx * 4 .. (dind_idx + 1) * 4];
+                let cell_segment = &mut b_data[dind_idx * 4..(dind_idx + 1) * 4];
 
                 let result_blk_id = self.balloc(h)?;
                 let result_blk_data = result_blk_id.to_ne_bytes();
@@ -537,7 +563,7 @@ impl Xv6FileSystem {
 
             let result_blk_id: u32;
             let mut dcell_data = [0; 4];
-            let dcell_segment = &db_data[dblock_idx * 4 .. (dblock_idx + 1) * 4];
+            let dcell_segment = &db_data[dblock_idx * 4..(dblock_idx + 1) * 4];
             dcell_data.copy_from_slice(dcell_segment);
             let dcell = u32::from_ne_bytes(dcell_data);
             if dcell == 0 {
@@ -547,7 +573,7 @@ impl Xv6FileSystem {
                 };
                 h.get_write_access(&dbh);
                 let db_data = dbh.data_mut();
-                let dcell_segment = &mut db_data[dblock_idx * 4 .. (dblock_idx + 1) * 4];
+                let dcell_segment = &mut db_data[dblock_idx * 4..(dblock_idx + 1) * 4];
 
                 result_blk_id = self.balloc(h)?;
                 let result_blk_data = result_blk_id.to_ne_bytes();
@@ -562,8 +588,12 @@ impl Xv6FileSystem {
         return Err(libc::EIO);
     }
 
-    
-    pub fn itrunc(&self, inode: &mut CachedInode, internals: &mut InodeInternal, handle: &Handle) -> Result<(), libc::c_int> {
+    pub fn itrunc(
+        &self,
+        inode: &mut CachedInode,
+        internals: &mut InodeInternal,
+        handle: &Handle,
+    ) -> Result<(), libc::c_int> {
         for i in 0..NDIRECT as usize {
             let addr = internals.addrs.get_mut(i).ok_or(libc::EIO)?;
             if *addr != 0 {
@@ -702,8 +732,9 @@ impl Xv6FileSystem {
         n: usize,
         internals: &mut InodeInternal,
         inum: u32,
-        handle: &Handle
+        handle: &Handle,
     ) -> Result<usize, libc::c_int> {
+        // println!("write inum: {}", inum);
         let mut off = _off;
         let i_size = internals.size as usize;
         if off + n < off {
@@ -727,7 +758,7 @@ impl Xv6FileSystem {
                 let disk = self.disk.as_ref().unwrap();
                 let mut bh = disk.bread(block_no as u64)?;
                 handle.get_write_access(&bh);
-    
+
                 let b_data = bh.data_mut();
 
                 let m = min(off - start_off, BSIZE - start_off % BSIZE);
@@ -737,7 +768,7 @@ impl Xv6FileSystem {
                 }
                 written_blocks += 1;
                 handle.journal_write(&mut bh);
-    
+
                 start_off += m;
                 end_size = start_off;
             }
@@ -756,7 +787,7 @@ impl Xv6FileSystem {
             let disk = self.disk.as_ref().unwrap();
             let mut bh = disk.bread(block_no as u64)?;
             handle.get_write_access(&bh);
-    
+
             let data_slice = bh.data_mut();
             let data_off = off % BSIZE;
             let data_region = &mut data_slice[data_off..data_off + m];
@@ -801,7 +832,7 @@ impl Xv6FileSystem {
             Some(s) => s,
             None => {
                 return Err(libc::ENOENT);
-            },
+            }
         };
 
         let mut de = Xv6fsDirent::new();
@@ -917,9 +948,7 @@ impl Xv6FileSystem {
         let leaf_slice = leaf_vec.as_slice();
         let target_leaf = match find_lowerbound(leaf_slice, leaf_vec.len(), target_hash) {
             Some(index) => index,
-            None => {
-                return Err(libc::ENOENT)
-            },
+            None => return Err(libc::ENOENT),
         };
 
         // read leafnode
@@ -1034,7 +1063,15 @@ impl Xv6FileSystem {
         } else if search_name == ".." {
             let root_de_slice = &mut root_slice[de_len..2 * de_len];
             de.dump_into(root_de_slice).map_err(|_| libc::EIO)?;
-            if self.writei(root_de_slice, de_len, de_len, internals, parent_inum, handle)? != de_len {
+            if self.writei(
+                root_de_slice,
+                de_len,
+                de_len,
+                internals,
+                parent_inum,
+                handle,
+            )? != de_len
+            {
                 return Err(libc::EIO);
             }
 
@@ -1059,7 +1096,14 @@ impl Xv6FileSystem {
             rie.block = (index_offset / BSIZE) as u32;
 
             rie.dump_into(rie_slice).map_err(|_| libc::EIO)?;
-            if self.writei(rie_slice, rie_offset, hentry_len, internals, parent_inum, handle)? != hentry_len
+            if self.writei(
+                rie_slice,
+                rie_offset,
+                hentry_len,
+                internals,
+                parent_inum,
+                handle,
+            )? != hentry_len
             {
                 return Err(libc::EIO);
             }
@@ -1093,7 +1137,14 @@ impl Xv6FileSystem {
 
             ine.dump_into(ine_slice).map_err(|_| libc::EIO)?;
 
-            if self.writei(ine_slice, ine_offset, hentry_len, internals, parent_inum, handle)? != hentry_len
+            if self.writei(
+                ine_slice,
+                ine_offset,
+                hentry_len,
+                internals,
+                parent_inum,
+                handle,
+            )? != hentry_len
             {
                 return Err(libc::EIO);
             }
@@ -1174,7 +1225,14 @@ impl Xv6FileSystem {
             ine.block = (de_offset / BSIZE) as u32;
             ine.dump_into(ine_slice).map_err(|_| libc::EIO)?;
 
-            if self.writei(ine_slice, ine_offset, hentry_len, internals, parent_inum, handle)? != hentry_len
+            if self.writei(
+                ine_slice,
+                ine_offset,
+                hentry_len,
+                internals,
+                parent_inum,
+                handle,
+            )? != hentry_len
             {
                 return Err(libc::EIO);
             }
@@ -1201,7 +1259,14 @@ impl Xv6FileSystem {
                 let rie_slice = rie_vec.as_mut_slice();
                 rie.dump_into(rie_slice).map_err(|_| libc::EIO)?;
                 let offset = hroot_len + rie_idx * hentry_len;
-                if self.writei(rie_slice, offset, hentry_len, internals, parent_inum, handle)? != hentry_len
+                if self.writei(
+                    rie_slice,
+                    offset,
+                    hentry_len,
+                    internals,
+                    parent_inum,
+                    handle,
+                )? != hentry_len
                 {
                     return Err(libc::EIO);
                 }
@@ -1214,7 +1279,8 @@ impl Xv6FileSystem {
             root.ind_entries += 1;
             root.blocks += 2;
             root.dump_into(root2_slice).map_err(|_| libc::EIO)?;
-            if self.writei(root2_slice, 0, hroot_len, internals, parent_inum, handle)? != hroot_len {
+            if self.writei(root2_slice, 0, hroot_len, internals, parent_inum, handle)? != hroot_len
+            {
                 return Err(libc::EIO);
             }
             return Ok(0);
@@ -1226,7 +1292,7 @@ impl Xv6FileSystem {
             Some(index) => index,
             None => {
                 return Err(libc::ENOENT);
-            },
+            }
         };
 
         // read entire index block
@@ -1268,7 +1334,7 @@ impl Xv6FileSystem {
             Some(index) => index,
             None => {
                 return Err(libc::ENOENT);
-            },
+            }
         };
 
         // read entire leaf node block
@@ -1290,8 +1356,14 @@ impl Xv6FileSystem {
             // there is enough space in the leaf node
             if final_off.is_some() {
                 let final_off = final_off.unwrap();
-                if self.writei(de_slice, final_off as usize, de_len, internals, parent_inum, handle)?
-                    != de_len
+                if self.writei(
+                    de_slice,
+                    final_off as usize,
+                    de_len,
+                    internals,
+                    parent_inum,
+                    handle,
+                )? != de_len
                 {
                     return Err(libc::EIO);
                 }
@@ -1340,38 +1412,19 @@ impl Xv6FileSystem {
         let mut de_map2 = de_map.split_off(&keys2[0]);
         let leaf2_lower = keys2[0];
 
-        // get vecs from the dirents maps
-        let mut leaf1_dir_vec: Vec<Xv6fsDirent> = Vec::with_capacity(66);
-        let mut leaf2_dir_vec: Vec<Xv6fsDirent> = Vec::with_capacity(66);
-
-        {
-            for key in keys {
-                if let Some(mut val) = de_map.remove(&key) {
-                    while let Some(dirent) = val.pop() {
-                        leaf1_dir_vec.push(dirent);
-                    }
-                }
-            }
-        }
-        {
-            for key in keys2 {
-                if let Some(mut val) = de_map2.remove(&key) {
-                    while let Some(dirent) = val.pop() {
-                        leaf2_dir_vec.push(dirent);
-                    }
-                }
-            }
-        }
-
         // keep half dirents into current leaf node
         {
             let mut leaf_vec: Vec<u8> = vec![0; BSIZE];
             let leaf_slice = leaf_vec.as_mut_slice();
             let mut idx = 0;
-            while let Some(de) = leaf1_dir_vec.pop() {
-                let leaf_idx_slice = &mut leaf_slice[idx * de_len..(idx + 1) * de_len];
-                de.dump_into(leaf_idx_slice).map_err(|_| libc::EIO)?;
-                idx += 1;
+            for key in keys {
+                if let Some(mut val) = de_map.remove(&key) {
+                    while let Some(de) = val.pop() {
+                        let leaf_idx_slice = &mut leaf_slice[idx * de_len..(idx + 1) * de_len];
+                        de.dump_into(leaf_idx_slice).map_err(|_| libc::EIO)?;
+                        idx += 1;
+                    }
+                }
             }
 
             // need overwrite prev dirents with 0's
@@ -1399,11 +1452,14 @@ impl Xv6FileSystem {
             let mut leaf_vec: Vec<u8> = vec![0; BSIZE];
             let leaf_slice = leaf_vec.as_mut_slice();
             let mut idx = 0;
-
-            while let Some(de) = leaf2_dir_vec.pop() {
-                let leaf_idx_slice = &mut leaf_slice[idx * de_len..(idx + 1) * de_len];
-                de.dump_into(leaf_idx_slice).map_err(|_| libc::EIO)?;
-                idx += 1;
+            for key in keys2 {
+                if let Some(mut val) = de_map2.remove(&key) {
+                    while let Some(de) = val.pop() {
+                        let leaf_idx_slice = &mut leaf_slice[idx * de_len..(idx + 1) * de_len];
+                        de.dump_into(leaf_idx_slice).map_err(|_| libc::EIO)?;
+                        idx += 1;
+                    }
+                }
             }
 
             // zero out possible trash values
@@ -1480,7 +1536,8 @@ impl Xv6FileSystem {
             let root2_slice = &mut root_arr_slice[0..hroot_len];
             root.blocks += 1;
             root.dump_into(root2_slice).map_err(|_| libc::EIO)?;
-            if self.writei(root2_slice, 0, hroot_len, internals, parent_inum, handle)? != hroot_len {
+            if self.writei(root2_slice, 0, hroot_len, internals, parent_inum, handle)? != hroot_len
+            {
                 return Err(libc::EIO);
             }
         } else {
@@ -1604,8 +1661,14 @@ impl Xv6FileSystem {
 
                     // zero out possible trash values
                     let write_size = BSIZE;
-                    if self.writei(root_arr_slice, 0, write_size, internals, parent_inum, handle)?
-                        != write_size
+                    if self.writei(
+                        root_arr_slice,
+                        0,
+                        write_size,
+                        internals,
+                        parent_inum,
+                        handle,
+                    )? != write_size
                     {
                         return Err(libc::EIO);
                     }
