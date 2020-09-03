@@ -53,7 +53,7 @@ print("%-18s %s" % ("TIME(s)", "CALL"))
 # process event
 def print_event(cpu, data, size):
     event = ct.cast(data, ct.POINTER(Data)).contents
-    print("%-18.9f fsync(), fn_ptr=%ull" % (float(event.ts) / 1000000, event.fn))
+    print("%-18.9f fsync(), fn_ptr=%lx" % (float(event.ts) / 1000000, event.fn))
     if event.error != 0:
         print("error")
 

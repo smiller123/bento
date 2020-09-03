@@ -29,6 +29,8 @@ struct data_t {
     u64 ts;
     u32 pid;
     u32 ppid;
+    u32 dup_fd;
+    int sendmsg_fd;
     //char *execname;
 };
 
@@ -61,20 +63,31 @@ void kprobe__sys_pipe(void *ctx) {
     data.type = 2;
     data.ts = bpf_ktime_get_ns() / 1000;
     data.pid = myproc->pid;
+    data.ppid = myproc->real_parent->pid;
     events.perf_submit(ctx, &data, sizeof(data));
 };
 
-void kprobe__sys_dup(void *ctx) {
+void kprobe__sys_dup(struct pt_regs  *ctx, unsigned int fildes) {
     struct data_t data = {};
     struct task_struct *myproc = (struct task_struct *) bpf_get_current_task();
     data.type = 3;
     data.ts = bpf_ktime_get_ns() / 1000;
     data.pid = myproc->pid;
     data.ppid = myproc->real_parent->pid;
+    data.dup_fd = fildes;
     events.perf_submit(ctx, &data, sizeof(data));
 };
 
-
+void kprobe__sys_sendmsg(struct pt_regs *ctx, int fd) {
+    struct data_t data = {};
+    struct task_struct *myproc = (struct task_struct *) bpf_get_current_task();
+    data.type = 4;
+    data.ts = bpf_ktime_get_ns() / 1000;
+    data.pid = myproc->pid;
+    data.ppid = myproc->real_parent->pid;
+    data.sendmsg_fd = fd;
+    events.perf_submit(ctx, &data, sizeof(data));
+};
 """)
 
 class Data(ct.Structure):
@@ -82,7 +95,9 @@ class Data(ct.Structure):
         ("type", ct.c_int),
         ("ts", ct.c_ulonglong),
         ("pid", ct.c_int),
-        ("ppid", ct.c_int)
+        ("ppid", ct.c_int),
+        ("dup_fd", ct.c_int),
+        ("sendmsg_fd", ct.c_int) 
     ]
 
 # header
@@ -94,12 +109,13 @@ Notes:
 clone is used instead of fork, basically the same thing
 for some reason EXECS are showing up before the CLONE for that process shows up, which is counter intuitive
 I'll add other information for pipes and dups
+Need to find info about message recipient in sendmsg
 """
 
 # process event
 def print_event(cpu, data, size):
     event = ct.cast(data, ct.POINTER(Data)).contents
-    syscall_names = ["CLONE", "EXEC", "PIPE", "DUP"]
+    syscall_names = ["CLONE", "EXEC", "PIPE", "DUP", "SENDMSG"]
     if event.type == 0:
         print("%-18.9f %s(), pid=%d, ppid=%d" % (float(event.ts) / 1000000, "CLONE", event.pid, event.ppid))
     elif event.type == 1:
@@ -107,7 +123,10 @@ def print_event(cpu, data, size):
     elif event.type == 2:
         print("%-18.9f %s(), pid=%d" % (float(event.ts) / 1000000, "PIPE", event.pid))
     elif event.type == 3:
-        print("%-18.9f %s(), pid=%d" % (float(event.ts) / 1000000, "DUP", event.pid))
+        print("%-18.9f %s(), pid=%d, fd=%u" % (float(event.ts) / 1000000, "DUP", event.pid, event.dup_fd))
+    elif event.type == 4:
+        print("%-18.9f %s(), pid=%d, fd=%i" % (float(event.ts) / 1000000, "SENDMSG", event.pid, event.sendmsg_fd))
+
 
 # loop with callback to print_event
 b["events"].open_perf_buffer(print_event)
