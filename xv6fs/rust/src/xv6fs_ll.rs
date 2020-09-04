@@ -177,7 +177,7 @@ impl BentoFilesystem<'_, Xv6State, Xv6State> for Xv6FileSystem {
         reply.statfs(fs_size as u64, 0, 0, 0, 0, BSIZE as u32, DIRSIZ as u32, 0);
     }
 
-    fn bento_open(&self, _req: &Request, nodeid: u64, flags: u32, reply: ReplyOpen) {
+    fn bento_open(&self, req: &Request, nodeid: u64, flags: u32, reply: ReplyOpen) {
         let log = self.log.as_ref().unwrap();
         let inode = match self.iget(nodeid) {
             Ok(x) => x,
@@ -221,6 +221,62 @@ impl BentoFilesystem<'_, Xv6State, Xv6State> for Xv6FileSystem {
         let fh = 0;
         let open_flags = FOPEN_KEEP_CACHE;
         reply.opened(fh, open_flags);
+
+        // add provenance information
+        // {
+        //     let log = self.log.as_ref().unwrap();
+        //     let handle = log.begin_op(MAXOPBLOCKS as u32);
+        //     let inode = match self.iget(PROVINO as u64) {
+        //         Ok(x) => x,
+        //         Err(x) => {
+        //             reply.error(x);
+        //             return;
+        //         }
+        //     };
+
+        //     let icache = self.ilock_cache.as_ref().unwrap();
+        //     let inode_guard = match self.ilock(inode.idx, &icache, inode.inum) {
+        //         Ok(x) => x,
+        //         Err(x) => {
+        //             reply.error(x);
+        //             return;
+        //         }
+        //     };
+        //     let mut internals = match inode_guard.internals.write() {
+        //         Ok(x) => x,
+        //         Err(_) => {
+        //             reply.error(libc::EIO);
+        //             return;
+        //         }
+        //     };
+
+        //     // Check if inode is a file
+        //     // Provenance special inode must be a file
+        //     if internals.inode_type != T_FILE {
+        //         reply.error(libc::EISDIR);
+        //         return;
+        //     }
+
+        //     let msg = format!(
+        //         "op: open, pid: {}, flags: {}, inode: {}\n",
+        //         req.pid(),
+        //         flags,
+        //         nodeid
+        //     );
+        //     let info = OsStr::new(&msg[..]);
+        //     let info_slice = info.to_str().unwrap().as_bytes();
+        //     if let Err(_x) = self.writei(
+        //         info_slice,
+        //         internals.size as usize,
+        //         info.len(),
+        //         &mut internals,
+        //         inode.inum,
+        //         &handle,
+        //     ) {
+        //         reply.error(libc::EIO);
+        //         return;
+        //     }
+        // }
     }
 
     fn bento_opendir(&self, _req: &Request, nodeid: u64, _flags: u32, reply: ReplyOpen) {
@@ -764,7 +820,6 @@ impl BentoFilesystem<'_, Xv6State, Xv6State> for Xv6FileSystem {
         flags: u32,
         reply: ReplyCreate,
     ) {
-        println!("bento_create - parent_inum: {}", parent);
         // Check if the file already exists
         let log = self.log.as_ref().unwrap();
         let handle = log.begin_op(16);
@@ -801,7 +856,7 @@ impl BentoFilesystem<'_, Xv6State, Xv6State> for Xv6FileSystem {
             Ok(attr) => {
                 reply.created(&attr_valid, &attr, generation, fh, open_flags);
                 let log = self.log.as_ref().unwrap();
-                let handle = log.begin_op(MAXOPBLOCKS as u32);
+                let handle = log.begin_op(16 as u32);
                 let inode = match self.iget(PROVINO as u64) {
                     Ok(x) => x,
                     Err(x) => {
@@ -839,23 +894,18 @@ impl BentoFilesystem<'_, Xv6State, Xv6State> for Xv6FileSystem {
                         return;
                     }
                 };
-                println!(
-                    "pid: {}, op: create, path: {}, mode: {}, flags: {}",
-                    req.pid(),
-                    path_name,
-                    mode,
-                    flags
-                );
+
                 let msg = format!(
-                    "pid: {}, op: create, path: {}, mode: {}, flags: {}\n",
+                    "op: create, pid: {}, path: {}, mode: {}, flags: {}, inode: {}\n",
                     req.pid(),
                     path_name,
                     mode,
-                    flags
+                    flags,
+                    child.inum
                 );
                 let info = OsStr::new(&msg[..]);
                 let info_slice = info.to_str().unwrap().as_bytes();
-                match self.writei(
+                if let Err(_x) = self.writei(
                     info_slice,
                     internals.size as usize,
                     info.len(),
@@ -863,15 +913,9 @@ impl BentoFilesystem<'_, Xv6State, Xv6State> for Xv6FileSystem {
                     inode.inum,
                     &handle,
                 ) {
-                    Ok(x) => {
-                        println!("writei return: {}", x);
-                    }
-                    Err(_) => {
-                        println!("write error");
-                        reply.error(libc::EIO);
-                        return;
-                    }
-                };
+                    reply.error(libc::EIO);
+                    return;
+                }
             }
             Err(x) => {
                 reply.error(x);
@@ -1023,7 +1067,7 @@ impl BentoFilesystem<'_, Xv6State, Xv6State> for Xv6FileSystem {
             Ok(attr) => {
                 reply.entry(&attr_valid, &attr, generation);
                 let log = self.log.as_ref().unwrap();
-                let handle = log.begin_op(MAXOPBLOCKS as u32);
+                let handle = log.begin_op(16 as u32);
                 let inode = match self.iget(PROVINO as u64) {
                     Ok(x) => x,
                     Err(x) => {
@@ -1061,21 +1105,16 @@ impl BentoFilesystem<'_, Xv6State, Xv6State> for Xv6FileSystem {
                         return;
                     }
                 };
-                println!(
-                    "pid: {}, op: symlink, path_1: {}, path_2: {}\n",
-                    req.pid(),
-                    path_name,
-                    linkname_str,
-                );
+
                 let msg = format!(
-                    "pid: {}, op: symlink, path_1: {}, path_2: {}\n",
+                    "op: symlink, pid: {}, path_1: {}, path_2: {}\n",
                     req.pid(),
                     path_name,
                     linkname_str,
                 );
                 let info = OsStr::new(&msg[..]);
                 let info_slice = info.to_str().unwrap().as_bytes();
-                match self.writei(
+                if let Err(_x) = self.writei(
                     info_slice,
                     internals.size as usize,
                     info.len(),
@@ -1083,15 +1122,9 @@ impl BentoFilesystem<'_, Xv6State, Xv6State> for Xv6FileSystem {
                     inode.inum,
                     &handle,
                 ) {
-                    Ok(x) => {
-                        println!("writei return: {}", x);
-                    }
-                    Err(_) => {
-                        println!("write error");
-                        reply.error(libc::EIO);
-                        return;
-                    }
-                };
+                    reply.error(libc::EIO);
+                    return;
+                }
             }
             Err(x) => {
                 reply.error(x);
@@ -1421,7 +1454,7 @@ impl Xv6FileSystem {
         self.iupdate(&inode_internals, inode.inum, handle)?;
         if inode_internals.inode_type == T_FILE {
             let log = self.log.as_ref().unwrap();
-            let handle = log.begin_op(MAXOPBLOCKS as u32);
+            let handle = log.begin_op(16 as u32);
             let p_inode = self.iget(PROVINO as u64)?;
 
             let icache = self.ilock_cache.as_ref().unwrap();
@@ -1445,11 +1478,17 @@ impl Xv6FileSystem {
                 0 => "unlink_file_deleted",
                 _ => "unlink",
             };
-            println!("pid: {}, op: {}, path: {}", req.pid(), op, path_name,);
-            let msg = format!("pid: {}, op: {}, path: {}", req.pid(), op, path_name,);
+
+            let msg = format!(
+                "op: {}, pid: {}, path: {}, inode: {}\n",
+                op,
+                req.pid(),
+                path_name,
+                inode.inum
+            );
             let info = OsStr::new(&msg[..]);
             let info_slice = info.to_str().unwrap().as_bytes();
-            match self.writei(
+            if let Err(_x) = self.writei(
                 info_slice,
                 internals.size as usize,
                 info.len(),
@@ -1457,14 +1496,8 @@ impl Xv6FileSystem {
                 p_inode.inum,
                 &handle,
             ) {
-                Ok(x) => {
-                    println!("writei return: {}", x);
-                }
-                Err(_) => {
-                    println!("write error");
-                    return Err(libc::EIO);
-                }
-            };
+                return Err(libc::EIO);
+            }
         }
 
         return Ok(0);
