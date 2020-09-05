@@ -64,6 +64,12 @@ rs_sb_bread(void *ptr, sector_t block)
 }
 
 struct buffer_head *
+rs_getblk(struct block_device *bdev, sector_t block, unsigned size)
+{
+	return __getblk_gfp(bdev, block, size, __GFP_MOVABLE);
+}
+
+struct buffer_head *
 bread_helper(void *ptr, sector_t block, unsigned size)
 {
 	struct block_device *bdev = (struct block_device *)ptr;
@@ -138,6 +144,18 @@ void rs_ndelay(unsigned long x) {
 
 int journal_get_superblock(journal_t *journal);
 
+void rs_set_buffer_uptodate(struct buffer_head *bh)
+{
+        set_buffer_uptodate(bh);
+}
+
+void rs_lock_buffer(struct buffer_head *bh)
+{
+	might_sleep();
+	if (!trylock_buffer(bh))
+		__lock_buffer(bh);
+}
+
 // TODO journal
 journal_t* rs_jbd2_journal_init_dev(struct block_device *bdev, 
                                     struct block_device *fs_dev, 
@@ -174,10 +192,29 @@ int rs_jbd2_journal_get_write_access(handle_t * handle, struct buffer_head * bh)
     return jbd2_journal_get_write_access(handle, bh);
 }
 
+int rs_jbd2_journal_get_create_access(handle_t * handle, struct buffer_head * bh) {
+    return jbd2_journal_get_create_access(handle, bh);
+}
+
 int rs_jbd2_journal_dirty_metadata (handle_t *handle, struct buffer_head *bh) {
     return jbd2_journal_dirty_metadata(handle, bh);
 }
 
 int rs_jbd2_journal_force_commit(journal_t *journal) {
     return jbd2_journal_force_commit(journal);
+}
+
+void rs_jbd2_journal_set_barrier(journal_t *journal) {
+	journal->j_flags |= JBD2_BARRIER;
+	jbd2_journal_set_features(journal, 0, 0,
+                                       JBD2_FEATURE_INCOMPAT_64BIT);
+}
+
+void rs_jbd2_journal_set_async_commit(journal_t *journal) {
+	jbd2_journal_clear_features(journal,
+			JBD2_FEATURE_COMPAT_CHECKSUM, 0,
+			JBD2_FEATURE_INCOMPAT_CSUM_V3 |
+			JBD2_FEATURE_INCOMPAT_CSUM_V2);
+	jbd2_journal_clear_features(journal, 0,
+			0, JBD2_FEATURE_INCOMPAT_ASYNC_COMMIT);
 }

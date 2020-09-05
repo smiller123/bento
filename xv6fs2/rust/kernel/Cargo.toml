@@ -13,6 +13,7 @@ crate-type = ["staticlib"]
 bento = {path = "../../../bento/rust" }
 datablock = { path = "../../../datablock-rs/datablock" }
 arr_macro = "0.1.0"
+hash32 = "0.1.1"
 rlibc = "1.0"
 
 [dependencies.serde]

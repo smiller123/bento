@@ -368,7 +368,11 @@ pub struct Handle<'log> {
 }
 
 impl Handle<'_> {
-    pub fn get_write_access(&self, bh: &BufferHead) -> i32 {
+    pub fn get_write_access(&self, _bh: &BufferHead) -> i32 {
+        return 0;
+    }
+
+    pub fn get_create_access(&self, _bh: &BufferHead) -> i32 {
         return 0;
     }
 
