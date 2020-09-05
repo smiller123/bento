@@ -179,42 +179,45 @@ impl BentoFilesystem<'_, Xv6State, Xv6State> for Xv6FileSystem {
 
     fn bento_open(&self, req: &Request, nodeid: u64, flags: u32, reply: ReplyOpen) {
         let log = self.log.as_ref().unwrap();
-        let inode = match self.iget(nodeid) {
-            Ok(x) => x,
-            Err(x) => {
-                reply.error(x);
-                return;
-            }
-        };
-
         let icache = self.ilock_cache.as_ref().unwrap();
-        let inode_guard = match self.ilock(inode.idx, &icache, inode.inum) {
-            Ok(x) => x,
-            Err(x) => {
-                reply.error(x);
+        {
+            let inode = match self.iget(nodeid) {
+                Ok(x) => x,
+                Err(x) => {
+                    reply.error(x);
+                    return;
+                }
+            };
+
+            //let icache = self.ilock_cache.as_ref().unwrap();
+            let inode_guard = match self.ilock(inode.idx, &icache, inode.inum) {
+                Ok(x) => x,
+                Err(x) => {
+                    reply.error(x);
+                    return;
+                }
+            };
+            let mut internals = match inode_guard.internals.write() {
+                Ok(x) => x,
+                Err(_) => {
+                    reply.error(libc::EIO);
+                    return;
+                }
+            };
+
+            // Check if inode is a file
+            if internals.inode_type != T_FILE {
+                reply.error(libc::EISDIR);
                 return;
             }
-        };
-        let mut internals = match inode_guard.internals.write() {
-            Ok(x) => x,
-            Err(_) => {
-                reply.error(libc::EIO);
-                return;
-            }
-        };
 
-        // Check if inode is a file
-        if internals.inode_type != T_FILE {
-            reply.error(libc::EISDIR);
-            return;
-        }
-
-        if flags & libc::O_TRUNC as u32 != 0 {
-            let handle = log.begin_op(2);
-            internals.size = 0;
-            if let Err(x) = self.iupdate(&internals, inode.inum, &handle) {
-                reply.error(x);
-                return;
+            if flags & libc::O_TRUNC as u32 != 0 {
+                let handle = log.begin_op(2);
+                internals.size = 0;
+                if let Err(x) = self.iupdate(&internals, inode.inum, &handle) {
+                    reply.error(x);
+                    return;
+                }
             }
         }
 
@@ -234,51 +237,51 @@ impl BentoFilesystem<'_, Xv6State, Xv6State> for Xv6FileSystem {
                 }
             };
 
-            // // let icache = self.ilock_cache.as_ref().unwrap();
-            // println!("open ilock");
-            // let p_inode_guard = match self.ilock(p_inode.idx, &icache, p_inode.inum) {
-            //     Ok(x) => x,
-            //     Err(x) => {
-            //         reply.error(x);
-            //         return;
-            //     }
-            // };
-            // println!("open internals");
-            // let mut internals = match p_inode_guard.internals.write() {
-            //     Ok(x) => x,
-            //     Err(_) => {
-            //         reply.error(libc::EIO);
-            //         return;
-            //     }
-            // };
+             // let icache = self.ilock_cache.as_ref().unwrap();
+             println!("open ilock");
+             let p_inode_guard = match self.ilock(p_inode.idx, &icache, p_inode.inum) {
+                 Ok(x) => x,
+                 Err(x) => {
+                     reply.error(x);
+                     return;
+                 }
+             };
+             println!("open internals");
+             let mut internals = match p_inode_guard.internals.write() {
+                 Ok(x) => x,
+                 Err(_) => {
+                     reply.error(libc::EIO);
+                     return;
+                 }
+             };
 
-            // // Check if inode is a file
-            // // Provenance special inode must be a file
-            // if internals.inode_type != T_FILE {
-            //     reply.error(libc::EISDIR);
-            //     return;
-            // }
-            // let msg = format!(
-            //     "op: open, pid: {}, flags: {}, inode: {}\n",
-            //     req.pid(),
-            //     flags,
-            //     nodeid
-            // );
+             // Check if inode is a file
+             // Provenance special inode must be a file
+             if internals.inode_type != T_FILE {
+                 reply.error(libc::EISDIR);
+                 return;
+             }
+             let msg = format!(
+                 "op: open, pid: {}, flags: {}, inode: {}\n",
+                 req.pid(),
+                 flags,
+                 nodeid
+             );
 
-            // let info = OsStr::new(&msg[..]);
-            // let info_slice = info.to_str().unwrap().as_bytes();
-            // println!("open write");
-            // if let Err(_x) = self.writei(
-            //     info_slice,
-            //     internals.size as usize,
-            //     info.len(),
-            //     &mut internals,
-            //     p_inode.inum,
-            //     &handle,
-            // ) {
-            //     reply.error(libc::EIO);
-            //     return;
-            // }
+             let info = OsStr::new(&msg[..]);
+             let info_slice = info.to_str().unwrap().as_bytes();
+             println!("open write");
+             if let Err(_x) = self.writei(
+                 info_slice,
+                 internals.size as usize,
+                 info.len(),
+                 &mut internals,
+                 p_inode.inum,
+                 &handle,
+             ) {
+                 reply.error(libc::EIO);
+                 return;
+             }
             println!("open write finished");
         }
         reply.opened(fh, open_flags);
