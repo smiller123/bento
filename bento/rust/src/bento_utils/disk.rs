@@ -35,6 +35,10 @@ impl Disk {
     pub fn bread(&self, blockno: u64) -> Result<BufferHead, libc::c_int> {
         self.bdev.bread(blockno)
     }
+
+    pub fn getblk(&self, blockno: u64) -> Result<BufferHead, libc::c_int> {
+        self.bdev.getblk(blockno)
+    }
 }
 
 impl AsRawFd for Disk {

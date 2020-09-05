@@ -14,7 +14,7 @@
 #define static_assert(a, b) do { switch (0) case 0: case (a): ; } while (0)
 #endif
 
-#define NINODES 90000
+#define NINODES 900000
 
 // Disk layout:
 // [ boot block | sb block | log | inode blocks | free bit map | data blocks ]
@@ -256,21 +256,25 @@ ialloc(ushort type)
   return inum;
 }
 
+#define min(a, b) ((a) < (b) ? (a) : (b))
+
 void
 balloc(int used)
 {
   u_char buf[BSIZE];
   int i;
+  int j;
+  int iter;
 
-  assert(used < BSIZE*8);
-  bzero(buf, BSIZE);
-  for(i = 0; i < used; i++){
-    buf[i/8] = buf[i/8] | (0x1 << (i%8));
+  for(j = 0; j < used; j += BSIZE * 8) {
+	iter = min(BSIZE * 8, used - j);
+  	bzero(buf, BSIZE);
+  	for(i = 0; i < iter; i++){
+    		buf[i/8] = buf[i/8] | (0x1 << (i%8));
+  	}
+  	wsect(sb.bmapstart + j / (BSIZE * 8), buf);
   }
-  wsect(sb.bmapstart, buf);
 }
-
-#define min(a, b) ((a) < (b) ? (a) : (b))
 
 void
 iappend(uint inum, void *xp, int n)
@@ -323,12 +327,10 @@ void init_journal_sb() {
   jsb.s_header.h_blocktype = htonl(JBD2_SUPERBLOCK_V2);
 
   jsb.s_blocksize = htonl(BSIZE);
-  jsb.s_maxlen = htonl(1032);
+  jsb.s_maxlen = htonl(32768);
   jsb.s_first = htonl(8);
   jsb.s_sequence = htonl(1);
   jsb.s_nr_users = htonl(1);
-  jsb.s_max_transaction = htonl(32);
-  jsb.s_max_trans_data = htonl(32);
 
   jsb.s_feature_compat = htonl(JBD2_FEATURE_COMPAT_CHECKSUM);
 

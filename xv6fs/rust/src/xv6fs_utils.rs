@@ -34,7 +34,7 @@ pub const NINODE: usize = 300;
 
 pub const MAXOPBLOCKS: usize = 32;
 #[allow(dead_code)]
-pub const LOGSIZE: usize = 1032;
+pub const LOGSIZE: usize = 1023;
 
 pub fn iblock(i: usize, sb: &Xv6fsSB) -> usize {
     i / IPB + sb.inodestart as usize

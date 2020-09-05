@@ -1,3 +1,10 @@
+#![feature(get_mut_unchecked)]
+
+extern crate fuse;
+extern crate libc;
+extern crate serde;
+extern crate time;
+
 mod disk;
 pub use self::disk::*;
 
@@ -19,6 +26,7 @@ pub mod consts {
     pub const FUSE_FILE_OPS: u32            = 1 << 2;
     pub const FUSE_ATOMIC_O_TRUNC: u32      = 1 << 3;
     pub const FUSE_EXPORT_SUPPORT: u32      = 1 << 4;
+    pub const FUSE_BIG_WRITES: u32          = 1 << 5;
     pub const FUSE_DONT_MASK: u32           = 1 << 6;
     pub const FUSE_SPLICE_WRITE: u32        = 1 << 7;
     pub const FUSE_SPLICE_MOVE: u32         = 1 << 8;
@@ -968,6 +976,7 @@ pub trait BentoFilesystem<'de, TransferIn: Send + Deserialize<'de>=i32, Transfer
     fn bento_update_transfer(&mut self, Option<TransferIn>) { }
 }
 
+#[macro_export]
 macro_rules! impl_filesystem {
     ($name:ty) => {
         impl Filesystem for $name {

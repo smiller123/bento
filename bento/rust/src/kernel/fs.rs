@@ -105,6 +105,10 @@ impl BlockDevice {
     pub fn bread(&self, blockno: u64) -> Result<BufferHead, libc::c_int> {
         self.bdev.bread(blockno, self.bsize).ok_or(libc::EIO)
     }
+
+    pub fn getblk(&self, blockno: u64) -> Result<BufferHead, libc::c_int> {
+        self.bdev.getblk(blockno, self.bsize).ok_or(libc::EIO)
+    }
 }
 
 impl AsRawFd for BlockDevice {

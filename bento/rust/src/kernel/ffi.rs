@@ -235,6 +235,7 @@ extern "C" {
 
     // block cache
     pub fn rs_sb_bread(sb: *const raw::c_void, blockno: u64) -> *const raw::c_void;
+    pub fn rs_getblk(sb: *const raw::c_void, blockno: u64, size: u32) -> *const raw::c_void;
     pub fn bread_helper(ptr: *const raw::c_void, blockno: u64, size: u32) -> *const raw::c_void;
     pub fn __brelse(buf: *const raw::c_void);
     pub fn blkdev_issue_flush(
@@ -253,6 +254,7 @@ extern "C" {
 
     pub fn mark_buffer_dirty(bh: *const raw::c_void);
     pub fn sync_dirty_buffer(bh: *const raw::c_void) -> i32;
+    pub fn rs_set_buffer_uptodate(bh: *const raw::c_void);
 
     pub fn rs_get_semaphore() -> *mut raw::c_void;
     pub fn rs_put_semaphore(sem: *const raw::c_void);
@@ -271,9 +273,13 @@ extern "C" {
     pub fn rs_jbd2_journal_start(journal: *const raw::c_void, nblocks: i32) -> *const raw::c_void;
     pub fn rs_jbd2_journal_stop(handle: *const raw::c_void) -> i32;
     pub fn rs_jbd2_journal_get_write_access(handle: *const raw::c_void, bh: *const raw::c_void) -> i32;
+    pub fn rs_jbd2_journal_get_create_access(handle: *const raw::c_void, bh: *const raw::c_void) -> i32;
     pub fn rs_jbd2_journal_dirty_metadata(handle: *const raw::c_void, bh: *const raw::c_void) -> i32;
     pub fn rs_jbd2_journal_force_commit(journal: *const raw::c_void) -> i32;
-
+    pub fn rs_jbd2_journal_set_barrier(journal: *const raw::c_void);
+    pub fn rs_jbd2_journal_set_async_commit(journal: *const raw::c_void);
+    pub fn rs_lock_buffer(bh: *const raw::c_void);
+    pub fn unlock_buffer(bh: *const raw::c_void);
 
     // string
     pub fn strnlen(s: *const raw::c_char, max_len: u64) -> u64;
