@@ -1,18 +1,10 @@
-#![feature(lang_items)]
-#![feature(concat_idents)]
-#![feature(const_fn)]
-#![feature(get_mut_unchecked)]
-
 extern crate alloc;
+#[macro_use]
+extern crate bento_utils;
 extern crate fuse;
 extern crate capnp;
 extern crate core;
-extern crate libc;
-extern crate serde;
 extern crate time;
-
-#[macro_use]
-pub mod bento_utils;
 
 pub mod hello_ll;
 

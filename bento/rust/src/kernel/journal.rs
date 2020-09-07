@@ -52,6 +52,8 @@ impl Journal {
                 if rs_jbd2_journal_load(journal) != 0 {
                     return None;
                 }
+                rs_jbd2_journal_set_barrier(journal);
+                rs_jbd2_journal_set_async_commit(journal);
 
                 return Some(Journal { 
                     journal: UnsafeCell::new(RsJournal::from_raw(journal as *const c_void)),
@@ -109,6 +111,16 @@ impl Handle {
         }
         unsafe {
             return rs_jbd2_journal_get_write_access((*self.handle.get()).get_raw() as *const c_void, bh.get_raw());
+        }
+    }
+
+    pub fn get_create_access(&self, bh: &BufferHead) -> i32 {
+        let vec: &mut Vec<u64> = &mut self.blocks.borrow_mut();
+        if vec.contains(&bh.blocknr()) {
+            return 0;
+        }
+        unsafe {
+            return rs_jbd2_journal_get_create_access((*self.handle.get()).get_raw() as *const c_void, bh.get_raw());
         }
     }
 

@@ -13,14 +13,12 @@ pkg-config = "0.3"
 user = []
 
 [dependencies]
+bento_utils = { path = "../../../bento_utils" }
 datablock = { path = "../../../datablock-rs/datablock" }
 libc = "0.2.5"
-arr_macro = "0.1.0"
 fuse = "0.3.1"
 env_logger = "0.7.1"
-thread-scoped = "1.0.2"
 time = "0.1"
-log = "0.3"
 
 [dependencies.serde]
 version = "*"

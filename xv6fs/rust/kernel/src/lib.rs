@@ -5,6 +5,7 @@
 #![feature(alloc_error_handler)]
 #![feature(alloc_layout_extra)]
 #![feature(panic_info_message)]
+#![feature(slice_fill)]
 #![no_std]
 
 #[macro_use]

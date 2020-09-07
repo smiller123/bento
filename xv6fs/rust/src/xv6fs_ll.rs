@@ -43,9 +43,6 @@ use crate::xv6fs_log::*;
 #[cfg(not(feature = "user"))]
 use bento::kernel::journal::*;
 
-#[cfg(not(feature = "user"))]
-use crate::println;
-
 use std::ffi::OsStr;
 use std::path::Path;
 use std::sync::RwLock;
@@ -93,6 +90,7 @@ impl BentoFilesystem<'_, Xv6State, Xv6State> for Xv6FileSystem {
         fc_info.proto_major = BENTO_KERNEL_VERSION;
         fc_info.proto_minor = BENTO_KERNEL_MINOR_VERSION;
         fc_info.want = 0;
+        fc_info.max_write = u32::MAX;
 
         let mut max_readahead = u32::MAX;
         if fc_info.max_readahead < max_readahead {
@@ -533,7 +531,6 @@ impl BentoFilesystem<'_, Xv6State, Xv6State> for Xv6FileSystem {
         let n = data.len();
         let mut off = offset as usize;
         let mut file_off = 0;
-        //let nblocks = 1 + 1 + 2 + (off + n + BSIZE - 1)/BSIZE - off/BSIZE;
         while i < n {
             let log = self.log.as_ref().unwrap();
             let handle = log.begin_op(MAXOPBLOCKS as u32);
@@ -1198,6 +1195,7 @@ impl BentoFilesystem<'_, Xv6State, Xv6State> for Xv6FileSystem {
     }
 
     fn bento_update_prepare(&mut self) -> Option<Xv6State> {
+        self.log.as_ref().unwrap().destroy();
         let state = Xv6State {
             diskname: self.diskname.as_ref().unwrap().clone(),
         };

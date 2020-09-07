@@ -47,6 +47,8 @@ impl ArrWrapper {
         self.dirty = true;
     }
 
+    fn set_buffer_uptodate(&mut self) {}
+
     fn sync_dirty_buffer(&mut self) {
         if self.dirty {
             let _ = self.disk.write_at(self.arr.as_slice(), self.blockno * self.bsize);
@@ -91,11 +93,21 @@ impl BufferHead {
         }
     }
 
+    pub fn set_buffer_uptodate(&mut self) {
+        unsafe {
+            Arc::get_mut_unchecked(&mut self.buffer).set_buffer_uptodate();
+        }
+    }
+
     pub fn sync_dirty_buffer(&mut self) {
         unsafe {
             Arc::get_mut_unchecked(&mut self.buffer).sync_dirty_buffer();
         }
     }
+
+    pub fn lock(&mut self) {}
+
+    pub fn unlock(&mut self) {}
 
     pub fn data(&self) -> &[u8] {
         self.buffer.data()
@@ -179,6 +191,10 @@ impl BufferCache {
         cache_lock.insert(blockno, Arc::downgrade(&new_arc));
         return Ok(BufferHead::new(new_arc, blockno));
     }
+
+    fn getblk(&self, blockno: u64) -> Result<BufferHead, libc::c_int> {
+        self.bread(blockno)
+    }
 }
 
 pub struct Disk {
@@ -207,6 +223,10 @@ impl Disk {
 
     pub fn bread(&self, blockno: u64) -> Result<BufferHead, libc::c_int> {
         self.cache.bread(blockno)
+    }
+
+    pub fn getblk(&self, blockno: u64) -> Result<BufferHead, libc::c_int> {
+        self.cache.getblk(blockno)
     }
 }
 

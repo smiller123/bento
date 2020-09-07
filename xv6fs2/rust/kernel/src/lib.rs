@@ -5,6 +5,7 @@
 #![feature(alloc_error_handler)]
 #![feature(alloc_layout_extra)]
 #![feature(panic_info_message)]
+#![feature(slice_fill)]
 #![no_std]
 
 #[macro_use]
@@ -12,6 +13,7 @@ extern crate alloc;
 extern crate arr_macro;
 extern crate bento;
 extern crate datablock;
+extern crate hash32;
 extern crate rlibc;
 extern crate serde;
 
@@ -22,9 +24,9 @@ use bento::std;
 use bento::time;
 use bento::bento_utils;
 
-mod xv6fs_log;
 mod xv6fs_file;
 mod xv6fs_fs;
+mod xv6fs_htree;
 mod xv6fs_ll;
 mod xv6fs_utils;
 
@@ -48,7 +50,7 @@ pub static XV6FS: Xv6FileSystem = Xv6FileSystem {
 #[no_mangle]
 pub fn rust_main() {
     println!("Hello from Rust");
-    XV6FS.register();
+    XV6FS.reregister();
 }
 
 #[no_mangle]

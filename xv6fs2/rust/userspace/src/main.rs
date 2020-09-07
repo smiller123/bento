@@ -1,29 +1,20 @@
-#![feature(lang_items)]
-#![feature(concat_idents)]
-#![feature(const_fn)]
-#![feature(get_mut_unchecked)]
+#![feature(slice_fill)]
 
 extern crate alloc;
-extern crate arr_macro;
+extern crate bento_utils;
 extern crate core;
 extern crate datablock;
-extern crate env_logger;
-extern crate libc;
-#[macro_use]
-extern crate log;
+extern crate fuse;
 extern crate serde;
 extern crate time;
-extern crate thread_scoped;
 
 #[macro_use]
 pub mod xv6fs_ll;
-pub mod fuse;
 pub mod xv6fs_file;
 pub mod xv6fs_fs;
+pub mod xv6fs_htree;
 pub mod xv6fs_log;
 pub mod xv6fs_utils;
-#[macro_use]
-pub mod bento_utils;
 
 use alloc::sync::Arc;
 

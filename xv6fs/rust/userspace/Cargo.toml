@@ -14,12 +14,11 @@ user = []
 
 [dependencies]
 datablock = { path = "../../../datablock-rs/datablock" }
+bento_utils = { path = "../../../bento_utils" }
 libc = "0.2.5"
-arr_macro = "*"
 env_logger = "0.7.1"
-thread-scoped = "1.0.2"
+fuse = "0.3.1"
 time = "0.1"
-log = "0.3"
 
 [dependencies.serde]
 version = "*"

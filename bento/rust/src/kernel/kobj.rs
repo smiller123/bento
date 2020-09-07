@@ -46,6 +46,7 @@ def_kernel_val_getter!(RsBlockDevice, bd_dev, block_device, u32);
 
 def_kobj_op!(BufferHead, brelse, __brelse, ());
 def_kobj_op!(BufferHead, mark_buffer_dirty, mark_buffer_dirty, ());
+def_kobj_op!(BufferHead, set_buffer_uptodate, rs_set_buffer_uptodate, ());
 def_kobj_op!(BufferHead, sync_dirty_buffer, sync_dirty_buffer, i32);
 
 def_kobj_immut_op!(RsRwSemaphore, down_read, down_read, ());
@@ -78,10 +79,23 @@ impl RsBlockDevice {
         }
     }
 
+    pub fn getblk(&self, blockno: u64, size: u32) -> Option<BufferHead> {
+        let bh = unsafe {
+            rs_getblk(self.get_raw() as *const c_void, blockno, size)
+        };
+        if bh.is_null() {
+            return None;
+        } else {
+            unsafe {
+                return Some(BufferHead::from_raw(bh as *const c_void));
+            }
+        }
+    }
+
     pub fn put(&self) {
-        //unsafe {
-        //    blkdev_put(self.get_raw(), 0x80);
-        //}
+        unsafe {
+            blkdev_put(self.get_raw(), 0x80);
+        }
     }
 }
 
@@ -180,6 +194,18 @@ impl BufferHead {
 
     pub fn blocknr(&self) -> u64 {
         return self.b_blocknr();
+    }
+
+    pub fn lock(&mut self) {
+        unsafe {
+            rs_lock_buffer(self.get_raw() as *const c_void);
+        }
+    }
+
+    pub fn unlock(&mut self) {
+        unsafe {
+            unlock_buffer(self.get_raw() as *const c_void);
+        }
     }
 }
 
