@@ -31,7 +31,6 @@ pub const DPB: usize = BSIZE / mem::size_of::<Xv6fsDirent>();
 pub const BPB: usize = BSIZE * 8;
 
 pub const NINODE: usize = 300;
-pub const PROVINO: u16 = 2;
 
 pub const MAXOPBLOCKS: usize = 32;
 #[allow(dead_code)]

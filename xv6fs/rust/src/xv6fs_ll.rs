@@ -72,6 +72,7 @@ pub struct Xv6FileSystem {
     pub ialloc_lock: Option<RwLock<usize>>,
     pub balloc_lock: Option<RwLock<usize>>,
     pub diskname: Option<String>,
+    pub provino: Option<u64>,
 }
 
 impl BentoFilesystem<'_, Xv6State, Xv6State> for Xv6FileSystem {
@@ -132,42 +133,46 @@ impl BentoFilesystem<'_, Xv6State, Xv6State> for Xv6FileSystem {
         // create special file for provenance information
 
         // check if .lin file already exists
+        let name = OsStr::new(".lin");
+        let mut provino = None;
         {
-            let sb = self.sb.as_ref().unwrap();
-            let _guard = self.ialloc_lock.as_ref().unwrap().write();
-            let disk = self.disk.as_ref().unwrap();
-            let mut bh = disk.bread(iblock(0, &sb) as u64)?;
-
-            let data_slice = bh.data_mut();
-
-            let inum = 2;
-            let inode_offset = (inum as usize % IPB) * mem::size_of::<Xv6fsInode>();
-
-            let inode_slice =
-                &mut data_slice[inode_offset..inode_offset + mem::size_of::<Xv6fsInode>()];
-
-            let mut dinode = Xv6fsInode::new();
-            dinode.extract_from(inode_slice).map_err(|_| libc::EIO)?;
-
-            if inum == 2 && dinode.inode_type != 0 {
-                return Ok(());
+            let inode = match self.iget(1) {
+                Ok(x) => x,
+                Err(_) => {
+                    return Ok(());
+                }
+            };
+            let icache = self.ilock_cache.as_ref().unwrap();
+            let inode_guard = match self.ilock(inode.idx, &icache, inode.inum) {
+                Ok(x) => x,
+                Err(_) => {
+                    return Ok(());
+                }
+            };
+            let mut internals = match inode_guard.internals.write() {
+                Ok(x) => x,
+                Err(_) => {
+                    return Ok(());
+                }
+            };
+            let mut poff = 0;
+            if let Ok(child) = self.dirlookup(&mut internals, name, &mut poff) {
+                provino = Some(child.inum as u64);
             }
         }
 
-        let name = OsStr::new(".lin");
+        if provino.is_some() {
+            self.provino = provino;
+            return Ok(());
+        }
 
-        let log = self.log.as_ref().unwrap();
-        let handle = log.begin_op(16);
-        let child = self.create_internal(1, T_FILE, name, &handle).unwrap();
-
-        let icache = self.ilock_cache.as_ref().unwrap();
-        let inode_guard = self.ilock(child.idx, &icache, child.inum).unwrap();
-
-        let internals = inode_guard.internals.read().unwrap();
-
-        let nodeid = child.inum as u64;
-        self.stati(nodeid, &internals).unwrap();
-
+        {
+            let log = self.log.as_ref().unwrap();
+            let handle = log.begin_op(16);
+            let child = self.create_internal(1, T_FILE, name, &handle).unwrap();
+            provino = Some(child.inum as u64);
+        }
+        self.provino = provino;
         return Ok(());
     }
 
@@ -222,9 +227,9 @@ impl BentoFilesystem<'_, Xv6State, Xv6State> for Xv6FileSystem {
         let fh = 0;
         let open_flags = FOPEN_KEEP_CACHE;
         {
-            let handle = log.begin_op(4 as u32);
+            let handle = log.begin_op(5 as u32);
 
-            let p_inode = match self.iget(PROVINO as u64) {
+            let p_inode = match self.iget(self.provino.unwrap()) {
                 Ok(x) => x,
                 Err(x) => {
                     reply.error(x);
@@ -854,7 +859,7 @@ impl BentoFilesystem<'_, Xv6State, Xv6State> for Xv6FileSystem {
         let attr_valid = Timespec::new(1, 999999999);
         match self.stati(nodeid, &internals) {
             Ok(attr) => {
-                let inode = match self.iget(PROVINO as u64) {
+                let inode = match self.iget(self.provino.unwrap()) {
                     Ok(x) => x,
                     Err(x) => {
                         reply.error(x);
@@ -1062,7 +1067,7 @@ impl BentoFilesystem<'_, Xv6State, Xv6State> for Xv6FileSystem {
         let attr_valid = Timespec::new(1, 999999999);
         match self.stati(out_nodeid, &internals) {
             Ok(attr) => {
-                let inode = match self.iget(PROVINO as u64) {
+                let inode = match self.iget(self.provino.unwrap()) {
                     Ok(x) => x,
                     Err(x) => {
                         reply.error(x);
@@ -1216,6 +1221,46 @@ impl BentoFilesystem<'_, Xv6State, Xv6State> for Xv6FileSystem {
             self.sb = Some(sb_lock);
 
             self.iinit();
+            let name = OsStr::new(".lin");
+            let mut provino = None;
+            {
+                let inode = match self.iget(1) {
+                    Ok(x) => x,
+                    Err(_) => {
+                        return;
+                    }
+                };
+                let icache = self.ilock_cache.as_ref().unwrap();
+                let inode_guard = match self.ilock(inode.idx, &icache, inode.inum) {
+                    Ok(x) => x,
+                    Err(_) => {
+                        return;
+                    }
+                };
+                let mut internals = match inode_guard.internals.write() {
+                    Ok(x) => x,
+                    Err(_) => {
+                        return;
+                    }
+                };
+                let mut poff = 0;
+                if let Ok(child) = self.dirlookup(&mut internals, name, &mut poff) {
+                    provino = Some(child.inum as u64);
+                }
+            }
+
+            if provino.is_some() {
+                self.provino = provino;
+                return;
+            }
+
+            {
+                let log = self.log.as_ref().unwrap();
+                let handle = log.begin_op(16);
+                let child = self.create_internal(1, T_FILE, name, &handle).unwrap();
+                provino = Some(child.inum as u64);
+            }
+            self.provino = provino;
         }
     }
 }
@@ -1447,7 +1492,7 @@ impl Xv6FileSystem {
         inode_internals.nlink -= 1;
         self.iupdate(&inode_internals, inode.inum, handle)?;
         if inode_internals.inode_type == T_FILE {
-            let p_inode = self.iget(PROVINO as u64)?;
+            let p_inode = self.iget(self.provino.unwrap())?;
 
             let p_inode_guard = self.ilock(p_inode.idx, &icache, p_inode.inum)?;
 
