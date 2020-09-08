@@ -28,6 +28,8 @@ use alloc::vec::Vec;
 use core::mem;
 use core::str;
 
+use crate::println;
+
 use bento_utils::BentoFilesystem;
 
 use datablock::DataBlock;
@@ -97,14 +99,14 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
             max_readahead = fc_info.max_readahead;
         }
 
-        if self.disk.is_none() {
+        //if self.disk.is_none() {
             let devname_str = devname.to_str().unwrap();
             let disk = Disk::new(devname_str, BSIZE as u64);
             let mut disk_string = devname_str.to_string();
             disk_string.push('\0');
             self.diskname = Some(disk_string);
             self.disk = Some(Arc::new(disk));
-        }
+        //}
 
         let sb_lock = Xv6fsSB {
             size: 0,
@@ -836,10 +838,28 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
     }
 
     fn bento_fsync(&self, _req: &Request, _ino: u64, _fh: u64, _datasync: bool, reply: ReplyEmpty) {
+        println!("fsync");
         let log = self.log.as_ref().unwrap();
         log.force_commit();
+        println!("fsync done");
         reply.ok();
     }
+
+    fn bento_fsyncdir(
+        &self,
+        _req: &Request,
+        _ino: u64,
+        _fh: u64,
+        _datasync: bool,
+        reply: ReplyEmpty,
+    ) {
+        println!("fsyncdir");
+        let log = self.log.as_ref().unwrap();
+        log.force_commit();
+        println!("fsyncdir done");
+        reply.ok();
+    }
+
 
     fn bento_symlink(
         &self,
