@@ -17,12 +17,39 @@ use alloc::vec::Vec;
 
 use kernel::fs::*;
 
+use serde::{Serialize, Serializer, Deserialize, Deserializer};
+
 use crate::bento_utils::Disk;
 
 /// Wrapper around the kernel `journal_t`.
 #[derive(Debug)]
 pub struct Journal {
     journal: UnsafeCell<RsJournal>,
+}
+
+impl Serialize for Journal {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        unsafe {
+            serializer.serialize_u64((*self.journal.get()).get_raw() as u64)
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for Journal {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        unsafe {
+            let n = u64::deserialize(deserializer)?;
+            Ok(Journal { 
+                journal: UnsafeCell::new(RsJournal::from_raw(n as *const c_void)),
+            })
+        }
+    }
 }
 
 /// Wrapper around the kernel `handle_t`.
@@ -64,6 +91,10 @@ impl Journal {
 
     pub fn new_from_disk(disk: Arc<Disk>, fs_disk: Arc<Disk>, start: u64, len: i32, bsize: i32) -> Option<Journal> {
         Journal::new(&disk.bdev, &fs_disk.bdev, start, len, bsize)
+    }
+
+    pub unsafe fn get_raw(&self) -> u64 {
+        (*self.journal.get()).get_raw() as u64
     }
 
     // begin transaction of size blocks
@@ -157,4 +188,5 @@ impl Drop for Handle {
     }
 }
 
+unsafe impl Send for Journal {}
 unsafe impl Sync for Journal {}

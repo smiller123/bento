@@ -177,10 +177,11 @@ int rs_jbd2_journal_destroy(journal_t *journal) {
 }
 
 handle_t *rs_jbd2_journal_start(journal_t * journal, int nblocks) {
-    /*printk(KERN_INFO "begin_op\n\tjournal %p\n\tmax_len %u\n\tmax_transaction_buffers %u\n",
-                                                journal,
+    /*printk(KERN_INFO "begin_op\n\tbarrier_count %u\n\tmax_len %u\n\tmax_transaction_buffers %u\n\tcommit interval %u",
+                                                journal->j_barrier_count,
                                                 journal->j_maxlen,
-                                                journal->j_max_transaction_buffers);*/
+                                                journal->j_max_transaction_buffers,
+						journal->j_commit_interval);*/
     return jbd2_journal_start(journal, nblocks);
 }
 

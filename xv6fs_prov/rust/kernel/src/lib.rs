@@ -44,11 +44,13 @@ pub static XV6FS: Xv6FileSystem = Xv6FileSystem {
     ialloc_lock: None,
     balloc_lock: None,
     diskname: None,
+    provino: None,
 };
 
 #[no_mangle]
 pub fn rust_main() {
     println!("Hello from Rust");
+    //XV6FS.reregister();
     XV6FS.register();
 }
 

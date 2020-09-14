@@ -327,7 +327,8 @@ void init_journal_sb() {
   jsb.s_header.h_blocktype = htonl(JBD2_SUPERBLOCK_V2);
 
   jsb.s_blocksize = htonl(BSIZE);
-  jsb.s_maxlen = htonl(32768);
+  //jsb.s_maxlen = htonl(32768);
+  jsb.s_maxlen = htonl(262144);
   jsb.s_first = htonl(8);
   jsb.s_sequence = htonl(1);
   jsb.s_nr_users = htonl(1);
