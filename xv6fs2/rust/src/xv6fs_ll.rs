@@ -55,9 +55,10 @@ use crate::xv6fs_file::*;
 use crate::xv6fs_htree::*;
 use crate::xv6fs_utils::*;
 
-#[derive(Serialize, Deserialize)]
+#[cfg_attr(not(feature = "user"), derive(Serialize, Deserialize))]
 pub struct Xv6State {
     diskname: String,
+    log: Option<Journal>,
 }
 
 pub struct Xv6FileSystem {
@@ -982,14 +983,16 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
     }
 
     fn bento_update_prepare(&mut self) -> Option<Xv6State> {
-        let state = Xv6State {
+        let mut state = Xv6State {
             diskname: self.diskname.as_ref().unwrap().clone(),
+            log: None,
         };
+        mem::swap(&mut self.log, &mut state.log);
         Some(state)
     }
 
     fn bento_update_transfer(&mut self, state_opt: Option<Xv6State>) {
-        if let Some(state) = state_opt {
+        if let Some(mut state) = state_opt {
             let disk = Arc::new(Disk::new(state.diskname.as_str(), 4096));
             self.disk = Some(disk);
             self.diskname = Some(state.diskname);
@@ -1003,6 +1006,7 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
                 bmapstart: 0,
             };
             self.sb = Some(sb_lock);
+            mem::swap(&mut self.log, &mut state.log);
 
             self.iinit();
         }

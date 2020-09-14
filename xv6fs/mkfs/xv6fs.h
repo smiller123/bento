@@ -6,8 +6,8 @@
 #define T_DEV  3   // Device
 
 #define MAXOPBLOCKS 	32
-#define LOGSIZE 	32768
-#define FSSIZE       	2000000
+#define LOGSIZE 	262144
+#define FSSIZE       	3500000
 
 /*
  *  Disk layout:

@@ -215,6 +215,7 @@ impl Journal {
         log.committing = 0;
         BLOCKER.store(true, Ordering::SeqCst);
         self.wait_q.notify_one();
+        self.disk.sync_all();
     }
 
     // Only writes to buffer cache, does not persist; only install_trans will persist data.

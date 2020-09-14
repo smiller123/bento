@@ -38,10 +38,10 @@ use fuse::consts::*;
 
 use fuse::*;
 
-#[cfg(not(feature = "user"))]
-use bento::kernel::journal::*;
 #[cfg(feature = "user")]
 use crate::xv6fs_log::*;
+#[cfg(not(feature = "user"))]
+use bento::kernel::journal::*;
 
 use std::ffi::OsStr;
 use std::path::Path;
@@ -49,7 +49,7 @@ use std::sync::RwLock;
 
 use time::*;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use crate::xv6fs_file::*;
 use crate::xv6fs_htree::*;
@@ -70,9 +70,10 @@ pub struct Xv6FileSystem {
     pub ialloc_lock: Option<RwLock<usize>>,
     pub balloc_lock: Option<RwLock<usize>>,
     pub diskname: Option<String>,
+    pub provino: Option<u64>,
 }
 
-impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
+impl BentoFilesystem<'_, Xv6State, Xv6State> for Xv6FileSystem {
     fn get_name(&self) -> &'static str {
         Xv6FileSystem::NAME
     }
@@ -80,7 +81,6 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
     fn bento_destroy(&mut self, _req: &Request) {
         self.log.as_ref().unwrap().destroy();
     }
-
 
     fn bento_init(
         &mut self,
@@ -129,6 +129,10 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
         fc_info.congestion_threshold = 0;
         fc_info.time_gran = 1;
 
+        // create special file for provenance information
+
+        // check if .lin file already exists
+        self.create_prov_file();
         return Ok(());
     }
 
@@ -138,50 +142,88 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
         reply.statfs(fs_size as u64, 0, 0, 0, 0, BSIZE as u32, DIRSIZ as u32, 0);
     }
 
-    fn bento_open(&self, _req: &Request, nodeid: u64, flags: u32, reply: ReplyOpen) {
+    fn bento_open(&self, req: &Request, nodeid: u64, flags: u32, reply: ReplyOpen) {
         let log = self.log.as_ref().unwrap();
-        let inode = match self.iget(nodeid) {
-            Ok(x) => x,
-            Err(x) => {
-                reply.error(x);
-                return;
-            }
-        };
-
         let icache = self.ilock_cache.as_ref().unwrap();
-        let inode_guard = match self.ilock(inode.idx, &icache, inode.inum) {
-            Ok(x) => x,
-            Err(x) => {
-                reply.error(x);
-                return;
-            }
-        };
-        let mut internals = match inode_guard.internals.write() {
-            Ok(x) => x,
-            Err(_) => {
-                reply.error(libc::EIO);
-                return;
-            }
-        };
+        {
+            let inode = match self.iget(nodeid) {
+                Ok(x) => x,
+                Err(x) => {
+                    reply.error(x);
+                    return;
+                }
+            };
 
-        // Check if inode is a file
-        if internals.inode_type != T_FILE {
-            reply.error(libc::EISDIR);
-            return;
+            let inode_guard = match self.ilock(inode.idx, &icache, inode.inum) {
+                Ok(x) => x,
+                Err(x) => {
+                    reply.error(x);
+                    return;
+                }
+            };
+            let mut internals = match inode_guard.internals.write() {
+                Ok(x) => x,
+                Err(_) => {
+                    reply.error(libc::EIO);
+                    return;
+                }
+            };
+
+            // Check if inode is a file
+            if internals.inode_type != T_FILE {
+                reply.error(libc::EISDIR);
+                return;
+            }
+
+            if flags & libc::O_TRUNC as u32 != 0 {
+                let handle = log.begin_op(2);
+                internals.size = 0;
+                if let Err(x) = self.iupdate(&internals, inode.inum, &handle) {
+                    reply.error(x);
+                    return;
+                }
+            }
         }
-
-        if flags & libc::O_TRUNC as u32 != 0 {
-            let handle = log.begin_op(2);
-            internals.size = 0;
-            if let Err(x) = self.iupdate(&internals, inode.inum, &handle) {
-                reply.error(x);
-                return;
-            }
-        }
-
         let fh = 0;
         let open_flags = FOPEN_KEEP_CACHE;
+        {
+            let handle = log.begin_op(6 as u32);
+
+            let msg = format!(
+                "op: open, pid: {}, flags: {}, inode: {}\n",
+                req.pid(),
+                flags,
+                nodeid
+            );
+            if let Err(x) = self.write_prov_file(msg, &handle) {
+                reply.error(x);
+                return;
+            }
+
+        }
         reply.opened(fh, open_flags);
+    }
+
+    fn bento_flush(
+        &self,
+        req: &Request,
+        ino: u64,
+        _fh: u64,
+        _lock_owner: u64,
+        reply: ReplyEmpty,
+    ) {
+        let log = self.log.as_ref().unwrap();
+        let handle = log.begin_op(6 as u32);
+        let msg = format!(
+            "op: close, pid: {}, inode: {}\n",
+            req.pid(),
+            ino
+        );
+        if let Err(x) = self.write_prov_file(msg, &handle) {
+            reply.error(x);
+            return;
+        }
+        reply.ok();
     }
 
     fn bento_opendir(&self, _req: &Request, nodeid: u64, _flags: u32, reply: ReplyOpen) {
@@ -270,7 +312,6 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
         _flags: Option<u32>,
         reply: ReplyAttr,
     ) {
-        
         let inode = match self.iget(ino) {
             Ok(x) => x,
             Err(x) => {
@@ -718,16 +759,16 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
 
     fn bento_create(
         &self,
-        _req: &Request,
+        req: &Request,
         parent: u64,
         name: &OsStr,
-        _mode: u32,
-        _flags: u32,
+        mode: u32,
+        flags: u32,
         reply: ReplyCreate,
     ) {
         // Check if the file already exists
         let log = self.log.as_ref().unwrap();
-        let handle = log.begin_op(10);
+        let handle = log.begin_op(16);
         let child = match self.create_internal(parent, T_FILE, name, &handle) {
             Ok(x) => x,
             Err(x) => {
@@ -759,6 +800,26 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
         let attr_valid = Timespec::new(1, 999999999);
         match self.stati(nodeid, &internals) {
             Ok(attr) => {
+                let path_name = match name.to_str() {
+                    Some(s) => s,
+                    None => {
+                        reply.error(libc::EIO);
+                        return;
+                    }
+                };
+
+                let msg = format!(
+                    "op: create, pid: {}, path: {}, mode: {}, flags: {}, inode: {}\n",
+                    req.pid(),
+                    path_name,
+                    mode,
+                    flags,
+                    child.inum
+                );
+                if let Err(x) = self.write_prov_file(msg, &handle) {
+                    reply.error(x);
+                    return;
+                }
                 reply.created(&attr_valid, &attr, generation, fh, open_flags);
             }
             Err(x) => {
@@ -816,22 +877,21 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
         }
     }
 
-    fn bento_rmdir(&self, _req: &Request, parent: u64, name: &OsStr, reply: ReplyEmpty) {
+    fn bento_rmdir(&self, req: &Request, parent: u64, name: &OsStr, reply: ReplyEmpty) {
         let log = self.log.as_ref().unwrap();
         let handle = log.begin_op(MAXOPBLOCKS as u32);
-        match self.dounlink(parent, name, &handle) {
+        match self.dounlink(req, parent, name, &handle) {
             Ok(_) => reply.ok(),
             Err(x) => reply.error(x),
         }
     }
 
-    fn bento_unlink(&self, _req: &Request, parent: u64, name: &OsStr, reply: ReplyEmpty) {
+    fn bento_unlink(&self, req: &Request, parent: u64, name: &OsStr, reply: ReplyEmpty) {
         let log = self.log.as_ref().unwrap();
         let handle = log.begin_op(MAXOPBLOCKS as u32);
-        match self.dounlink(parent, name, &handle) {
-            Ok(_) => {
-                reply.ok();
-            },
+
+        match self.dounlink(req, parent, name, &handle) {
+            Ok(_) => reply.ok(),
             Err(x) => reply.error(x),
         }
     }
@@ -844,7 +904,7 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
 
     fn bento_symlink(
         &self,
-        _req: &Request,
+        req: &Request,
         nodeid: u64,
         name: &OsStr,
         linkname: &Path,
@@ -909,7 +969,28 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
         let generation = 0;
         let attr_valid = Timespec::new(1, 999999999);
         match self.stati(out_nodeid, &internals) {
-            Ok(attr) => reply.entry(&attr_valid, &attr, generation),
+            Ok(attr) => {
+                let path_name = match name.to_str() {
+                    Some(s) => s,
+                    None => {
+                        reply.error(libc::EIO);
+                        return;
+                    }
+                };
+
+                let msg = format!(
+                    "op: symlink, pid: {}, path_1: {}, path_2: {}\n",
+                    req.pid(),
+                    path_name,
+                    linkname_str,
+                );
+                if let Err(x) = self.write_prov_file(msg, &handle) {
+                    reply.error(x);
+                    return;
+                }
+
+                reply.entry(&attr_valid, &attr, generation);
+            }
             Err(x) => {
                 reply.error(x);
             }
@@ -1009,6 +1090,7 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
             mem::swap(&mut self.log, &mut state.log);
 
             self.iinit();
+            self.create_prov_file();
         }
     }
 }
@@ -1021,7 +1103,7 @@ impl Xv6FileSystem {
         nodeid: u64,
         itype: u16,
         name: &OsStr,
-        handle: &Handle
+        handle: &Handle,
     ) -> Result<CachedInode<'a>, libc::c_int> {
         // Get inode for parent directory
         let parent = self.iget(nodeid)?;
@@ -1046,19 +1128,19 @@ impl Xv6FileSystem {
         internals.major = parent_internals.major;
         internals.minor = parent_internals.minor;
         internals.nlink = 1;
-    
+
         self.iupdate(&internals, inode.inum, handle)?;
-    
+
         if itype == T_DIR {
             parent_internals.nlink += 1;
             self.iupdate(&parent_internals, parent.inum, handle)?;
             let d = OsStr::new(".");
             self.dirlink(&mut internals, &d, inode.inum, inode.inum, handle)?;
-    
+
             let dd = OsStr::new("..");
             self.dirlink(&mut internals, &dd, nodeid as u32, inode.inum, handle)?;
         }
-    
+
         self.dirlink(&mut parent_internals, name, inode.inum, parent.inum, handle)?;
         return Ok(inode);
     }
@@ -1179,8 +1261,14 @@ impl Xv6FileSystem {
 
         return Ok(true);
     }
-    
-    fn dounlink(&self, nodeid: u64, name: &OsStr, handle: &Handle) -> Result<usize, libc::c_int> {
+
+    fn dounlink(
+        &self,
+        req: &Request,
+        nodeid: u64,
+        name: &OsStr,
+        handle: &Handle,
+    ) -> Result<usize, libc::c_int> {
         let parent = self.iget(nodeid)?;
         let icache = self.ilock_cache.as_ref().unwrap();
         let parent_inode_guard = self.ilock(parent.idx, &icache, parent.inum)?;
@@ -1219,7 +1307,7 @@ impl Xv6FileSystem {
             buf_len,
             &mut parent_internals,
             parent.inum,
-            handle
+            handle,
         )?;
 
         if r != buf_len {
@@ -1233,7 +1321,100 @@ impl Xv6FileSystem {
 
         inode_internals.nlink -= 1;
         self.iupdate(&inode_internals, inode.inum, handle)?;
-    
+        if inode_internals.inode_type == T_FILE {
+            let path_name = match name.to_str() {
+                Some(s) => s,
+                None => {
+                    return Err(libc::EIO);
+                }
+            };
+
+            let op = match inode_internals.nlink {
+                0 => "unlink_file_deleted",
+                _ => "unlink",
+            };
+
+            let msg = format!(
+                "op: {}, pid: {}, path: {}, inode: {}\n",
+                op,
+                req.pid(),
+                path_name,
+                inode.inum
+            );
+            if let Err(x) = self.write_prov_file(msg, &handle) {
+                return Err(x);
+            }
+        }
+
         return Ok(0);
+    }
+
+    fn create_prov_file(&mut self) {
+        let name = OsStr::new(".lin");
+        let mut provino = None;
+        {
+            let inode = match self.iget(1) {
+                Ok(x) => x,
+                Err(_) => {
+                    return;
+                }
+            };
+            let icache = self.ilock_cache.as_ref().unwrap();
+            let inode_guard = match self.ilock(inode.idx, &icache, inode.inum) {
+                Ok(x) => x,
+                Err(_) => {
+                    return;
+                }
+            };
+            let mut internals = match inode_guard.internals.write() {
+                Ok(x) => x,
+                Err(_) => {
+                    return;
+                }
+            };
+            let mut poff = 0;
+            if let Ok(child) = self.dirlookup(&mut internals, name, &mut poff) {
+                provino = Some(child.inum as u64);
+            }
+        }
+
+        if provino.is_some() {
+            self.provino = provino;
+            return;
+        }
+
+        {
+            let log = self.log.as_ref().unwrap();
+            let handle = log.begin_op(16);
+            let child = self.create_internal(1, T_FILE, name, &handle).unwrap();
+            provino = Some(child.inum as u64);
+        }
+        self.provino = provino;
+    }
+
+    fn write_prov_file(&self, msg: String, handle: &Handle) -> Result<(), libc::c_int> {
+        let icache = self.ilock_cache.as_ref().unwrap();
+        let inode = self.iget(self.provino.unwrap())?;
+
+        let inode_guard = self.ilock(inode.idx, &icache, inode.inum)?;
+        let mut internals = inode_guard.internals.write().map_err(|_| {libc::EIO})?;
+
+        // Check if inode is a file
+        // Provenance special inode must be a file
+        if internals.inode_type != T_FILE {
+            return Err(libc::EISDIR);
+        }
+
+        let info = OsStr::new(&msg[..]);
+        let info_slice = info.to_str().unwrap().as_bytes();
+        self.writei(
+            info_slice,
+            internals.size as usize,
+            info.len(),
+            &mut internals,
+            inode.inum,
+            handle,
+        ).map_err(|_| {libc::EIO})?;
+        return Ok(());
     }
 }
