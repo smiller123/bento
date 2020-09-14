@@ -86,7 +86,7 @@ impl FuseConnInfo {
 /// correspond to the `fuse_lowlevel_ops` in libfuse. The user must provide a
 /// name for the file system. Otherwise, default implementations are
 /// provided here to get a mountable filesystem that does nothing.
-pub trait BentoFilesystem<'de, TransferIn, TransferOut> {
+pub trait BentoFilesystem<'de, TransferIn=i32, TransferOut=i32> {
     /// Get the name of the file system.
     ///
     /// This must be provided to mount the filesystem.
