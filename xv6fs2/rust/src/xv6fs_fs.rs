@@ -208,10 +208,12 @@ impl Xv6FileSystem {
 
         let sb = self.sb.as_mut().unwrap();
 
-        let disk_ref = Arc::clone(self.disk.as_ref().unwrap());
-        let disk_ref2 = Arc::clone(self.disk.as_ref().unwrap());
-        let log = Journal::new_from_disk(disk_ref, disk_ref2, sb.logstart as u64, sb.nlog as i32, BSIZE as i32).unwrap();
-        self.log = Some(log);
+        if self.log.is_none() {
+            let disk_ref = Arc::clone(self.disk.as_ref().unwrap());
+            let disk_ref2 = Arc::clone(self.disk.as_ref().unwrap());
+            let log = Journal::new_from_disk(disk_ref, disk_ref2, sb.logstart as u64, sb.nlog as i32, BSIZE as i32).unwrap();
+            self.log = Some(log);
+        }
         println!(
             "sb: size {}, nblocks {}, ninodes {}, nlog {}, logstart {} inodestart {}, bmap start {}",
             sb.size,

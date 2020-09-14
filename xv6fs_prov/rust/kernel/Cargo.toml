@@ -1,0 +1,22 @@
+[package]
+name = "xv6fs_prov"
+version = "0.1.0"
+authors = ["Danyang Zhuo <danyangz@cs.washington.edu>",
+           "Kaiyuan Zhang <kaiyuanz@cs.washington.edu>",
+           "Samantha Miller <sm237@cs.washington.edu>"]
+edition = "2018"
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+bento = {path = "../../../bento/rust" }
+datablock = { path = "../../../datablock-rs/datablock" }
+arr_macro = "0.1.0"
+rlibc = "1.0"
+hash32 = "0.1.1"
+
+[dependencies.serde]
+version = "*"
+default-features = false
+features = ["alloc", "derive"]

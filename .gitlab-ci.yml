@@ -120,3 +120,20 @@ test_update_hello:
     - sudo umount /mnt/hello
     - sudo rmmod hello_ll2
     - sudo rmmod bentofs
+
+test_prov:
+  stage: test
+  script:
+    - git submodule update --init --recursive
+    - (cd bentofs && make)
+    - (cd xv6fs_prov/rust && make)
+    - (cd xv6fs/mkfs && gcc mkfs.c && ./a.out fs.img)
+    - sudo insmod bentofs/bentofs.ko
+    - sudo insmod xv6fs_prov/rust/kernel/xv6fs_prov.ko
+    - sudo mkdir -p /mnt/xv6fs
+    - sudo mount -t bentoblk -o fd=10,rootmode=40000,user_id=0,group_id=0,blksize=4096,name=xv6fs_ll -o loop xv6fs/mkfs/fs.img /mnt/xv6fs
+    - echo 0 | sudo tee /proc/sys/kernel/randomize_va_space
+    - sudo filebench -f /home/test/fileserver.f
+    - sudo umount /mnt/xv6fs
+    - sudo rmmod xv6fs_prov
+    - sudo rmmod bentofs

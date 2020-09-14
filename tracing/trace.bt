@@ -1,0 +1,85 @@
+
+tracepoint:syscalls:sys_enter_execve,
+tracepoint:syscalls:sys_enter_execveat
+{
+	printf("op: execve; pid: %-5d; pname: %s; filepath: %s; argv: ", pid, comm, str(args->filename));
+	join(args->argv);
+}
+
+tracepoint:syscalls:sys_enter_exit
+{
+	printf("op: exit; pid: %-5d", pid);
+}
+
+tracepoint:syscalls:sys_enter_fork
+{
+	printf("op: fork; pid: %-5d", pid);
+}
+
+tracepoint:syscalls:sys_enter_open,
+tracepoint:syscalls:sys_enter_openat
+{
+	@filename[tid]= args->filename;
+}
+
+tracepoint:syscalls:sys_exit_open,
+tracepoint:syscalls:sys_exit_openat
+/@filename[tid]/
+{
+	$ret = args->ret;
+	$fd = $ret > 0 ? $ret : -1;
+	$errno = $ret > 0 ? 0 : - $ret;
+
+	printf("op: open; pid: %-5d; pname: %s; fd: %4d; filepath: %s\n", pid, comm, $fd, str(@filename[tid]));
+	delete(@filename[tid]);
+}
+
+tracepoint:syscalls:sys_enter_dup
+{
+	@fd[tid] = args->fildes;
+}
+
+tracepoint:syscalls:sys_enter_dup2
+{
+	@fd[tid] = args->oldfd;
+}
+
+tracepoint:syscalls:sys_exit_dup,
+tracepoint:syscalls:sys_exit_dup2
+/@fd[tid]/
+{
+	printf("op: dup; pid: %-5d; pname: %s; fd: %d; new_fd: %ld\n", pid, comm, @fd[tid], args->ret);
+	delete(@fd[tid]);
+}
+
+tracepoint:syscalls:sys_enter_pipe
+{
+	printf("op: pipe; pid: %-5d; pname: %s; fd: %d\n", pid, comm, args->fildes);
+}
+
+tracepoint:syscalls:sys_enter_pipe2
+{
+	printf("op: pipe2; pid: %-5d; pname: %s; fd: %d; flags: %d\n", pid, comm, args->fildes, args-> flags);
+}
+
+tracepoint:syscalls:sys_enter_link
+{
+	printf("op: link; pid: %-5d; pname: %s; old_fpath: %s; new_fpath: %s\n", pid, comm, str(args->oldname), str(args->newname));
+}
+
+tracepoint:syscalls:sys_enter_symlink
+{
+	printf("op: link; pid: %-5d; pname: %s; old_fpath: %s; new_fpath: %s\n", pid, comm, str(args->oldname), str(args->newname));
+}
+
+tracepoint:syscalls:sys_enter_unlink
+{
+	printf("op: link; pid: %-5d; pname: %s; filepath: %s\n", pid, comm, str(args->pathname));
+}
+
+END
+{
+	clear(@filename);
+	clear(@fd);
+}
+
