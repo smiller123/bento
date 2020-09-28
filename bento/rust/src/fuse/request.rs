@@ -413,6 +413,7 @@ pub fn dispatch<'de, TransferIn: Send + Deserialize<'de>, TransferOut: Send + Se
                 oldname_str,
                 rename_in.newdir,
                 newname_str,
+                rename_in.flags,
                 &mut reply,
             );
             match reply.reply() {

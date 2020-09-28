@@ -18,7 +18,7 @@ pub const T_FILE: u16 = 2;
 pub const T_DEV: u16 = 3;
 pub const T_LNK: u16 = 4;
 
-pub const DIRSIZ: u16 = 60;
+pub const DIRSIZ: u16 = 124;
 pub const NDIRECT: u32 = 10;
 pub const NINDIRECT: u32 = (BSIZE / mem::size_of::<u32>()) as u32;
 pub const NDINDIRECT: u32 = NINDIRECT * NINDIRECT;
