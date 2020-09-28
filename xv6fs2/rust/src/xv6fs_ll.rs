@@ -842,6 +842,12 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
         reply.ok();
     }
 
+    fn bento_fsyncdir(&self, _req: &Request, _ino: u64, _fh: u64, _datasync: bool, reply: ReplyEmpty) {
+        let log = self.log.as_ref().unwrap();
+        log.force_commit();
+        reply.ok();
+    }
+
     fn bento_symlink(
         &self,
         _req: &Request,

@@ -358,6 +358,7 @@ pub trait BentoFilesystem<'de, TransferIn=i32, TransferOut=i32> {
         _name: &OsStr,
         _newparent: u64,
         _newname: &OsStr,
+        _flags: u32,
         reply: ReplyEmpty,
     ) {
         return reply.error(ENOSYS);
@@ -1097,7 +1098,7 @@ macro_rules! impl_filesystem {
                 newname: &OsStr,
                 reply: ReplyEmpty,
             ) {
-                self.bento_rename(req, parent, name, newparent, newname, reply)
+                self.bento_rename(req, parent, name, newparent, newname, 0, reply)
             }
         
             fn link(

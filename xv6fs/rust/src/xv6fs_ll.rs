@@ -260,7 +260,7 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
         _mode: Option<u32>,
         _uid: Option<u32>,
         _gid: Option<u32>,
-        _size: Option<u64>,
+        size: Option<u64>,
         _atime: Option<Timespec>,
         _mtime: Option<Timespec>,
         _fh: Option<u64>,
@@ -287,13 +287,22 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
                 return;
             }
         };
-        let internals = match inode_guard.internals.read() {
+        let mut internals = match inode_guard.internals.write() {
             Ok(x) => x,
             Err(_) => {
                 reply.error(libc::EIO);
                 return;
             }
         };
+        if let Some(fsize) = size {
+            let log = self.log.as_ref().unwrap();
+            let handle = log.begin_op(2);
+            internals.size = fsize;
+            if let Err(x) = self.iupdate(&internals, inode.inum, &handle) {
+                reply.error(x);
+                return;
+            }
+        }
         let attr_valid = Timespec::new(1, 999999999);
         match self.stati(ino, &internals) {
             Ok(attr) => reply.attr(&attr_valid, &attr),
@@ -727,7 +736,7 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
     ) {
         // Check if the file already exists
         let log = self.log.as_ref().unwrap();
-        let handle = log.begin_op(10);
+        let handle = log.begin_op(16);
         let child = match self.create_internal(parent, T_FILE, name, &handle) {
             Ok(x) => x,
             Err(x) => {
@@ -837,6 +846,12 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
     }
 
     fn bento_fsync(&self, _req: &Request, _ino: u64, _fh: u64, _datasync: bool, reply: ReplyEmpty) {
+        let log = self.log.as_ref().unwrap();
+        log.force_commit();
+        reply.ok();
+    }
+
+    fn bento_fsyncdir(&self, _req: &Request, _ino: u64, _fh: u64, _datasync: bool, reply: ReplyEmpty) {
         let log = self.log.as_ref().unwrap();
         log.force_commit();
         reply.ok();
@@ -980,6 +995,417 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
             }
         };
         reply.data(buf_slice);
+    }
+
+    fn bento_rename(
+        &self,
+        _req: &Request,
+        parent_ino: u64,
+        name: &OsStr,
+        newparent_ino: u64,
+        newname: &OsStr,
+        flags: u32,
+        reply: ReplyEmpty,
+    ) {
+        let log = self.log.as_ref().unwrap();
+        let handle = log.begin_op(MAXOPBLOCKS as u32);
+        let no_replace = (flags & libc::RENAME_NOREPLACE as u32) > 0;
+        let exchange = (flags & libc::RENAME_EXCHANGE as u32) > 0;
+        // Get and lock old and new parent directories
+        if parent_ino != newparent_ino {
+            let old_parent = match self.iget(parent_ino) {
+                Ok(x) => x,
+                Err(_) => {
+                    reply.error(libc::EIO);
+                    return;
+                },
+            };
+            let new_parent = match self.iget(newparent_ino) {
+                Ok(x) => x,
+                Err(_) => {
+                    reply.error(libc::EIO);
+                    return;
+                },
+            };
+            let icache = self.ilock_cache.as_ref().unwrap();
+            let old_parent_inode_guard = match self.ilock(old_parent.idx, &icache, old_parent.inum) {
+                Ok(x) => x,
+                Err(_) => {
+                    reply.error(libc::EIO);
+                    return;
+                },
+            };
+            let new_parent_inode_guard = match self.ilock(new_parent.idx, &icache, new_parent.inum) {
+                Ok(x) => x,
+                Err(_) => {
+                    reply.error(libc::EIO);
+                    return;
+                },
+            };
+            let mut old_parent_internals = match old_parent_inode_guard
+                .internals
+                .write() {
+                Ok(x) => x,
+                Err(_) => {
+                    reply.error(libc::EIO);
+                    return;
+                },
+            };
+            let mut new_parent_internals = match new_parent_inode_guard
+                .internals
+                .write() {
+                Ok(x) => x,
+                Err(_) => {
+                    reply.error(libc::EIO);
+                    return;
+                },
+            };
+            let mut old_poff = 0;
+            let old_name_str = name.to_str().unwrap();
+            if old_name_str == "." || old_name_str == ".." {
+                reply.error(libc::EIO);
+                return;
+            }
+            let inode = match self.dirlookup(&mut old_parent_internals, name, &mut old_poff) {
+                Ok(x) => x,
+                Err(x) => {
+                    reply.error(x);
+                    return;
+                },
+            };
+
+            let inode_guard = match self.ilock(inode.idx, &icache, inode.inum) {
+                Ok(x) => x,
+                Err(_) => {
+                    reply.error(libc::EIO);
+                    return;
+                },
+            };
+            let mut inode_internals = match inode_guard.internals.write() {
+                Ok(x) => x,
+                Err(_) => {
+                    reply.error(libc::EIO);
+                    return;
+                },
+            };
+
+            if inode_internals.nlink < 1 {
+                reply.error(libc::EIO);
+                return;
+            }
+
+            let mut new_poff = 0;
+            let new_name_str = newname.to_str().unwrap();
+            if new_name_str == "." || new_name_str == ".." {
+                reply.error(libc::EIO);
+                return;
+            }
+            let new_inode_res = self.dirlookup(&mut new_parent_internals, newname, &mut new_poff);
+            if let Ok(new_inode) = new_inode_res {
+                if no_replace {
+                    reply.error(libc::EEXIST);
+                    return;
+                } else if exchange {
+                    let de_arr = [0; mem::size_of::<Xv6fsDirent>()];
+                    let buf_len = mem::size_of::<Xv6fsDirent>();
+                    match self.writei(
+                        &de_arr,
+                        new_poff as usize,
+                        buf_len,
+                        &mut new_parent_internals,
+                        new_parent.inum,
+                        &handle
+                    ) {
+                        Ok(x) => x,
+                        Err(_) => {
+                            reply.error(libc::EIO);
+                            return;
+                        },
+                    };
+                    let new_inode_guard = match self.ilock(new_inode.idx, &icache, new_inode.inum) {
+                        Ok(x) => x,
+                        Err(_) => {
+                            reply.error(libc::EIO);
+                            return;
+                        },
+                    };
+                    let mut new_inode_internals = match new_inode_guard.internals.write() {
+                        Ok(x) => x,
+                        Err(_) => {
+                            reply.error(libc::EIO);
+                            return;
+                        },
+                    };
+                    if new_inode_internals.inode_type == T_DIR {
+                        old_parent_internals.nlink += 1;
+                        if self.iupdate(&old_parent_internals, old_parent.inum, &handle).is_err() {
+                            reply.error(libc::EIO);
+                            return;
+                        }
+                        let d = OsStr::new(".");
+                        if self.dirlink(&mut new_inode_internals, &d, new_inode.inum, new_inode.inum, &handle).is_err() {
+                            reply.error(libc::EIO);
+                            return;
+                        }
+    
+                        let dd = OsStr::new("..");
+                        if self.dirlink(&mut new_inode_internals, &dd, parent_ino as u32, new_inode.inum, &handle).is_err() {
+                            reply.error(libc::EIO);
+                            return;
+                        }
+                    }
+    
+                    if self.dirlink(&mut old_parent_internals, name, new_inode.inum, old_parent.inum, &handle).is_err() {
+                        reply.error(libc::EIO);
+                        return;
+                    }
+                } else {
+                    let new_inode_guard = match self.ilock(new_inode.idx, &icache, new_inode.inum) {
+                        Ok(x) => x,
+                        Err(_) => {
+                            reply.error(libc::EIO);
+                            return;
+                        },
+                    };
+                    let mut new_inode_internals = match new_inode_guard.internals.write() {
+                        Ok(x) => x,
+                        Err(_) => {
+                            reply.error(libc::EIO);
+                            return;
+                        },
+                    };
+                    if new_inode_internals.inode_type == T_DIR {
+                        match self.isdirempty(&mut new_inode_internals) {
+                            Ok(true) => {}
+                            _ => {
+                                reply.error(libc::ENOTEMPTY);
+                                return;
+                            }
+                        }
+                    }
+                    let de_arr = [0; mem::size_of::<Xv6fsDirent>()];
+                    let buf_len = mem::size_of::<Xv6fsDirent>();
+                    match self.writei(
+                        &de_arr,
+                        new_poff as usize,
+                        buf_len,
+                        &mut new_parent_internals,
+                        new_parent.inum,
+                        &handle
+                    ) {
+                        Ok(x) => x,
+                        Err(_) => {
+                            reply.error(libc::EIO);
+                            return;
+                        },
+                    };
+                }
+            }
+
+
+            let de_arr = [0; mem::size_of::<Xv6fsDirent>()];
+            let buf_len = mem::size_of::<Xv6fsDirent>();
+            match self.writei(
+                &de_arr,
+                old_poff as usize,
+                buf_len,
+                &mut old_parent_internals,
+                old_parent.inum,
+                &handle
+            ) {
+                Ok(x) => x,
+                Err(_) => {
+                    reply.error(libc::EIO);
+                    return;
+                },
+            };
+
+
+            if inode_internals.inode_type == T_DIR {
+                old_parent_internals.nlink -= 1;
+                if self.iupdate(&old_parent_internals, old_parent.inum, &handle).is_err() {
+                    reply.error(libc::EIO);
+                    return;
+                }
+            }
+            if inode_internals.inode_type == T_DIR {
+                new_parent_internals.nlink += 1;
+                if self.iupdate(&new_parent_internals, new_parent.inum, &handle).is_err() {
+                    reply.error(libc::EIO);
+                    return;
+                }
+                let d = OsStr::new(".");
+                if self.dirlink(&mut inode_internals, &d, inode.inum, inode.inum, &handle).is_err() {
+                    reply.error(libc::EIO);
+                    return;
+                }
+    
+                let dd = OsStr::new("..");
+                if self.dirlink(&mut inode_internals, &dd, newparent_ino as u32, inode.inum, &handle).is_err() {
+                    reply.error(libc::EIO);
+                    return;
+                }
+            }
+    
+            if self.dirlink(&mut new_parent_internals, newname, inode.inum, new_parent.inum, &handle).is_err() {
+                reply.error(libc::EIO);
+                return;
+            }
+        } else {
+            let parent = match self.iget(parent_ino) {
+                Ok(x) => x,
+                Err(_) => {
+                    reply.error(libc::EIO);
+                    return;
+                },
+            };
+            let icache = self.ilock_cache.as_ref().unwrap();
+            let parent_inode_guard = match self.ilock(parent.idx, &icache, parent.inum) {
+                Ok(x) => x,
+                Err(_) => {
+                    reply.error(libc::EIO);
+                    return;
+                },
+            };
+            let mut parent_internals = match parent_inode_guard
+                .internals
+                .write() {
+                Ok(x) => x,
+                Err(_) => {
+                    reply.error(libc::EIO);
+                    return;
+                },
+            };
+            let mut old_poff = 0;
+            let old_name_str = name.to_str().unwrap();
+            if old_name_str == "." || old_name_str == ".." {
+                reply.error(libc::EIO);
+                return;
+            }
+            let inode = match self.dirlookup(&mut parent_internals, name, &mut old_poff) {
+                Ok(x) => x,
+                Err(x) => {
+                    reply.error(x);
+                    return;
+                },
+            };
+
+            let inode_guard = match self.ilock(inode.idx, &icache, inode.inum) {
+                Ok(x) => x,
+                Err(_) => {
+                    reply.error(libc::EIO);
+                    return;
+                },
+            };
+            let inode_internals = match inode_guard.internals.write() {
+                Ok(x) => x,
+                Err(_) => {
+                    reply.error(libc::EIO);
+                    return;
+                },
+            };
+            if inode_internals.nlink < 1 {
+                reply.error(libc::EIO);
+                return;
+            }
+
+            let mut new_poff = 0;
+            let new_name_str = newname.to_str().unwrap();
+            if new_name_str == "." || new_name_str == ".." {
+                reply.error(libc::EIO);
+                return;
+            }
+            let new_inode_res = self.dirlookup(&mut parent_internals, newname, &mut new_poff);
+            if let Ok(new_inode) = new_inode_res {
+                if no_replace {
+                    reply.error(libc::EEXIST);
+                    return;
+                } else if exchange {
+                    let de_arr = [0; mem::size_of::<Xv6fsDirent>()];
+                    let buf_len = mem::size_of::<Xv6fsDirent>();
+                    match self.writei(
+                        &de_arr,
+                        new_poff as usize,
+                        buf_len,
+                        &mut parent_internals,
+                        parent.inum,
+                        &handle
+                    ) {
+                        Ok(x) => x,
+                        Err(_) => {
+                            reply.error(libc::EIO);
+                            return;
+                        },
+                    };
+                    if self.dirlink(&mut parent_internals, name, new_inode.inum, parent.inum, &handle).is_err() {
+                        reply.error(libc::EIO);
+                        return;
+                    }
+                } else {
+                    let new_inode_guard = match self.ilock(new_inode.idx, &icache, new_inode.inum) {
+                        Ok(x) => x,
+                        Err(_) => {
+                            reply.error(libc::EIO);
+                            return;
+                        },
+                    };
+                    let mut new_inode_internals = match new_inode_guard.internals.write() {
+                        Ok(x) => x,
+                        Err(_) => {
+                            reply.error(libc::EIO);
+                            return;
+                        },
+                    };
+                    if new_inode_internals.inode_type == T_DIR {
+                        match self.isdirempty(&mut new_inode_internals) {
+                            Ok(true) => {}
+                            _ => {
+                                reply.error(libc::ENOTEMPTY);
+                                return;
+                            }
+                        }
+                    }
+                    let de_arr = [0; mem::size_of::<Xv6fsDirent>()];
+                    let buf_len = mem::size_of::<Xv6fsDirent>();
+                    match self.writei(
+                        &de_arr,
+                        new_poff as usize,
+                        buf_len,
+                        &mut parent_internals,
+                        parent.inum,
+                        &handle
+                    ) {
+                        Ok(x) => x,
+                        Err(_) => {
+                            reply.error(libc::EIO);
+                            return;
+                        },
+                    };
+                }
+            }
+            let de_arr = [0; mem::size_of::<Xv6fsDirent>()];
+            let buf_len = mem::size_of::<Xv6fsDirent>();
+            match self.writei(
+                &de_arr,
+                old_poff as usize,
+                buf_len,
+                &mut parent_internals,
+                parent.inum,
+                &handle
+            ) {
+                Ok(x) => x,
+                Err(_) => {
+                    reply.error(libc::EIO);
+                    return;
+                },
+            };
+            if self.dirlink(&mut parent_internals, newname, inode.inum, parent.inum, &handle).is_err() {
+                reply.error(libc::EIO);
+                return;
+            }
+        }
+        reply.ok();
+    
     }
 
     fn bento_update_prepare(&mut self) -> Option<Xv6State> {

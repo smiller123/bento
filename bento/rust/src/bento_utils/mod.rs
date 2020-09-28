@@ -373,6 +373,7 @@ pub trait BentoFilesystem<'de, TransferIn: Send + Deserialize<'de>=i32,TransferO
         _name: &OsStr,
         _newparent: u64,
         _newname: &OsStr,
+        _flags: u32,
         reply: ReplyEmpty,
     ) {
         return reply.error(ENOSYS);

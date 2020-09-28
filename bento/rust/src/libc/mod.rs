@@ -161,3 +161,6 @@ pub const O_TRUNC: c_int = 512;
 
 pub const SOCK_CLOEXEC: c_int = O_CLOEXEC;
 
+pub const RENAME_NOREPLACE: c_int = 1;
+pub const RENAME_EXCHANGE: c_int = 2;
+pub const RENAME_WHITEOUT: c_int = 4;
