@@ -1,25 +1,13 @@
-This is a simple Rust file system. The file system consists of one file called hello, which can
-be read and written to. The file system doesn't support file creation or deletion.
+This is a simple Rust file system. The file system consists of one file called hello, which can be read and written to. The file system doesn't support file creation or deletion.
+
+This is a redepoyable version of `hello_ll` that can be deployed on top of `hello_ll`.
+The main difference between this file system and `hello_ll` is that this uses `reregister_bento_fs`
+in `kernel/lib.rs` instead of `register_bento_fs`.
 
 The file system is compiled as a Linux kernel module and depends on the
 bentofs kernel module.
 
 We use Linux kernel version 4.15 and Rust nightly version 1.43.0.
-
-## Disk setup
-**To make a RAM Disk:**
-```
-sudo modprobe brd rd_nr=1 rd_size=20971520 max_part=0
-```
-
-**To load a disk image to the disk:**
-```
-sudo dd if=$FS_IMG of=$DEV_FILE
-```
-For example:
-```
-sudo dd if=fs.img of=/dev/ram0
-``` 
 
 ## Kernel Version
 **To compile:**
@@ -34,25 +22,14 @@ make clean
 ```
 
 **To insert:**
-First, insert bentofs kernel module, described in the bentofs directory.
+This file system should be inserted after an existing `hello_ll` file system has been inserted and/or mounted.
 ```
-sudo insmod kernel/hello_ll.ko
-```
-
-**To mount file system:**
-```
-sudo mkdir -p /mnt/hello_ll
-sudo mount -t bentoblk -o fd=10,rootmode=40000,user_id=0,group_id=0,blksize=4096,name=hello_ll $DEV_FILE /mnt/hello_ll
-```
-
-**To unmount file system:**
-```
-sudo umount /mnt/hello_ll
+sudo insmod kernel/hello_ll2.ko
 ```
 
 **To remove module:**
 ```
-sudo rmmod hello_ll
+sudo rmmod hello_ll2
 ```
 
 ## User version
@@ -69,7 +46,7 @@ make clean
 **To insert/mount:**
 ```
 sudo mkdir -p /mnt/hello_ll
-sudo userspace/target/release/user_hello $DEV_FILE /mnt/hello_ll blkdev
+sudo userspace/target/release/user_hello hello /mnt/hello_ll blkdev
 ```
 
 **To unmount:**
