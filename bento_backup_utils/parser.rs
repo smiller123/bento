@@ -144,7 +144,7 @@ fn parse_rename(line: String) -> Result<Event, Box<dyn Error>> {
     let vec: Vec<&str> = line.split(',').collect();
     let parent_inode: u64 = vec[0].trim().parse::<u64>().unwrap();
     let old_name: String = vec[1].trim().to_string();
-    let newparent_inode: u64 = vec[2].trim().parse::<u64>().unwrap();;
+    let newparent_inode: u64 = vec[2].trim().parse::<u64>().unwrap();
     let new_name: String = vec[3].trim().to_string();
 
     Ok(Event::Rename {
@@ -189,6 +189,22 @@ fn parse_event(line: &str) -> Result<Event, Box<dyn Error>> {
     Err(From::from("error"))
 }
 
+fn update_inode_map(inode_map: &mut HashMap<u64, String>, events: &Vec<&Event>) {
+    for event in events {
+        match event {
+            Event::Create { pid: _, path, mode: _, flags: _, inode } => {
+                inode_map.insert(*inode, path.to_string());
+            },
+            Event::Rename {parent_inode, old_name: _, newparent_inode, new_name } => {
+                // does old name need to be removed?
+                inode_map.remove(&parent_inode);
+                inode_map.insert(*newparent_inode, new_name.to_string());
+            }
+            _ => (),
+        }
+    }
+}
+
 fn main(){
     println!("{:?}", parse_key_value("op: open"));
     println!("{:?}", parse_key_value("op: open: ss"));
@@ -203,6 +219,28 @@ fn main(){
     println!("{:?}", parse_event("op: symlink, pid: 0, path_1: hello.txt, path_2: test.txt"));
     println!("{:?}", parse_event("rename: 1, hello.txt, 1, hello.txt~"));
 
+    let mut events = Vec::<&Event>::new();
+    let mut inode_map = HashMap::new();
+    let event_list = [
+        parse_event("op: create, pid: 0, path: hello.txt, mode: 33152, flags: 164034, inode: 0"),
+        parse_event("op: open, pid: 0, flags: 0, inode: 0"),
+        parse_event("op: close, pid: 0, inode: 0"),
+        parse_event("rename: 1, hello.txt, 1, hello.txt~"),
+        parse_event("op: symlink, pid: 0, path_1: hello.txt, path_2: test.txt"),
+    ];
+
+    for event in event_list.iter() {
+        match event {
+            Ok(e) => events.push(e),
+            Err(e) => panic!("Parser error: {:?}", e)
+        }
+    }
+
+    update_inode_map(&mut inode_map, &events);
+
+    for (key, value) in inode_map {
+        println!("{}: {}", key, value);
+    }
 
     // Ok(("op", "open"))
     // Err("ParseError")
