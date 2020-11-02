@@ -1,0 +1,23 @@
+op: create, pid: 0, path: new_file, mode: 33188, flags: 34881, inode: 3, parent: 1
+op: close, pid: 3052306432, inode: 3
+op: close, pid: 2252570880, inode: 3
+op: create, pid: 0, path: file_for_edit, mode: 33188, flags: 34881, inode: 4, parent: 1
+op: close, pid: 3052306432, inode: 4
+op: close, pid: 2102771200, inode: 4
+op: open, pid: 38337368, flags: 33281, inode: 4
+op: close, pid: 2145457792, inode: 4
+op: close, pid: 6, inode: 4
+op: create, pid: 0, path: move_file, mode: 33188, flags: 34881, inode: 5, parent: 1
+op: close, pid: 3052306432, inode: 5
+op: close, pid: 2102884096, inode: 5
+op: mkdir, pid: 38567320, path: test_dir, mode: 493, inode: 6, parent: 1
+rename: 1, move_file, 6, move_file, 5, None, None
+op: create, pid: 0, path: rename_file, mode: 33188, flags: 34881, inode: 7, parent: 1
+op: close, pid: 3052306432, inode: 7
+op: close, pid: 2252570880, inode: 7
+rename: 1, rename_file, 1, renamed, 7, None, None
+op: create, pid: 0, path: delete_file, mode: 33188, flags: 34881, inode: 8, parent: 1
+op: close, pid: 3052318720, inode: 8
+op: close, pid: 2102882816, inode: 8
+op: unlink_deleted, type: file, pid: 38567432, path: delete_file, inode: 8, parent: 1
+
