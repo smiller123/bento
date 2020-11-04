@@ -2,7 +2,7 @@ use std::error::Error;
 // use std::io;
 // use std::fs;
 use std::path::Path;
-use std::{thread, time};
+use std::{thread};
 use std::sync::mpsc::{self, TryRecvError};
 
 extern crate fs_extra;
@@ -16,7 +16,7 @@ pub fn copy(file_list: Vec<String>, base_dir: &Path, target_dir: &Path) -> Resul
     }
 
     // Create the target directory
-    fs_extra::dir::create_all(&target_dir, true).unwrap();
+    fs_extra::dir::create_all(&target_dir, false).unwrap();
 
     for path in file_list.iter() {
         let source_path = base_dir.join(path);
@@ -24,7 +24,7 @@ pub fn copy(file_list: Vec<String>, base_dir: &Path, target_dir: &Path) -> Resul
         println!("{:?} ==> {:?}", source_path.to_str(), target_path.to_str());
 
         if source_path.is_dir() {
-            fs_extra::dir::create_all(&target_path, true).unwrap();
+            fs_extra::dir::create_all(&target_path, false).unwrap();
         } else {
             let target_parent_dir = target_path.parent().unwrap();
             fs_extra::dir::create_all(&target_parent_dir, false).unwrap();
@@ -35,7 +35,7 @@ pub fn copy(file_list: Vec<String>, base_dir: &Path, target_dir: &Path) -> Resul
             thread::spawn(move || {
                 let handler = |process_info: TransitProcess| {
                     tx.send(process_info).unwrap();
-                    thread::sleep(time::Duration::from_millis(500));
+                    // thread::sleep(time::Duration::from_millis(500));
                     // fs_extra::dir::TransitProcessResult::ContinueOrAbort;
                 };
                 fs_extra::file::copy_with_progress(&source_path, &target_path, &options, handler).unwrap();
