@@ -1,7 +1,7 @@
 [package]
 name = "bento_backup_utils"
 version = "0.1.0"
-authors = ["Teerapat Jenrungrot"]
+authors = ["Teerapat Jenrungrot", "Pat Kosakanchit", "Nicolas Monsees"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

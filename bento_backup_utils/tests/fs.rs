@@ -1,5 +1,3 @@
-// cargo build && cargo test -- --test-threads=1 --nocapture
-
 use std::error::Error;
 use std::path::{Path};
 use std::panic;
