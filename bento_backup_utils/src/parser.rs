@@ -15,6 +15,16 @@ enum Event {
     Rename { parent_inode: u64, old_name: String, newparent_inode: u64, new_name: String, moved_inode: u64, swapped_inode: u64, overwritten_inode: u64},
 }
 
+pub fn halves_if_even(i: i32) -> Result<i32, Box<dyn Error>> {
+    if i % 2 == 0 {
+        Ok(i / 2)
+    } else {
+        Err(From::from("44"))
+    }
+}
+
+
+
 // Parse token in the format of key:value
 fn parse_key_value(token: &str) -> Result<(&str, &str), Box<dyn Error>>{
     let vec: Vec<&str> = token.split(':').collect();
