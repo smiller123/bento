@@ -4,6 +4,7 @@ use std::error::Error;
 use std::path::{Path};
 use std::panic;
 use std::fs as rust_fs;
+use serial_test::serial;
 
 extern crate fs_extra;
 
@@ -51,6 +52,7 @@ where
 // named test_file_eq with the same content. It checks if two files have
 // the same content.
 #[test]
+#[serial]
 fn test_file_eq() {
     run_test(||{
         fs_extra::dir::create_all(Path::new(TEST_FOLDER).join("test_file_eq"), false).unwrap();
@@ -73,6 +75,7 @@ fn test_file_eq() {
 
 // This test checks if calling copy would create a folder or not.
 #[test]
+#[serial]
 fn test_copy_no_files() {
     run_test(||{
         // Check the folders before copy
@@ -93,6 +96,7 @@ fn test_copy_no_files() {
 // This test checks if calling copy to an existing folder would
 // cause an error or not.
 #[test]
+#[serial]
 fn test_copy_to_existing_folder() {
     run_test(||{
         // create folder and check if there's no folder
@@ -115,6 +119,7 @@ fn test_copy_to_existing_folder() {
 }
 
 #[test]
+#[serial]
 fn test_simple_copy() {
     run_test(||{
         // create source directory
@@ -154,6 +159,7 @@ fn test_simple_copy() {
 }
 
 #[test]
+#[serial]
 fn test_copy_nested_folder1() {
     run_test(||{
         // create source directory
@@ -194,6 +200,7 @@ fn test_copy_nested_folder1() {
 }
 
 #[test]
+#[serial]
 fn test_copy_nested_folder2() {
     run_test(||{
         // create source directory
@@ -242,6 +249,7 @@ fn test_copy_nested_folder2() {
 }
 
 #[test]
+#[serial]
 fn test_copy_to_existing_nested_folder() {
     run_test(||{
         // create source directory

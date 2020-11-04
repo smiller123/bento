@@ -1,10 +1,13 @@
 [package]
 name = "bento_backup_utils"
 version = "0.1.0"
-authors = ["Teerapat Jenrungrot <15001582+mjenrungrot@users.noreply.github.com>"]
+authors = ["Teerapat Jenrungrot"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 fs_extra = "1.2.0"
+
+[dev-dependencies]
+serial_test = "0.5.0"
