@@ -1,5 +1,6 @@
 use std::error::Error;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::io;
 use std::fs;
 
@@ -363,6 +364,42 @@ fn update_inode_map(inode_map: &mut HashMap<u64, String>, events: &Vec<Event>) {
     }
 }
 
+fn files_to_update(inode_map: &HashMap<u64, String>, events: &Vec<Event>) -> HashSet<String> {
+    let mut files = HashSet::<String>::new();
+    for event in events {
+        match event {
+            Event::Close { inode, ..} => {
+                match inode_map.get(inode) {
+                    Some(v) => { files.insert(v.to_string()); },
+                    None => { println!("inode num {} not found in map", inode); }
+                }
+            },
+            Event::Create { inode, ..} => {
+                match inode_map.get(inode) {
+                    Some(v) => { files.insert(v.to_string()); },
+                    None => { println!("inode num {} not found in map", inode); }
+                }
+            },
+            // TOOD(nmonsees): this fn should return a map of filename to an action,
+            // to specify whether the file should be deleted, copied over, etc.
+            Event::UnlinkDeleted { inode, ..} => {
+                match inode_map.get(inode) {
+                    Some(v) => { files.insert(v.to_string()); },
+                    None => { println!("inode num {} not found in map", inode); }
+                }
+            },
+            // TODO(nmonsees): this will need to handle cases where a rename overwrites vs. swaps,
+            // which I think can be handled just by whether a swapped inode exists or not?
+            Event::Rename { old_name, new_name, ..} => {
+                files.insert(old_name.to_string());
+                files.insert(new_name.to_string());
+            },
+            _ => (),
+        }
+    }
+    files
+}
+
 fn read_lin_file(file_name: &str) -> Result<String, io::Error> {
     fs::read_to_string(file_name)
 }
@@ -392,9 +429,13 @@ fn main(){
     inode_map.insert(1, "".to_string());
     update_inode_map(&mut inode_map, &events);
 
-    for (key, value) in inode_map {
+    for (key, value) in &inode_map {
         println!("{}: {}", key, value);
     }
+    let files = files_to_update(&inode_map, &events);
+    files.iter().for_each(|f| { println!("file to update {:?}", f); });
+    
+
     // println!("{:?}", parse_key_value("op: open"));
     // println!("{:?}", parse_key_value("op: open: ss"));
     // println!("{:?}", parse_key_value("op:"));
