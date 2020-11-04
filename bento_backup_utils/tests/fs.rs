@@ -245,6 +245,7 @@ fn test_copy_nested_folder2() {
 fn test_copy_to_existing_nested_folder() {
     run_test(||{
         // create source directory
+        fs_extra::dir::create_all(Path::new(TEST_FOLDER).join("test_copy_to_existing_nested_folder/src"), false).unwrap();
         fs_extra::dir::create_all(Path::new(TEST_FOLDER).join("test_copy_to_existing_nested_folder/target"), false).unwrap();
 
         // create test1.txt
@@ -256,12 +257,12 @@ fn test_copy_to_existing_nested_folder() {
 
         // create test2.txt
         let content2 = "content";
-        fs_extra::dir::create_all(Path::new(TEST_FOLDER).join("test_copy_to_existing_nested_folder/src/folder2"), false).unwrap();
-        fs_extra::dir::create_all(Path::new(TEST_FOLDER).join("test_copy_to_existing_nested_folder/target/folder2"), false).unwrap();
+        fs_extra::dir::create_all(Path::new(TEST_FOLDER).join("test_copy_to_existing_nested_folder/src/folder2/"), false).unwrap();
+        fs_extra::dir::create_all(Path::new(TEST_FOLDER).join("test_copy_to_existing_nested_folder/target/folder2/"), false).unwrap();
         fs_extra::file::write_all(&Path::new(TEST_FOLDER).join("test_copy_to_existing_nested_folder/src/folder2/test2.txt"), &content2).unwrap();
         fs_extra::file::write_all(&Path::new(TEST_FOLDER).join("test_copy_to_existing_nested_folder/target/folder2/test2.txt"), &content2).unwrap();
 
-        // create an empty directory
+        // // create an empty directory
         fs_extra::dir::create_all(Path::new(TEST_FOLDER).join("test_copy_to_existing_nested_folder/src/folder3"), false).unwrap();
         fs_extra::dir::create_all(Path::new(TEST_FOLDER).join("test_copy_to_existing_nested_folder/target/folder3"), false).unwrap();
 
