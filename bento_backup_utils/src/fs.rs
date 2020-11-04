@@ -10,10 +10,10 @@ use fs_extra::file::{TransitProcess, CopyOptions};
 
 #[allow(dead_code)]
 pub fn copy(file_list: Vec<String>, base_dir: &Path, target_dir: &Path) -> Result<(), Box<dyn Error>> {
-    // Check if the folder exists
-    if target_dir.exists() {
-        return Err(From::from("Directory existed"));
-    }
+    // // Check if the folder exists
+    // if target_dir.exists() {
+    //     return Err(From::from("Directory existed"));
+    // }
 
     // Create the target directory
     fs_extra::dir::create_all(&target_dir, false).unwrap();

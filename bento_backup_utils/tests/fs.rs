@@ -73,7 +73,8 @@ fn test_file_eq() {
 #[test]
 fn test_copy_no_files() {
     run_test(||{
-        // Check if target_dir folder doesn't exist
+        // Check the folders before copy
+        assert!(!Path::new(TEST_FOLDER).join("test_copy_no_files/src").exists());
         assert!(!Path::new(TEST_FOLDER).join("test_copy_no_files/target").exists());
 
         // run copy and check ok
@@ -81,8 +82,9 @@ fn test_copy_no_files() {
         let result = fs::copy(file_list, &Path::new(TEST_FOLDER).join("test_copy_no_files/src"), &Path::new(TEST_FOLDER).join("test_copy_no_files/target"));
         assert!(result.is_ok());
 
-        // Check if target_dir folder exists
-        assert!(Path::new(TEST_FOLDER).join("test_copy_no_files/target").exists()); // check there's a folder
+        // Check the folders after copy
+        assert!(!Path::new(TEST_FOLDER).join("test_copy_no_files/src").exists());
+        assert!(Path::new(TEST_FOLDER).join("test_copy_no_files/target").exists());
     })
 }
 
@@ -95,13 +97,18 @@ fn test_copy_to_existing_folder() {
         assert!(!Path::new(TEST_FOLDER).join("test_copy_to_existing_folder/target").exists());
         fs_extra::dir::create_all(Path::new(TEST_FOLDER).join("test_copy_to_existing_folder/target"), false).unwrap();
 
-        // check there's a folder
+        // check the folders before copy
+        assert!(!Path::new(TEST_FOLDER).join("test_copy_to_existing_folder/src").exists());
         assert!(Path::new(TEST_FOLDER).join("test_copy_to_existing_folder/target").exists());
 
         // run copy and expect an error
         let file_list = Vec::new();
         let result = fs::copy(file_list, &Path::new(TEST_FOLDER).join("test_copy_to_existing_folder/src"), &Path::new(TEST_FOLDER).join("test_copy_to_existing_folder/target"));
-        assert!(result.is_err());
+        assert!(result.is_ok());
+
+        // Check the folders after copy
+        assert!(!Path::new(TEST_FOLDER).join("test_copy_to_existing_folder/src").exists());
+        assert!(Path::new(TEST_FOLDER).join("test_copy_to_existing_folder/target").exists());
     })
 }
 
@@ -227,6 +234,59 @@ fn test_copy_nested_folder2() {
         // compare contents
         let path1_src = Path::new(TEST_FOLDER).join("test_copy_nested_folder2/src/folder1/folder1_1/test1.txt");
         let path2_src = Path::new(TEST_FOLDER).join("test_copy_nested_folder2/src/folder2/test2.txt");
+        assert!(file_eq(path1_src, path1_target).unwrap());
+        assert!(file_eq(path2_src, path2_target).unwrap());
+    })
+}
+
+#[test]
+fn test_copy_to_existing_nested_folder() {
+    run_test(||{
+        // create source directory
+        fs_extra::dir::create_all(Path::new(TEST_FOLDER).join("test_copy_to_existing_nested_folder/target"), false).unwrap();
+
+        // create test1.txt
+        let content1 = "content";
+        fs_extra::dir::create_all(Path::new(TEST_FOLDER).join("test_copy_to_existing_nested_folder/src/folder1/folder1_1"), false).unwrap();
+        fs_extra::dir::create_all(Path::new(TEST_FOLDER).join("test_copy_to_existing_nested_folder/target/folder1/folder1_1"), false).unwrap();
+        fs_extra::file::write_all(&Path::new(TEST_FOLDER).join("test_copy_to_existing_nested_folder/src/folder1/folder1_1/test1.txt"), &content1).unwrap();
+        fs_extra::file::write_all(&Path::new(TEST_FOLDER).join("test_copy_to_existing_nested_folder/target/folder1/folder1_1/test1.txt"), &content1).unwrap();
+
+        // create test2.txt
+        let content2 = "content";
+        fs_extra::dir::create_all(Path::new(TEST_FOLDER).join("test_copy_to_existing_nested_folder/src/folder2"), false).unwrap();
+        fs_extra::dir::create_all(Path::new(TEST_FOLDER).join("test_copy_to_existing_nested_folder/target/folder2"), false).unwrap();
+        fs_extra::file::write_all(&Path::new(TEST_FOLDER).join("test_copy_to_existing_nested_folder/src/folder2/test2.txt"), &content2).unwrap();
+        fs_extra::file::write_all(&Path::new(TEST_FOLDER).join("test_copy_to_existing_nested_folder/target/folder2/test2.txt"), &content2).unwrap();
+
+        // create an empty directory
+        fs_extra::dir::create_all(Path::new(TEST_FOLDER).join("test_copy_to_existing_nested_folder/src/folder3"), false).unwrap();
+        fs_extra::dir::create_all(Path::new(TEST_FOLDER).join("test_copy_to_existing_nested_folder/target/folder3"), false).unwrap();
+
+        // create file list
+        let mut file_list = Vec::new();
+        file_list.push("folder1/folder1_1/test1.txt".to_string());
+        file_list.push("folder2/test2.txt".to_string());
+        file_list.push("folder3/".to_string());
+
+        // run copy and expect an error
+        let result = fs::copy(file_list, &Path::new(TEST_FOLDER).join("test_copy_to_existing_nested_folder/src"), &Path::new(TEST_FOLDER).join("test_copy_to_existing_nested_folder/target"));
+        assert!(result.is_ok());
+
+        // check target files exist
+        let path1_target = Path::new(TEST_FOLDER).join("test_copy_to_existing_nested_folder/target/folder1/folder1_1/test1.txt");
+        let path2_target = Path::new(TEST_FOLDER).join("test_copy_to_existing_nested_folder/target/folder2/test2.txt");
+
+        assert!(path1_target.exists());
+        assert!(path2_target.exists());
+
+        // check target empty directory
+        assert!(Path::new(TEST_FOLDER).join("test_copy_to_existing_nested_folder/target/folder3").exists());
+        assert!(Path::new(TEST_FOLDER).join("test_copy_to_existing_nested_folder/target/folder3").is_dir());
+
+        // compare contents
+        let path1_src = Path::new(TEST_FOLDER).join("test_copy_to_existing_nested_folder/src/folder1/folder1_1/test1.txt");
+        let path2_src = Path::new(TEST_FOLDER).join("test_copy_to_existing_nested_folder/src/folder2/test2.txt");
         assert!(file_eq(path1_src, path1_target).unwrap());
         assert!(file_eq(path2_src, path2_target).unwrap());
     })
