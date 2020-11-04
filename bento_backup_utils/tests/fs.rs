@@ -20,7 +20,9 @@ fn setup() {
 
 #[allow(dead_code)]
 fn teardown() {
-    rust_fs::remove_dir_all(TEST_FOLDER).unwrap();
+    if Path::new(TEST_FOLDER).exists() {
+        rust_fs::remove_dir_all(TEST_FOLDER).unwrap();
+    }
 }
 
 fn run_test<T>(test: T) -> ()
@@ -31,7 +33,7 @@ where
     let result = panic::catch_unwind(|| {
         test()
     });
-    // teardown();
+    teardown();
     assert!(result.is_ok())
 }
 
@@ -101,7 +103,7 @@ fn test_copy_to_existing_folder() {
         assert!(!Path::new(TEST_FOLDER).join("test_copy_to_existing_folder/src").exists());
         assert!(Path::new(TEST_FOLDER).join("test_copy_to_existing_folder/target").exists());
 
-        // run copy and expect an error
+        // run copy and expect ok
         let file_list = Vec::new();
         let result = fs::copy(file_list, &Path::new(TEST_FOLDER).join("test_copy_to_existing_folder/src"), &Path::new(TEST_FOLDER).join("test_copy_to_existing_folder/target"));
         assert!(result.is_ok());
@@ -133,7 +135,7 @@ fn test_simple_copy() {
         file_list.push(path2.to_string());
         file_list.push(path1.to_string());
 
-        // run copy and expect an error
+        // run copy and expect ok
         let result = fs::copy(file_list, &Path::new(TEST_FOLDER).join("test_simple_copy/src"), &Path::new(TEST_FOLDER).join("test_simple_copy/target"));
         assert!(result.is_ok());
 
@@ -173,7 +175,7 @@ fn test_copy_nested_folder1() {
         file_list.push(path2.to_string());
         file_list.push(path1.to_string());
 
-        // run copy and expect an error
+        // run copy and expect ok
         let result = fs::copy(file_list, &Path::new(TEST_FOLDER).join("test_copy_nested_folder1/src"), &Path::new(TEST_FOLDER).join("test_copy_nested_folder1/target"));
         assert!(result.is_ok());
 
@@ -216,7 +218,7 @@ fn test_copy_nested_folder2() {
         file_list.push("folder2/test2.txt".to_string());
         file_list.push("folder3/".to_string());
 
-        // run copy and expect an error
+        // run copy and expect ok
         let result = fs::copy(file_list, &Path::new(TEST_FOLDER).join("test_copy_nested_folder2/src"), &Path::new(TEST_FOLDER).join("test_copy_nested_folder2/target"));
         assert!(result.is_ok());
 
@@ -269,7 +271,7 @@ fn test_copy_to_existing_nested_folder() {
         file_list.push("folder2/test2.txt".to_string());
         file_list.push("folder3/".to_string());
 
-        // run copy and expect an error
+        // run copy and expect ok
         let result = fs::copy(file_list, &Path::new(TEST_FOLDER).join("test_copy_to_existing_nested_folder/src"), &Path::new(TEST_FOLDER).join("test_copy_to_existing_nested_folder/target"));
         assert!(result.is_ok());
 
