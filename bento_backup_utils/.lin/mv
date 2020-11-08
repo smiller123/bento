@@ -1,0 +1,15 @@
+op: mkdir, pid: 1085930904, path: test_dir_1, mode: 493, inode: 3, parent: 1
+op: mkdir, pid: 1085930904, path: test_dir_2, mode: 493, inode: 4, parent: 3
+op: create, pid: 0, path: f1, mode: 33188, flags: 34881, inode: 5, parent: 3
+op: close, pid: 923848704, inode: 5
+op: close, pid: 235449600, inode: 5
+op: create, pid: 0, path: f2, mode: 33188, flags: 34881, inode: 6, parent: 3
+op: close, pid: 923848704, inode: 6
+op: close, pid: 3673389056, inode: 6
+op: create, pid: 0, path: f3, mode: 33188, flags: 34881, inode: 7, parent: 3
+op: close, pid: 923848704, inode: 7
+op: close, pid: 3673388800, inode: 7
+rename: 3, f3, 1, f3, Some(7), None, None
+rename: 3, f2, 4, f2, Some(6), None, None
+rename: 4, f2, 3, f4, Some(6), None, None
+rename: 3, f4, 4, f5, Some(6), None, None

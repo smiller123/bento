@@ -439,7 +439,7 @@ pub fn main(){
     let mut events = Vec::<Event>::new();
     let mut inode_map = HashMap::new();
 
-    let lin = read_lin_file(".lin");
+    let lin = read_lin_file(".lin/mv");
     let lin = match lin {
         Ok(file) => file,
         Err(error) => panic!("Problem opening the file: {:?}", error),
