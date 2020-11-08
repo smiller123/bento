@@ -356,7 +356,7 @@ pub fn update_inode_map(inode_map: &mut HashMap<u64, PathBuf>, events: &Vec<Even
                     _ => println!("inode key {} is not found", *parent)
                 }
             },
-            Event::Rename {parent_inode: _, old_name: _, newparent_inode, new_name, moved_inode, swapped_inode: _ , overwritten_inode: _} => {
+            Event::Rename {parent_inode: _, old_name: _, newparent_inode, new_name, moved_inode, swapped_inode: _ , overwritten_inode} => {
                 // TODO: handle swapped and overwritten events 
                 match inode_map.get(&newparent_inode) {
                     Some(parent_path) => {
@@ -364,6 +364,11 @@ pub fn update_inode_map(inode_map: &mut HashMap<u64, PathBuf>, events: &Vec<Even
                         inode_map.insert(moved_inode.unwrap(), full_path);
                     },
                     _ => println!("inode key {} is not found", *newparent_inode)
+                }
+
+                if overwritten_inode.is_some() {
+                    let inode = overwritten_inode.unwrap();
+                    inode_map.remove(&inode);
                 }
             },
             Event::Mkdir { pid: _, path, mode: _, inode, parent } => {
