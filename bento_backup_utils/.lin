@@ -11,11 +11,11 @@ op: create, pid: 0, path: move_file, mode: 33188, flags: 34881, inode: 5, parent
 op: close, pid: 3052306432, inode: 5
 op: close, pid: 2102884096, inode: 5
 op: mkdir, pid: 38567320, path: test_dir, mode: 493, inode: 6, parent: 1
-rename: 1, move_file, 6, move_file, 5, None, None
+rename: 1, move_file, 6, move_file, Some(5), None, None
 op: create, pid: 0, path: rename_file, mode: 33188, flags: 34881, inode: 7, parent: 1
 op: close, pid: 3052306432, inode: 7
 op: close, pid: 2252570880, inode: 7
-rename: 1, rename_file, 1, renamed, 7, None, None
+rename: 1, rename_file, 1, renamed, Some(7), None, None
 op: create, pid: 0, path: delete_file, mode: 33188, flags: 34881, inode: 8, parent: 1
 op: close, pid: 3052318720, inode: 8
 op: close, pid: 2102882816, inode: 8
