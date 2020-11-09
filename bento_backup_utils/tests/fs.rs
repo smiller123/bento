@@ -10,14 +10,12 @@ extern crate fs_extra;
 
 const TEST_FOLDER: &'static str = "./tmp";
 
-#[allow(dead_code)]
 fn setup() {
     if Path::new(TEST_FOLDER).exists() {
         rust_fs::remove_dir_all(TEST_FOLDER).unwrap();
     }
 }
 
-#[allow(dead_code)]
 fn teardown() {
     if Path::new(TEST_FOLDER).exists() {
         rust_fs::remove_dir_all(TEST_FOLDER).unwrap();

@@ -5,20 +5,64 @@ use std::collections::HashSet;
 use std::io;
 use std::fs;
 
-#[derive(Debug)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum Event {
-    Open { pid: u64, flags: u64, inode: u64 },
-    Close { pid: u64, inode: u64 },
-    Create { pid: u64, path: String, mode: u64, flags: u64, inode: u64, parent: u64 },
-    Mkdir { pid: u64, path: String, mode: u64, inode: u64, parent: u64 },
-    SymLink { pid: u64, path_1: String, path_2: String },
-    Unlink { r#type: String, pid: u64, path: String, inode: u64, parent: u64},
-    UnlinkDeleted { r#type: String, pid: u64, path: String, inode: u64, parent: u64},
-    Rename { parent_inode: u64, old_name: String, newparent_inode: u64, new_name: String, moved_inode: Option<u64>, swapped_inode: Option<u64>, overwritten_inode: Option<u64>},
+    Open {
+        pid: u64,
+        flags: u64,
+        inode: u64,
+    },
+    Close {
+        pid: u64,
+        inode: u64,
+    },
+    Mkdir {
+        pid: u64,
+        path: String,
+        mode: u64,
+        inode: u64,
+        parent: u64,
+    },
+    Create {
+        pid: u64,
+        path: String,
+        mode: u64,
+        flags: u64,
+        inode: u64,
+        parent: u64,
+    },
+    SymLink {
+        pid: u64,
+        path_1: String,
+        path_2: String,
+    },
+    Rename {
+        parent_inode: u64,
+        old_name: String,
+        newparent_inode: u64,
+        new_name: String,
+        moved_inode: Option<u64>,
+        swapped_inode: Option<u64>,
+        overwritten_inode: Option<u64>,
+    },
+    Unlink {
+        r#type: String,
+        pid: u64,
+        path: String,
+        inode: u64,
+        parent: u64,
+    },
+    UnlinkDeleted {
+        r#type: String,
+        pid: u64,
+        path: String,
+        inode: u64,
+        parent: u64,
+    },
 }
 
 // Parse token in the format of key:value
-fn parse_key_value(token: &str) -> Result<(&str, &str), Box<dyn Error>>{
+pub fn parse_key_value(token: &str) -> Result<(&str, &str), Box<dyn Error>>{
     let vec: Vec<&str> = token.split(':').collect();
 
     if vec.len() == 2 {
@@ -29,24 +73,24 @@ fn parse_key_value(token: &str) -> Result<(&str, &str), Box<dyn Error>>{
     }
 }
 
-fn parse_open(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<dyn Error>> {
+pub fn parse_open(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<dyn Error>> {
     let pid: u64;
     let flags: u64;
     let inode: u64;
 
     match kv_maps.get(&"pid"){
-        Some(v) => pid = v.parse::<u64>().unwrap(),
-        _ => return Err(From::from("ParseError"))
+        Some(v) => pid = v.parse::<u64>()?,
+        _ => return Err(From::from("ParseError: pid not found"))
     }
 
     match kv_maps.get(&"flags"){
-        Some(v) => flags = v.parse::<u64>().unwrap(),
-        _ => return Err(From::from("ParseError"))
+        Some(v) => flags = v.parse::<u64>()?,
+        _ => return Err(From::from("ParseError: flags not found"))
     }
 
     match kv_maps.get(&"inode"){
-        Some(v) => inode = v.parse::<u64>().unwrap(),
-        _ => return Err(From::from("ParseError"))
+        Some(v) => inode = v.parse::<u64>()?,
+        _ => return Err(From::from("ParseError: inode not found"))
     }
 
     Ok(Event::Open {
@@ -56,7 +100,27 @@ fn parse_open(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<dyn Error>> {
     })
 }
 
-fn parse_mkdir(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<dyn Error>> {
+pub fn parse_close(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<dyn Error>> {
+    let pid: u64;
+    let inode: u64;
+
+    match kv_maps.get(&"pid"){
+        Some(v) => pid = v.parse::<u64>()?,
+        _ => return Err(From::from("ParseError: pid not found"))
+    }
+
+    match kv_maps.get(&"inode"){
+        Some(v) => inode = v.parse::<u64>()?,
+        _ => return Err(From::from("ParseError: inode not found"))
+    }
+
+    Ok(Event::Close {
+        pid: pid,
+        inode: inode,
+    })
+}
+
+pub fn parse_mkdir(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<dyn Error>> {
     let pid: u64;
     let path: String;
     let mode: u64;
@@ -64,28 +128,28 @@ fn parse_mkdir(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<dyn Error>> {
     let parent: u64;
 
     match kv_maps.get(&"pid"){
-        Some(v) => pid = v.parse::<u64>().unwrap(),
-        _ => return Err(From::from("ParseError"))
+        Some(v) => pid = v.parse::<u64>()?,
+        _ => return Err(From::from("ParseError: pid not found"))
     }
 
     match kv_maps.get(&"path"){
         Some(v) => path = v.to_string(),
-        _ => return Err(From::from("ParseError"))
+        _ => return Err(From::from("ParseError: path not found"))
     }
 
     match kv_maps.get(&"mode"){
-        Some(v) => mode = v.parse::<u64>().unwrap(),
-        _ => return Err(From::from("ParseError"))
+        Some(v) => mode = v.parse::<u64>()?,
+        _ => return Err(From::from("ParseError: mode not found"))
     }
 
     match kv_maps.get(&"inode"){
-        Some(v) => inode = v.parse::<u64>().unwrap(),
-        _ => return Err(From::from("ParseError"))
+        Some(v) => inode = v.parse::<u64>()?,
+        _ => return Err(From::from("ParseError: inode not found"))
     }
 
     match kv_maps.get(&"parent"){
-        Some(v) => parent = v.parse::<u64>().unwrap(),
-        _ => return Err(From::from("ParseError"))
+        Some(v) => parent = v.parse::<u64>()?,
+        _ => return Err(From::from("ParseError: parent not found"))
     }
 
     Ok(Event::Mkdir {
@@ -97,27 +161,7 @@ fn parse_mkdir(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<dyn Error>> {
     })
 }
 
-fn parse_close(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<dyn Error>> {
-    let pid: u64;
-    let inode: u64;
-
-    match kv_maps.get(&"pid"){
-        Some(v) => pid = v.parse::<u64>().unwrap(),
-        _ => return Err(From::from("ParseError"))
-    }
-
-    match kv_maps.get(&"inode"){
-        Some(v) => inode = v.parse::<u64>().unwrap(),
-        _ => return Err(From::from("ParseError"))
-    }
-
-    Ok(Event::Close {
-        pid: pid,
-        inode: inode,
-    })
-}
-
-fn parse_create(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<dyn Error>> {
+pub fn parse_create(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<dyn Error>> {
     let pid: u64;
     let path: String;
     let mode: u64;
@@ -126,33 +170,33 @@ fn parse_create(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<dyn Error>> {
     let parent: u64;
 
     match kv_maps.get(&"pid"){
-        Some(v) => pid = v.parse::<u64>().unwrap(),
-        _ => return Err(From::from("ParseError"))
+        Some(v) => pid = v.parse::<u64>()?,
+        _ => return Err(From::from("ParseError: pid not found"))
     }
 
     match kv_maps.get(&"path"){
         Some(v) => path = v.to_string(),
-        _ => return Err(From::from("ParseError"))
+        _ => return Err(From::from("ParseError: path not found"))
     }
 
     match kv_maps.get(&"mode"){
-        Some(v) => mode = v.parse::<u64>().unwrap(),
-        _ => return Err(From::from("ParseError"))
+        Some(v) => mode = v.parse::<u64>()?,
+        _ => return Err(From::from("ParseError: mode not found"))
     }
 
     match kv_maps.get(&"flags"){
-        Some(v) => flags = v.parse::<u64>().unwrap(),
-        _ => return Err(From::from("ParseError"))
+        Some(v) => flags = v.parse::<u64>()?,
+        _ => return Err(From::from("ParseError: flags not found"))
     }
 
     match kv_maps.get(&"inode"){
-        Some(v) => inode = v.parse::<u64>().unwrap(),
-        _ => return Err(From::from("ParseError"))
+        Some(v) => inode = v.parse::<u64>()?,
+        _ => return Err(From::from("ParseError: inode not found"))
     }
 
     match kv_maps.get(&"parent"){
-        Some(v) => parent = v.parse::<u64>().unwrap(),
-        _ => return Err(From::from("ParseError"))
+        Some(v) => parent = v.parse::<u64>()?,
+        _ => return Err(From::from("ParseError: parent not found"))
     }
 
     Ok(Event::Create {
@@ -165,13 +209,13 @@ fn parse_create(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<dyn Error>> {
     })
 }
 
-fn parse_symlink(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<dyn Error>> {
+pub fn parse_symlink(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<dyn Error>> {
     let pid: u64;
     let path_1: String;
     let path_2: String;
 
     match kv_maps.get(&"pid"){
-        Some(v) => pid = v.parse::<u64>().unwrap(),
+        Some(v) => pid = v.parse::<u64>()?,
         _ => return Err(From::from("ParseError"))
     }
 
@@ -203,6 +247,8 @@ fn parse_optional_inode(inode_str: &str) -> Option<u64>{
     }
 }
 
+// TODO: remove dead_code by adding tests
+#[allow(dead_code)]
 fn parse_rename(line: String) -> Result<Event, Box<dyn Error>> {
     let line = &line[7..]; // remove prefix "rename:"
     println!("debug {:?}", line);
@@ -226,6 +272,8 @@ fn parse_rename(line: String) -> Result<Event, Box<dyn Error>> {
     })
 }
 
+// TODO: remove dead_code by adding tests
+#[allow(dead_code)]
 fn parse_unlink(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<dyn Error>> {
     let r#type: String;
     let pid: u64;
@@ -266,6 +314,8 @@ fn parse_unlink(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<dyn Error>> {
     })
 }
 
+// TODO: remove dead_code by adding tests
+#[allow(dead_code)]
 fn parse_unlink_deleted(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<dyn Error>> {
     let r#type: String;
     let pid: u64;
@@ -304,9 +354,10 @@ fn parse_unlink_deleted(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<dyn E
         inode: inode,
         parent: parent
     })
+
 }
 
-fn parse_event(line: &str) -> Result<Event, Box<dyn Error>> {
+pub fn parse_event(line: &str) -> Result<Event, Box<dyn Error>> {
     let mut kv_maps = HashMap::new();
 
     let vec: Vec<&str> = line.split(',').collect();
@@ -343,6 +394,8 @@ fn parse_event(line: &str) -> Result<Event, Box<dyn Error>> {
     Err(From::from("error"))
 }
 
+// TODO: remove dead_code by adding tests
+#[allow(dead_code)]
 pub fn update_inode_map(inode_map: &mut HashMap<u64, PathBuf>, events: &Vec<Event>) {
     for event in events {
         match event {
@@ -386,6 +439,9 @@ pub fn update_inode_map(inode_map: &mut HashMap<u64, PathBuf>, events: &Vec<Even
     }
 }
 
+// TODO: remove dead_code by adding tests
+// TODO: remove unused_variables
+#[allow(dead_code,unused_variables)]
 fn files_to_update<'a>(inode_map: &'a HashMap<u64, PathBuf>, events: &Vec<Event>) -> HashSet<&'a Path> {
     let mut files = HashSet::<&Path>::new();
     for event in events {
@@ -422,10 +478,12 @@ fn files_to_update<'a>(inode_map: &'a HashMap<u64, PathBuf>, events: &Vec<Event>
     files
 }
 
+#[allow(dead_code)]
 fn read_lin_file(file_name: &str) -> Result<String, io::Error> {
     fs::read_to_string(file_name)
 }
 
+#[allow(dead_code)]
 fn populate_events(events: &mut Vec::<Event>, lin: String) {
     let vec: Vec<&str> = lin.split('\n').collect();
     vec.iter()
@@ -440,29 +498,29 @@ fn populate_events(events: &mut Vec::<Event>, lin: String) {
         });
 }
 
-pub fn main(){
-    let mut events = Vec::<Event>::new();
-    let mut inode_map = HashMap::new();
+// pub fn main(){
+//     let mut events = Vec::<Event>::new();
+//     let mut inode_map = HashMap::new();
 
-    let lin = read_lin_file(".lin/mv");
-    let lin = match lin {
-        Ok(file) => file,
-        Err(error) => panic!("Problem opening the file: {:?}", error),
-    };
+//     let lin = read_lin_file(".lin/mv");
+//     let lin = match lin {
+//         Ok(file) => file,
+//         Err(error) => panic!("Problem opening the file: {:?}", error),
+//     };
 
-    populate_events(&mut events, lin);
+//     populate_events(&mut events, lin);
 
-    let mut root = PathBuf::new();
-    root.push("/");
-    inode_map.insert(1, root);
-    update_inode_map(&mut inode_map, &events);
+//     let mut root = PathBuf::new();
+//     root.push("/");
+//     inode_map.insert(1, root);
+//     update_inode_map(&mut inode_map, &events);
 
-    for (key, value) in &inode_map {
-        println!("{}: {}", key, value.display());
-    }
-    let files = files_to_update(&inode_map, &events);
-    files.iter().for_each(|f| { println!("file to update {:?}", f); });
-    
+//     for (key, value) in &inode_map {
+//         println!("{}: {}", key, value.display());
+//     }
+//     let files = files_to_update(&inode_map, &events);
+//     files.iter().for_each(|f| { println!("file to update {:?}", f); });
+
 
     // println!("{:?}", parse_key_value("op: open"));
     // println!("{:?}", parse_key_value("op: open: ss"));
@@ -497,4 +555,5 @@ pub fn main(){
     // debug {"rename": "1"}
     // debug " 1, hello.txt, 1, hello.txt~"
     // Ok(Rename { parent_inode: 1, old_name: "hello.txt", newparent_inode: 1, new_name: "hello.txt~" })
-}
+// }
+// 
