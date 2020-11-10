@@ -1,7 +1,6 @@
 use std::error::Error;
 use std::path::{Path, PathBuf};
 use std::collections::HashMap;
-use std::collections::HashSet;
 use std::io;
 use std::fs;
 
@@ -59,6 +58,18 @@ pub enum Event {
         inode: u64,
         parent: u64,
     },
+}
+
+// 
+pub enum Action {
+    Update,
+    Delete,
+    // TODO(nmonsees): not worrying about SymLinks for now, but will we need to process these
+    // differently than just an update or deletion?
+    SymLink {
+        path1: Box<Path>,
+        path2: Box<Path>,
+    }
 }
 
 // Parse token in the format of key:value
@@ -459,35 +470,34 @@ pub fn update_inode_map(inode_map: &mut HashMap<u64, PathBuf>, events: &Vec<Even
 // TODO: remove dead_code by adding tests
 // TODO: remove unused_variables
 #[allow(dead_code,unused_variables)]
-fn files_to_update<'a>(inode_map: &'a HashMap<u64, PathBuf>, events: &Vec<Event>) -> HashSet<&'a Path> {
-    let mut files = HashSet::<&Path>::new();
+pub fn files_to_update<'a>(inode_map: &'a HashMap<u64, PathBuf>, events: &Vec<Event>) -> HashMap<&'a Path, Action> {
+    let mut files = HashMap::<&Path, Action>::new();
     for event in events {
         match event {
             Event::Close { inode, ..} => {
                 match inode_map.get(inode) {
-                    Some(v) => { files.insert(v.as_path()); },
+                    // mark inode for updating
+                    Some(v) => { files.insert(v.as_path(), Action::Update); },
                     None => { println!("inode num {} not found in map", inode); }
                 }
             },
             Event::Create { inode, ..} => {
                 match inode_map.get(inode) {
-                    Some(v) => { files.insert(v.as_path()); },
+                    Some(v) => { files.insert(v.as_path(), Action::Update); },
                     None => { println!("inode num {} not found in map", inode); }
                 }
             },
-            // TOOD(nmonsees): this fn should return a map of filename to an action,
-            // to specify whether the file should be deleted, copied over, etc.
             Event::UnlinkDeleted { inode, ..} => {
                 match inode_map.get(inode) {
-                    Some(v) => { files.insert(v.as_path()); },
+                    Some(v) => { files.insert(v.as_path(), Action::Delete); },
                     None => { println!("inode num {} not found in map", inode); }
                 }
             },
             // TODO(nmonsees): this will need to handle cases where a rename overwrites vs. swaps,
             // which I think can be handled just by whether a swapped inode exists or not?
             Event::Rename { old_name, new_name, ..} => {
-                // files.insert(old_name);
-                // files.insert(new_name);
+                // files.insert(old_name.as_path(), Action::Delete);
+                // files.insert(new_name.as_path(), Action::Update);
             },
             _ => (),
         }
@@ -515,7 +525,7 @@ fn populate_events(events: &mut Vec::<Event>, lin: String) {
         });
 }
 
-// pub fn main(){
+pub fn main(){
 //     let mut events = Vec::<Event>::new();
 //     let mut inode_map = HashMap::new();
 
@@ -572,5 +582,5 @@ fn populate_events(events: &mut Vec::<Event>, lin: String) {
     // debug {"rename": "1"}
     // debug " 1, hello.txt, 1, hello.txt~"
     // Ok(Rename { parent_inode: 1, old_name: "hello.txt", newparent_inode: 1, new_name: "hello.txt~" })
-// }
-// 
+}
+ 
