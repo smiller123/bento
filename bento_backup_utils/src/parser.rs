@@ -236,30 +236,47 @@ pub fn parse_symlink(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<dyn Erro
     })
 }
 
-pub fn parse_optional_inode(inode_str: &str) -> Option<u64>{
-    let mut inode = inode_str.trim();
-    if inode_str == "None" {
-        None
+pub fn parse_optional_inode(inode_str: &str) -> Result<Option<u64>, Box<dyn Error>> {
+    let inode = inode_str.trim();
+    if inode == "None" {
+        Ok(None)
     } else {
-        inode = inode.strip_prefix("Some(")?;
-        inode = inode.strip_suffix(")")?;
-        inode.parse::<u64>().ok()
+        let inode = inode.strip_prefix("Some(");
+        if inode.is_none() {
+            return Err(From::from("ParseError"))
+        }
+
+        let inode = inode.unwrap().strip_suffix(")");
+        if inode.is_none() {
+            return Err(From::from("ParseError"))
+        }
+
+        match inode.unwrap().parse::<u64>() {
+            Ok(v) => Ok(Some(v)),
+            _ => return Err(From::from("ParseError"))
+        }
     }
 }
 
-// TODO: remove dead_code by adding tests
-#[allow(dead_code)]
-fn parse_rename(line: String) -> Result<Event, Box<dyn Error>> {
-    let line = &line[7..]; // remove prefix "rename:"
-    println!("debug {:?}", line);
-    let vec: Vec<&str> = line.split(',').collect();
-    let parent_inode: u64 = vec[0].trim().parse::<u64>().unwrap();
+pub fn parse_rename(line: String) -> Result<Event, Box<dyn Error>> {
+    let pairs: &str;
+    match line.strip_prefix("rename:") {
+        Some(v) => pairs = v,
+        _ => return Err(From::from("ParseError"))
+    }
+
+    println!("debug {:?}", pairs);
+    let vec: Vec<&str> = pairs.split(',').collect();
+    if vec.len() < 6 {
+        return Err(From::from("ParseError"))
+    }
+    let parent_inode: u64 = vec[0].trim().parse::<u64>()?;
     let old_name: String = vec[1].trim().to_string();
-    let newparent_inode: u64 = vec[2].trim().parse::<u64>().unwrap();
+    let newparent_inode: u64 = vec[2].trim().parse::<u64>()?;
     let new_name: String = vec[3].trim().to_string();
-    let moved_inode: Option<u64> = parse_optional_inode(vec[4]);
-    let swapped_inode: Option<u64> = parse_optional_inode(vec[5]);
-    let overwritten_inode: Option<u64> = parse_optional_inode(vec[6]);
+    let moved_inode: Option<u64> = parse_optional_inode(vec[4])?;
+    let swapped_inode: Option<u64> = parse_optional_inode(vec[5])?;
+    let overwritten_inode: Option<u64> = parse_optional_inode(vec[6])?;
 
     Ok(Event::Rename {
         parent_inode: parent_inode,
