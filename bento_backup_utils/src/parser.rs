@@ -236,7 +236,7 @@ pub fn parse_symlink(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<dyn Erro
     })
 }
 
-fn parse_optional_inode(inode_str: &str) -> Option<u64>{
+pub fn parse_optional_inode(inode_str: &str) -> Option<u64>{
     let mut inode = inode_str.trim();
     if inode_str == "None" {
         None

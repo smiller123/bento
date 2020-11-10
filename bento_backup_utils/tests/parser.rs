@@ -358,7 +358,30 @@ fn test_parse_symlink(){
 
 #[test]
 fn parse_optional_inode(){
-    // TODO
+
+    // empty string
+    let inode: &str = "";
+    let result = parser::parse_optional_inode(inode);
+    assert!(result.is_none());
+
+    // Some(<inode_num>)
+    let inode_num = 2;
+    let inode_str = "Some(2)";
+    let result = parser::parse_optional_inode(inode_str);
+    match result {
+        Some(v) => assert_eq!(v, inode_num),
+        _ => assert!(false)
+    }
+
+    // None
+    let inode_str = "None";
+    let result = parser::parse_optional_inode(inode_str);
+    assert!(result.is_none());
+    
+    // invalid string
+    let inode_str = "abcd";
+    let result = parser::parse_optional_inode(inode_str);
+    assert!(result.is_none());
 }
 
 #[test]
