@@ -491,9 +491,8 @@ pub fn files_to_update<'a>(inode_map: &'a HashMap<u64, PathBuf>, events: &Vec<Ev
             },
             // TODO(nmonsees): this will need to handle cases where a rename overwrites vs. swaps,
             // which I think can be handled just by whether a swapped inode exists or not?
-            Event::Rename { old_name, new_name, ..} => {
-                // files.insert(old_name.as_path(), Action::Delete);
-                // files.insert(new_name.as_path(), Action::Update);
+            Event::Rename { old_name, new_name, moved_inode, ..} => {
+
             },
             _ => (),
         }
