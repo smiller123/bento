@@ -1,8 +1,10 @@
 use serial_test::serial;
 use std::panic;
+use std::path::Path;
 use std::path::PathBuf;
 use std::collections::HashMap;
 use crate::parser::Event;
+use crate::parser::Action;
 
 #[path = "../src/parser.rs"] mod parser;
 
@@ -99,7 +101,7 @@ fn test_rename() {
 
 #[test]
 #[serial]
-fn test_mkdir() {
+fn test_create_update_file() {
     run_test(||{
         let mut inode_map = HashMap::<u64, PathBuf>::new();
         let mut events = Vec::<Event>::new();
@@ -108,6 +110,51 @@ fn test_mkdir() {
         let parent_dir = "/test_dir";
         let parent_path = PathBuf::from(parent_dir);
         inode_map.insert(parent_inode, parent_path);
+
+        let inode = 3;
+        let file_name = "file_name";
+        let path: PathBuf = [parent_dir, file_name].iter().collect();
+        let path_copy = path.clone();
+        inode_map.insert(inode, path);
+
+        // create file, push update, close
+        events.push(Event::Create{
+            pid: 0,
+            path: file_name.to_string(),
+            mode: 0,
+            flags: 0,
+            inode: inode,
+            parent: parent_inode
+        });
+
+        events.push(Event::Close{
+            pid: 0,
+            inode: inode
+        });
+
+        let mut updates = parser::files_to_update(&inode_map, &events);
+        assert!(updates.len() == 1);
+        match updates.get(&path_copy.as_path()) {
+            Some(Action::Update) => (),
+            // TODO(nmonsees): could write an enum toString for actions to see the value
+            Some(action) => panic!("expected Action::Update, found another action instead"),
+            _ => panic!("path not found in updates"),
+        }
+    })
+}
+
+
+
+#[test]
+#[serial]
+fn test_mkdir() {
+    run_test(||{
+        let mut inode_map = HashMap::<u64, PathBuf>::new();
+        let mut events = Vec::<Event>::new();
+
+        let parent_inode = 2;
+        let parent_dir = "/test_dir";
+        let parent_path = PathBuf::from(parent_dir); inode_map.insert(parent_inode, parent_path);
 
         let inode = 3;
         let dir = "new_dir";
