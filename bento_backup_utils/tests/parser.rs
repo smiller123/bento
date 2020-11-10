@@ -358,12 +358,95 @@ fn test_parse_symlink(){
 
 #[test]
 fn parse_optional_inode(){
-    // TODO
+    // empty string
+    let inode: &str = "";
+    let result = parser::parse_optional_inode(inode);
+    assert!(result.is_err());
+
+    // invalid string
+    let inode_str = "abcd";
+    let result = parser::parse_optional_inode(inode_str);
+    assert!(result.is_err());
+
+    // Some(<inode_num>)
+    let inode_str = "Some(abcd)";
+    let result = parser::parse_optional_inode(inode_str);
+    assert!(result.is_err());
+
+    // Some(<inode_num>)
+    let inode_num = 2;
+    let inode_str = "Some(2)";
+    let result = parser::parse_optional_inode(inode_str);
+    match result {
+        Ok(v) => assert_eq!(v, Some(inode_num)),
+        _ => assert!(false)
+    }
+
+    // None
+    let inode_str = "None";
+    let result = parser::parse_optional_inode(inode_str);
+    match result {
+        Ok(v) => assert_eq!(v, None),
+        _ => assert!(false)
+
+    }
 }
 
 #[test]
 fn parse_rename(){
-    // TODO
+    // empty
+    let line = "".to_string();
+    assert!(parser::parse_rename(line).is_err());
+
+    // missing values
+    let line = "rename: 3, f1, 1, f3, Some(5)".to_string();
+    let result = parser::parse_rename(line);
+    assert!(result.is_err());
+
+    // ok
+    let line = "rename: 3, f1, 1, f3, Some(5), None, Some(7)".to_string();
+    let result = parser::parse_rename(line);
+    let expected = parser::Event::Rename {
+        parent_inode: 3,
+        old_name: "f1".to_string(),
+        newparent_inode: 1,
+        new_name: "f3".to_string(),
+        moved_inode: Some(5),
+        swapped_inode: None,
+        overwritten_inode: Some(7),
+    };
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), expected);
+
+    //extra
+    let line = "rename: 3, f1, 1, f3, Some(5), None, Some(7), f, 3".to_string();
+    let result = parser::parse_rename(line);
+    let expected = parser::Event::Rename {
+        parent_inode: 3,
+        old_name: "f1".to_string(),
+        newparent_inode: 1,
+        new_name: "f3".to_string(),
+        moved_inode: Some(5),
+        swapped_inode: None,
+        overwritten_inode: Some(7),
+    };
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), expected);
+
+    // non-int parent inode
+    let line = "rename: x, f1, 1, f3, Some(5), None, Some(7)".to_string();
+    let result = parser::parse_rename(line);
+    assert!(result.is_err());
+
+    // non-int inode
+    let line = "rename: 4, f1, x, f3, Some(5), None, Some(7)".to_string();
+    let result = parser::parse_rename(line);
+    assert!(result.is_err());
+
+    // non-int moved inode
+    let line = "rename: 4, f1, 5, f3, Some(hello), None, Some(7)".to_string();
+    let result = parser::parse_rename(line);
+    assert!(result.is_err());
 }
 
 #[test]
