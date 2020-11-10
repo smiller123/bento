@@ -300,9 +300,7 @@ pub fn parse_rename(line: String) -> Result<Event, Box<dyn Error>> {
     })
 }
 
-// TODO: remove dead_code by adding tests
-#[allow(dead_code)]
-fn parse_unlink(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<dyn Error>> {
+pub fn parse_unlink(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<dyn Error>> {
     let r#type: String;
     let pid: u64;
     let path: String;
@@ -314,7 +312,7 @@ fn parse_unlink(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<dyn Error>> {
         _ => return Err(From::from("ParseError"))
     }
     match kv_maps.get(&"pid"){
-        Some(v) => pid = v.parse::<u64>().unwrap(),
+        Some(v) => pid = v.parse::<u64>()?,
         _ => return Err(From::from("ParseError"))
     }
 
@@ -324,12 +322,12 @@ fn parse_unlink(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<dyn Error>> {
     }
 
     match kv_maps.get(&"inode"){
-        Some(v) => inode = v.parse::<u64>().unwrap(),
+        Some(v) => inode = v.parse::<u64>()?,
         _ => return Err(From::from("ParseError"))
     }
 
     match kv_maps.get(&"parent"){
-        Some(v) => parent = v.parse::<u64>().unwrap(),
+        Some(v) => parent = v.parse::<u64>()?,
         _ => return Err(From::from("ParseError"))
     }
 
@@ -342,9 +340,7 @@ fn parse_unlink(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<dyn Error>> {
     })
 }
 
-// TODO: remove dead_code by adding tests
-#[allow(dead_code)]
-fn parse_unlink_deleted(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<dyn Error>> {
+pub fn parse_unlink_deleted(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<dyn Error>> {
     let r#type: String;
     let pid: u64;
     let path: String;
@@ -356,7 +352,7 @@ fn parse_unlink_deleted(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<dyn E
         _ => return Err(From::from("ParseError"))
     }
     match kv_maps.get(&"pid"){
-        Some(v) => pid = v.parse::<u64>().unwrap(),
+        Some(v) => pid = v.parse::<u64>()?,
         _ => return Err(From::from("ParseError"))
     }
 
@@ -366,12 +362,12 @@ fn parse_unlink_deleted(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<dyn E
     }
 
     match kv_maps.get(&"inode"){
-        Some(v) => inode = v.parse::<u64>().unwrap(),
+        Some(v) => inode = v.parse::<u64>()?,
         _ => return Err(From::from("ParseError"))
     }
 
     match kv_maps.get(&"parent"){
-        Some(v) => parent = v.parse::<u64>().unwrap(),
+        Some(v) => parent = v.parse::<u64>()?,
         _ => return Err(From::from("ParseError"))
     }
 
