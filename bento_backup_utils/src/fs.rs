@@ -1,6 +1,4 @@
 use std::error::Error;
-// use std::io;
-// use std::fs;
 use std::path::Path;
 use std::{thread};
 use std::sync::mpsc::{self, TryRecvError};
@@ -8,7 +6,6 @@ use std::sync::mpsc::{self, TryRecvError};
 extern crate fs_extra;
 use fs_extra::file::{TransitProcess, CopyOptions};
 
-#[allow(dead_code)]
 pub fn copy(file_list: Vec<String>, base_dir: &Path, target_dir: &Path) -> Result<(), Box<dyn Error>> {
     // Create the target directory
     fs_extra::dir::create_all(&target_dir, false).unwrap();
@@ -61,3 +58,5 @@ pub fn copy(file_list: Vec<String>, base_dir: &Path, target_dir: &Path) -> Resul
 
     Ok(())
 }
+
+

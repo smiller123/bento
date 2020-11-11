@@ -60,7 +60,8 @@ pub enum Event {
     },
 }
 
-// 
+//
+#[allow(dead_code)]
 pub enum Action {
     Update,
     Delete,
@@ -520,7 +521,7 @@ fn populate_events(events: &mut Vec::<Event>, lin: String) {
         });
 }
 
-pub fn main(){
+// pub fn main(){
 //     let mut events = Vec::<Event>::new();
 //     let mut inode_map = HashMap::new();
 
@@ -577,5 +578,5 @@ pub fn main(){
     // debug {"rename": "1"}
     // debug " 1, hello.txt, 1, hello.txt~"
     // Ok(Rename { parent_inode: 1, old_name: "hello.txt", newparent_inode: 1, new_name: "hello.txt~" })
-}
+// }
  

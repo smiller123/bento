@@ -1,6 +1,5 @@
 use serial_test::serial;
 use std::panic;
-use std::path::Path;
 use std::path::PathBuf;
 use std::collections::HashMap;
 use crate::parser::Event;
@@ -20,7 +19,6 @@ fn run_test<T>(test: T) -> ()
 where
     T: FnOnce() -> () + panic::UnwindSafe
 {
-    
     setup();
     let result = panic::catch_unwind(|| {
         test();
@@ -85,7 +83,7 @@ fn test_rename() {
         events.push(Event::Rename{
             parent_inode,
             old_name: file_name.to_string(),
-            newparent_inode: new_parent_inode, 
+            newparent_inode: new_parent_inode,
             new_name: new_file_name.to_string(),
             moved_inode: Some(inode),
             swapped_inode: None,
@@ -99,6 +97,7 @@ fn test_rename() {
     })
 }
 
+#[allow(unused_variables,unused_mut)] // TODO: Remove this
 #[test]
 #[serial]
 fn test_update_delete_file() {
@@ -152,6 +151,7 @@ fn test_update_delete_file() {
     })
 }
 
+#[allow(unused_variables,unused_mut)] // TODO: Remove this
 #[test]
 #[serial]
 fn test_create_update_file() {
