@@ -1,5 +1,6 @@
 use std::error::Error;
 use std::path::Path;
+use std::fs;
 use std::{thread};
 use std::sync::mpsc::{self, TryRecvError};
 
@@ -53,6 +54,39 @@ pub fn copy(file_list: Vec<String>, base_dir: &Path, target_dir: &Path) -> Resul
                     Err(TryRecvError::Empty) => {}
                 }
             }
+        }
+    }
+
+    Ok(())
+}
+
+pub fn delete(file_list: Vec<String>, target_dir: &Path) -> Result<(), Box<dyn Error>> {
+    // Check that all files must exist
+    for path in file_list.iter() {
+        let target_path = target_dir.join(path);
+
+        // Check file existence
+        if !target_path.exists() {
+            return Err(From::from("delete: file does not exist. This operation won't remove anything."));
+        }
+
+        // Check remove permissions
+        let perm = fs::metadata(target_path)?.permissions();
+        if perm.readonly() {
+            return Err(From::from("delete: no write permission. This operation won't remove anything."));
+        }
+    }
+
+    // Do the actual remove
+    for path in file_list.iter() {
+        let target_path = target_dir.join(path);
+
+        // Directory
+        if target_path.is_dir() {
+            fs_extra::dir::remove(target_path)?;
+        // File
+        } else {
+            fs_extra::file::remove(target_path)?;
         }
     }
 

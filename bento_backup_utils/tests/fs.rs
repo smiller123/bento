@@ -381,3 +381,252 @@ fn test_overwrite_to_existing_nested_folder() {
         assert!(file_eq(path2_src, path2_target).unwrap());
     })
 }
+
+#[test]
+#[serial]
+fn test_remove_no_target() {
+    run_test(||{
+        // create target directory
+        fs_extra::dir::create_all(Path::new(TEST_FOLDER).join("test_remove_no_target/target"), false).unwrap();
+
+        // create test1.txt
+        fs_extra::file::write_all(&Path::new(TEST_FOLDER).join("test_remove_no_target/target/test1.txt"), &"content1").unwrap();
+
+        // create test2.txt
+        fs_extra::file::write_all(&Path::new(TEST_FOLDER).join("test_remove_no_target/target/test2.txt"), &"content2").unwrap();
+
+        // create file list
+        let mut file_list = Vec::new();
+        file_list.push("test1.txt".to_string());
+        file_list.push("test2.txt".to_string());
+        file_list.push("test3.txt".to_string());
+
+        // run delete and expect err
+        let result = fs::delete(file_list, &Path::new(TEST_FOLDER).join("test_remove_no_target/target"));
+        assert!(result.is_err());
+
+        // check target files' existence
+        let path1_target = Path::new(TEST_FOLDER).join("test_remove_no_target/target/test1.txt");
+        let path2_target = Path::new(TEST_FOLDER).join("test_remove_no_target/target/test2.txt");
+
+        assert!(path1_target.exists());
+        assert!(path2_target.exists());
+    })
+}
+
+#[test]
+#[serial]
+fn test_remove_empty() {
+    run_test(||{
+        // create target directory
+        fs_extra::dir::create_all(Path::new(TEST_FOLDER).join("test_remove_empty/target"), false).unwrap();
+
+        // create test1.txt
+        fs_extra::file::write_all(&Path::new(TEST_FOLDER).join("test_remove_empty/target/test1.txt"), &"content1").unwrap();
+
+        // create test2.txt
+        fs_extra::file::write_all(&Path::new(TEST_FOLDER).join("test_remove_empty/target/test2.txt"), &"content2").unwrap();
+
+        // create file list
+        let file_list = Vec::new();
+
+        // run delete and expect ok
+        let result = fs::delete(file_list, &Path::new(TEST_FOLDER).join("test_remove_empty/target"));
+        assert!(result.is_ok());
+
+        // check target files' existence
+        let path1_target = Path::new(TEST_FOLDER).join("test_remove_empty/target/test1.txt");
+        let path2_target = Path::new(TEST_FOLDER).join("test_remove_empty/target/test2.txt");
+
+        assert!(path1_target.exists());
+        assert!(path2_target.exists());
+    })
+}
+
+#[test]
+#[serial]
+fn test_remove_simple_file() {
+    run_test(||{
+        // create target directory
+        fs_extra::dir::create_all(Path::new(TEST_FOLDER).join("test_remove_simple_file/target"), false).unwrap();
+
+        // create test1.txt
+        fs_extra::file::write_all(&Path::new(TEST_FOLDER).join("test_remove_simple_file/target/test1.txt"), &"content1").unwrap();
+
+        // create test2.txt
+        fs_extra::file::write_all(&Path::new(TEST_FOLDER).join("test_remove_simple_file/target/test2.txt"), &"content2").unwrap();
+
+        // create file list
+        let mut file_list = Vec::new();
+        file_list.push("test1.txt".to_string());
+
+        // run delete and expect ok
+        let result = fs::delete(file_list, &Path::new(TEST_FOLDER).join("test_remove_simple_file/target"));
+        assert!(result.is_ok());
+
+        // check target files' existence
+        let path1_target = Path::new(TEST_FOLDER).join("test_remove_simple_file/target/test1.txt");
+        let path2_target = Path::new(TEST_FOLDER).join("test_remove_simple_file/target/test2.txt");
+
+        assert!(!path1_target.exists());
+        assert!(path2_target.exists());
+    })
+}
+
+#[test]
+#[serial]
+fn test_remove_file_no_permission() {
+    run_test(||{
+        // create target directory
+        fs_extra::dir::create_all(Path::new(TEST_FOLDER).join("test_remove_file_no_permission/target"), false).unwrap();
+
+        // create test1.txt
+        fs_extra::file::write_all(&Path::new(TEST_FOLDER).join("test_remove_file_no_permission/target/test1.txt"), &"content1").unwrap();
+
+        // create test2.txt
+        fs_extra::file::write_all(&Path::new(TEST_FOLDER).join("test_remove_file_no_permission/target/test2.txt"), &"content2").unwrap();
+        let mut perms = rust_fs::metadata(&Path::new(TEST_FOLDER).join("test_remove_file_no_permission/target/test2.txt")).unwrap().permissions();
+        perms.set_readonly(true);
+        rust_fs::set_permissions(&Path::new(TEST_FOLDER).join("test_remove_file_no_permission/target/test2.txt"), perms).unwrap();
+
+        // create file list
+        let mut file_list = Vec::new();
+        file_list.push("test1.txt".to_string());
+        file_list.push("test2.txt".to_string());
+
+        // run delete and expect ok
+        let result = fs::delete(file_list, &Path::new(TEST_FOLDER).join("test_remove_file_no_permission/target"));
+        assert!(result.is_err());
+
+        // check target files' existence
+        let path1_target = Path::new(TEST_FOLDER).join("test_remove_file_no_permission/target/test1.txt");
+        let path2_target = Path::new(TEST_FOLDER).join("test_remove_file_no_permission/target/test2.txt");
+
+        assert!(path1_target.exists());
+        assert!(path2_target.exists());
+    })
+}
+
+#[test]
+#[serial]
+fn test_remove_empty_dir() {
+    run_test(||{
+        // create target directory
+        fs_extra::dir::create_all(Path::new(TEST_FOLDER).join("test_remove_empty_dir/target"), false).unwrap();
+
+        // create test1.txt
+        fs_extra::file::write_all(&Path::new(TEST_FOLDER).join("test_remove_empty_dir/target/test1.txt"), &"content1").unwrap();
+
+        // create test2.txt
+        fs_extra::file::write_all(&Path::new(TEST_FOLDER).join("test_remove_empty_dir/target/test2.txt"), &"content2").unwrap();
+
+        // create a folder test3
+        fs_extra::dir::create_all(Path::new(TEST_FOLDER).join("test_remove_empty_dir/target/test3"), false).unwrap();
+
+        // create file list
+        let mut file_list = Vec::new();
+        file_list.push("test3".to_string());
+
+        // run delete and expect ok
+        let result = fs::delete(file_list, &Path::new(TEST_FOLDER).join("test_remove_empty_dir/target"));
+        assert!(result.is_ok());
+
+        // check target files' existence
+        let path1_target = Path::new(TEST_FOLDER).join("test_remove_empty_dir/target/test1.txt");
+        let path2_target = Path::new(TEST_FOLDER).join("test_remove_empty_dir/target/test2.txt");
+        let path3_target = Path::new(TEST_FOLDER).join("test_remove_empty_dir/target/test3");
+
+        assert!(path1_target.exists());
+        assert!(path2_target.exists());
+        assert!(!path3_target.exists());
+    })
+}
+
+#[test]
+#[serial]
+fn test_remove_non_empty_dir() {
+    run_test(||{
+        // create target directory
+        fs_extra::dir::create_all(Path::new(TEST_FOLDER).join("test_remove_non_empty_dir/target"), false).unwrap();
+
+        // create test1.txt
+        fs_extra::file::write_all(&Path::new(TEST_FOLDER).join("test_remove_non_empty_dir/target/test1.txt"), &"content1").unwrap();
+
+        // create test2.txt
+        fs_extra::file::write_all(&Path::new(TEST_FOLDER).join("test_remove_non_empty_dir/target/test2.txt"), &"content2").unwrap();
+
+        // create a folder test3 and test3/test4.txt
+        fs_extra::dir::create_all(Path::new(TEST_FOLDER).join("test_remove_non_empty_dir/target/test3"), false).unwrap();
+        fs_extra::file::write_all(&Path::new(TEST_FOLDER).join("test_remove_non_empty_dir/target/test3/test4.txt"), &"content4").unwrap();
+
+        // create file list
+        let mut file_list = Vec::new();
+        file_list.push("test3".to_string());
+
+        // run delete and expect ok
+        let result = fs::delete(file_list, &Path::new(TEST_FOLDER).join("test_remove_non_empty_dir/target"));
+        assert!(result.is_ok());
+
+        // check target files' existence
+        let path1_target = Path::new(TEST_FOLDER).join("test_remove_non_empty_dir/target/test1.txt");
+        let path2_target = Path::new(TEST_FOLDER).join("test_remove_non_empty_dir/target/test2.txt");
+        let path3_target = Path::new(TEST_FOLDER).join("test_remove_non_empty_dir/target/test3");
+        let path4_target = Path::new(TEST_FOLDER).join("test_remove_non_empty_dir/target/test3/test4.txt");
+
+        assert!(path1_target.exists());
+        assert!(path2_target.exists());
+        assert!(!path3_target.exists());
+        assert!(!path4_target.exists());
+    })
+}
+
+#[test]
+#[serial]
+fn test_remove_nested_file() {
+    run_test(||{
+        // create target directory
+        fs_extra::dir::create_all(Path::new(TEST_FOLDER).join("test_remove_nested_file/target"), false).unwrap();
+
+        // create file
+        fs_extra::dir::create_all(Path::new(TEST_FOLDER).join("test_remove_nested_file/target/1/2/3/4/5"), false).unwrap();
+        fs_extra::file::write_all(&Path::new(TEST_FOLDER).join("test_remove_nested_file/target/1/2/3/4/5/test.txt"), &"5").unwrap();
+
+        // create file list
+        let mut file_list = Vec::new();
+        file_list.push("1/2/3/4/5/test.txt".to_string());
+
+        // run delete and expect ok
+        let result = fs::delete(file_list, &Path::new(TEST_FOLDER).join("test_remove_nested_file/target"));
+        assert!(result.is_ok());
+
+        // check target files' existence
+        assert!(Path::new(TEST_FOLDER).join("test_remove_nested_file/target/1/2/3/4/5").exists());
+        assert!(!Path::new(TEST_FOLDER).join("test_remove_nested_file/target/1/2/3/4/5/test.txt").exists());
+    })
+}
+
+#[test]
+#[serial]
+fn test_remove_nested_dir() {
+    run_test(||{
+        // create target directory
+        fs_extra::dir::create_all(Path::new(TEST_FOLDER).join("test_remove_nested_dir/target"), false).unwrap();
+
+        // create file
+        fs_extra::dir::create_all(Path::new(TEST_FOLDER).join("test_remove_nested_dir/target/1/2/3/4/5"), false).unwrap();
+        fs_extra::file::write_all(&Path::new(TEST_FOLDER).join("test_remove_nested_dir/target/1/2/3/4/5/test.txt"), &"5").unwrap();
+
+        // create file list
+        let mut file_list = Vec::new();
+        file_list.push("1/2/3".to_string());
+
+        // run delete and expect ok
+        let result = fs::delete(file_list, &Path::new(TEST_FOLDER).join("test_remove_nested_dir/target"));
+        assert!(result.is_ok());
+
+        // check target files' existence
+        assert!(Path::new(TEST_FOLDER).join("test_remove_nested_dir/target/1/2").exists());
+        assert!(!Path::new(TEST_FOLDER).join("test_remove_nested_dir/target/1/2/3").exists());
+        assert!(!Path::new(TEST_FOLDER).join("test_remove_nested_dir/target/1/2/3/4/5/test.txt").exists());
+    })
+}
