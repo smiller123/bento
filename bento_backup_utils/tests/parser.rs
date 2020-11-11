@@ -391,7 +391,7 @@ fn parse_optional_inode(){
 }
 
 #[test]
-fn parse_rename(){
+fn test_parse_rename(){
     // empty
     let line = "".to_string();
     assert!(parser::parse_rename(line).is_err());
@@ -448,7 +448,7 @@ fn parse_rename(){
 }
 
 #[test]
-fn parse_unlink(){
+fn test_parse_unlink(){
     // empty
     let kv_maps = HashMap::new();
     assert!(parser::parse_unlink(kv_maps).is_err());
@@ -522,7 +522,7 @@ fn parse_unlink(){
 }
 
 #[test]
-fn parse_unlink_deleted(){
+fn test_parse_unlink_deleted(){
     // empty
     let kv_maps = HashMap::new();
     assert!(parser::parse_unlink_deleted(kv_maps).is_err());
@@ -596,7 +596,7 @@ fn parse_unlink_deleted(){
 }
 
 #[test]
-fn parse_event(){
+fn test_parse_event(){
     // TODO
     assert!(parser::parse_event("op: open, pid: 0, flags: 0, inode: 0").is_ok());
     assert!(parser::parse_event("op: close, pid: 0, inode: 0").is_ok());
