@@ -630,3 +630,32 @@ fn test_remove_nested_dir() {
         assert!(!Path::new(TEST_FOLDER).join("test_remove_nested_dir/target/1/2/3/4/5/test.txt").exists());
     })
 }
+
+#[test]
+#[serial]
+fn test_remove_parent_before() {
+    run_test(||{
+        // create target directory
+        fs_extra::dir::create_all(Path::new(TEST_FOLDER).join("test_remove_parent_before/target"), false).unwrap();
+
+        // create file
+        fs_extra::dir::create_all(Path::new(TEST_FOLDER).join("test_remove_parent_before/target/1/2/3/4/5"), false).unwrap();
+        fs_extra::file::write_all(&Path::new(TEST_FOLDER).join("test_remove_parent_before/target/1/2/3/4/5/test.txt"), &"5").unwrap();
+
+        // create file list
+        let mut file_list = Vec::new();
+        file_list.push("1/2/3".to_string());
+        file_list.push("1/2/3/4".to_string());
+        file_list.push("1/2/3/4/5".to_string());
+        file_list.push("1/2/3/4/5/test.txt".to_string());
+
+        // run delete and expect ok
+        let result = fs::delete(file_list, &Path::new(TEST_FOLDER).join("test_remove_parent_before/target"));
+        assert!(result.is_ok());
+
+        // check target files' existence
+        assert!(Path::new(TEST_FOLDER).join("test_remove_parent_before/target/1/2").exists());
+        assert!(!Path::new(TEST_FOLDER).join("test_remove_parent_before/target/1/2/3").exists());
+        assert!(!Path::new(TEST_FOLDER).join("test_remove_parent_before/target/1/2/3/4/5/test.txt").exists());
+    })
+}
