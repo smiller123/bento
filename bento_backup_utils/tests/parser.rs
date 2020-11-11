@@ -597,7 +597,6 @@ fn test_parse_unlink_deleted(){
 
 #[test]
 fn test_parse_event(){
-    // TODO
     assert!(parser::parse_event("op: open, pid: 0, flags: 0, inode: 0").is_ok());
     assert!(parser::parse_event("op: close, pid: 0, inode: 0").is_ok());
     assert!(parser::parse_event("op: close, pid: 0, inode: 0, random: 6666").is_ok());
@@ -606,4 +605,12 @@ fn test_parse_event(){
     assert!(parser::parse_event("rename: 3, f1, 1, f3, Some(5), None, Some(7)").is_ok());
     assert!(parser::parse_event("op: unlink_deleted, type: file, pid: 38567432, path: delete_file, inode: 8, parent: 1").is_ok());
     assert!(parser::parse_event("op: unlink, type: file, pid: 38567432, path: delete_file, inode: 8, parent: 1").is_ok());
+
+    assert!(parser::parse_event("").is_err());
+    // Unknown op
+    assert!(parser::parse_event("op: new_op, hi: 1234").is_err());
+    // Invalid key
+    assert!(parser::parse_event("op: open, id: 0, flags: 0, inode: None").is_err());
+    // Missing a value
+    assert!(parser::parse_event("rename: 3, 1, f3, Some(5), None, Some(7)").is_err());
 }
