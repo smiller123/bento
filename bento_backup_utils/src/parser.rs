@@ -60,7 +60,8 @@ pub enum Event {
     },
 }
 
-// 
+//
+#[allow(dead_code)]
 pub enum Action {
     Update,
     Delete,
@@ -80,7 +81,7 @@ pub fn parse_key_value(token: &str) -> Result<(&str, &str), Box<dyn Error>>{
         let pair = (vec[0].trim(), vec[1].trim());
         Ok(pair)
     } else {
-        Err(From::from("ParseError"))
+        Err(From::from("ParseError: expected a single ':'"))
     }
 }
 
@@ -227,17 +228,17 @@ pub fn parse_symlink(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<dyn Erro
 
     match kv_maps.get(&"pid"){
         Some(v) => pid = v.parse::<u64>()?,
-        _ => return Err(From::from("ParseError"))
+        _ => return Err(From::from("ParseError: pid not found"))
     }
 
     match kv_maps.get(&"path_1"){
         Some(v) => path_1 = v.to_string(),
-        _ => return Err(From::from("ParseError"))
+        _ => return Err(From::from("ParseError: path_1 not found"))
     }
 
     match kv_maps.get(&"path_2"){
         Some(v) => path_2 = v.to_string(),
-        _ => return Err(From::from("ParseError"))
+        _ => return Err(From::from("ParseError: path_2 not found"))
     }
 
     Ok(Event::SymLink {
@@ -254,17 +255,17 @@ pub fn parse_optional_inode(inode_str: &str) -> Result<Option<u64>, Box<dyn Erro
     } else {
         let inode = inode.strip_prefix("Some(");
         if inode.is_none() {
-            return Err(From::from("ParseError"))
+            return Err(From::from("ParseError: prefix 'Some(' not found"))
         }
 
         let inode = inode.unwrap().strip_suffix(")");
         if inode.is_none() {
-            return Err(From::from("ParseError"))
+            return Err(From::from("ParseError: suffix ')' not found"))
         }
 
         match inode.unwrap().parse::<u64>() {
             Ok(v) => Ok(Some(v)),
-            _ => return Err(From::from("ParseError"))
+            _ => return Err(From::from("ParseError: expect integer"))
         }
     }
 }
@@ -273,13 +274,13 @@ pub fn parse_rename(line: String) -> Result<Event, Box<dyn Error>> {
     let pairs: &str;
     match line.strip_prefix("rename:") {
         Some(v) => pairs = v,
-        _ => return Err(From::from("ParseError"))
+        _ => return Err(From::from("ParseError: prefix 'rename:' not found"))
     }
 
     println!("debug {:?}", pairs);
     let vec: Vec<&str> = pairs.split(',').collect();
     if vec.len() < 6 {
-        return Err(From::from("ParseError"))
+        return Err(From::from("ParseError: expect at least 6 variables"))
     }
     let parent_inode: u64 = vec[0].trim().parse::<u64>()?;
     let old_name: String = vec[1].trim().to_string();
@@ -300,9 +301,7 @@ pub fn parse_rename(line: String) -> Result<Event, Box<dyn Error>> {
     })
 }
 
-// TODO: remove dead_code by adding tests
-#[allow(dead_code)]
-fn parse_unlink(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<dyn Error>> {
+pub fn parse_unlink(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<dyn Error>> {
     let r#type: String;
     let pid: u64;
     let path: String;
@@ -311,26 +310,26 @@ fn parse_unlink(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<dyn Error>> {
 
     match kv_maps.get(&"type"){
         Some(v) => r#type = v.to_string(),
-        _ => return Err(From::from("ParseError"))
+        _ => return Err(From::from("ParseError: type not found"))
     }
     match kv_maps.get(&"pid"){
-        Some(v) => pid = v.parse::<u64>().unwrap(),
-        _ => return Err(From::from("ParseError"))
+        Some(v) => pid = v.parse::<u64>()?,
+        _ => return Err(From::from("ParseError: pid not found"))
     }
 
     match kv_maps.get(&"path"){
         Some(v) => path = v.to_string(),
-        _ => return Err(From::from("ParseError"))
+        _ => return Err(From::from("ParseError: path not found"))
     }
 
     match kv_maps.get(&"inode"){
-        Some(v) => inode = v.parse::<u64>().unwrap(),
-        _ => return Err(From::from("ParseError"))
+        Some(v) => inode = v.parse::<u64>()?,
+        _ => return Err(From::from("ParseError: inode not found"))
     }
 
     match kv_maps.get(&"parent"){
-        Some(v) => parent = v.parse::<u64>().unwrap(),
-        _ => return Err(From::from("ParseError"))
+        Some(v) => parent = v.parse::<u64>()?,
+        _ => return Err(From::from("ParseError: parent not found"))
     }
 
     Ok(Event::Unlink {
@@ -342,9 +341,7 @@ fn parse_unlink(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<dyn Error>> {
     })
 }
 
-// TODO: remove dead_code by adding tests
-#[allow(dead_code)]
-fn parse_unlink_deleted(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<dyn Error>> {
+pub fn parse_unlink_deleted(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<dyn Error>> {
     let r#type: String;
     let pid: u64;
     let path: String;
@@ -353,26 +350,26 @@ fn parse_unlink_deleted(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<dyn E
 
     match kv_maps.get(&"type"){
         Some(v) => r#type = v.to_string(),
-        _ => return Err(From::from("ParseError"))
+        _ => return Err(From::from("ParseError: type not found"))
     }
     match kv_maps.get(&"pid"){
-        Some(v) => pid = v.parse::<u64>().unwrap(),
-        _ => return Err(From::from("ParseError"))
+        Some(v) => pid = v.parse::<u64>()?,
+        _ => return Err(From::from("ParseError: pid not found"))
     }
 
     match kv_maps.get(&"path"){
         Some(v) => path = v.to_string(),
-        _ => return Err(From::from("ParseError"))
+        _ => return Err(From::from("ParseError: path not found"))
     }
 
     match kv_maps.get(&"inode"){
-        Some(v) => inode = v.parse::<u64>().unwrap(),
-        _ => return Err(From::from("ParseError"))
+        Some(v) => inode = v.parse::<u64>()?,
+        _ => return Err(From::from("ParseError: inode not found"))
     }
 
     match kv_maps.get(&"parent"){
-        Some(v) => parent = v.parse::<u64>().unwrap(),
-        _ => return Err(From::from("ParseError"))
+        Some(v) => parent = v.parse::<u64>()?,
+        _ => return Err(From::from("ParseError: parent not found"))
     }
 
     Ok(Event::UnlinkDeleted {
@@ -438,7 +435,7 @@ pub fn update_inode_map(inode_map: &mut HashMap<u64, PathBuf>, events: &Vec<Even
                 }
             },
             Event::Rename {parent_inode: _, old_name: _, newparent_inode, new_name, moved_inode, swapped_inode: _ , overwritten_inode} => {
-                // TODO: handle swapped and overwritten events 
+                // TODO: handle swapped and overwritten events
                 match inode_map.get(&newparent_inode) {
                     Some(parent_path) => {
                         let full_path = Path::new(parent_path).join(new_name);
@@ -530,7 +527,7 @@ fn populate_events(events: &mut Vec::<Event>, lin: String) {
         });
 }
 
-pub fn main(){
+// pub fn main(){
 //     let mut events = Vec::<Event>::new();
 //     let mut inode_map = HashMap::new();
 
@@ -587,5 +584,5 @@ pub fn main(){
     // debug {"rename": "1"}
     // debug " 1, hello.txt, 1, hello.txt~"
     // Ok(Rename { parent_inode: 1, old_name: "hello.txt", newparent_inode: 1, new_name: "hello.txt~" })
-}
+// }
  

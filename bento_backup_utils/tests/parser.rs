@@ -1,4 +1,3 @@
-// use std::error::Error;
 use std::collections::HashMap;
 
 #[path = "../src/parser.rs"] mod parser;
@@ -388,12 +387,11 @@ fn parse_optional_inode(){
     match result {
         Ok(v) => assert_eq!(v, None),
         _ => assert!(false)
-
     }
 }
 
 #[test]
-fn parse_rename(){
+fn test_parse_rename(){
     // empty
     let line = "".to_string();
     assert!(parser::parse_rename(line).is_err());
@@ -450,21 +448,162 @@ fn parse_rename(){
 }
 
 #[test]
-fn parse_unlink(){
-    // TODO
+fn test_parse_unlink(){
+    // empty
+    let kv_maps = HashMap::new();
+    assert!(parser::parse_unlink(kv_maps).is_err());
+
+    // ok
+    let mut kv_maps = HashMap::new();
+    kv_maps.insert("type", "file");
+    kv_maps.insert("pid", "2");
+    kv_maps.insert("path", "path_to_file");
+    kv_maps.insert("inode", "2");
+    kv_maps.insert("parent", "3");
+    let result = parser::parse_unlink(kv_maps);
+    let expected = parser::Event::Unlink {
+        r#type: "file".to_string(),
+        pid: 2,
+        path: "path_to_file".to_string(),
+        inode: 2,
+        parent: 3,
+    };
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), expected);
+
+    // extra
+    let mut kv_maps = HashMap::new();
+    kv_maps.insert("type", "file");
+    kv_maps.insert("pid", "2");
+    kv_maps.insert("path", "path_to_file");
+    kv_maps.insert("inode", "2");
+    kv_maps.insert("parent", "3");
+    kv_maps.insert("extra", "4");
+    let result = parser::parse_unlink(kv_maps);
+    let expected = parser::Event::Unlink{
+        r#type: "file".to_string(),
+        pid: 2,
+        path: "path_to_file".to_string(),
+        inode: 2,
+        parent: 3,
+    };
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), expected);
+
+    // non-int pid
+    let mut kv_maps = HashMap::new();
+    kv_maps.insert("type", "file");
+    kv_maps.insert("pid", "hello2");
+    kv_maps.insert("path", "path_to_file");
+    kv_maps.insert("inode", "2");
+    kv_maps.insert("parent", "3");
+    let result = parser::parse_unlink(kv_maps);
+    assert!(result.is_err());
+
+    // non-int inode
+    let mut kv_maps = HashMap::new();
+    kv_maps.insert("type", "file");
+    kv_maps.insert("pid", "2");
+    kv_maps.insert("path", "path_to_file");
+    kv_maps.insert("inode", "$$$");
+    kv_maps.insert("parent", "3");
+    let result = parser::parse_unlink(kv_maps);
+    assert!(result.is_err());
+
+    //non-int parent
+    let mut kv_maps = HashMap::new();
+    kv_maps.insert("type", "file");
+    kv_maps.insert("pid", "2");
+    kv_maps.insert("path", "path_to_file");
+    kv_maps.insert("inode", "2");
+    kv_maps.insert("parent", "parent");
+    let result = parser::parse_unlink(kv_maps);
+    assert!(result.is_err());
 }
 
 #[test]
-fn parse_unlink_deleted(){
-    // TODO
+fn test_parse_unlink_deleted(){
+    // empty
+    let kv_maps = HashMap::new();
+    assert!(parser::parse_unlink_deleted(kv_maps).is_err());
+
+    // ok
+    let mut kv_maps = HashMap::new();
+    kv_maps.insert("type", "file");
+    kv_maps.insert("pid", "2");
+    kv_maps.insert("path", "path_to_file");
+    kv_maps.insert("inode", "2");
+    kv_maps.insert("parent", "3");
+    let result = parser::parse_unlink_deleted(kv_maps);
+    let expected = parser::Event::UnlinkDeleted {
+        r#type: "file".to_string(),
+        pid: 2,
+        path: "path_to_file".to_string(),
+        inode: 2,
+        parent: 3,
+    };
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), expected);
+
+    // extra
+    let mut kv_maps = HashMap::new();
+    kv_maps.insert("type", "file");
+    kv_maps.insert("pid", "2");
+    kv_maps.insert("path", "path_to_file");
+    kv_maps.insert("inode", "2");
+    kv_maps.insert("parent", "3");
+    kv_maps.insert("extra", "4");
+    let result = parser::parse_unlink_deleted(kv_maps);
+    let expected = parser::Event::UnlinkDeleted {
+        r#type: "file".to_string(),
+        pid: 2,
+        path: "path_to_file".to_string(),
+        inode: 2,
+        parent: 3,
+    };
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), expected);
+
+    // non-int pid
+    let mut kv_maps = HashMap::new();
+    kv_maps.insert("type", "file");
+    kv_maps.insert("pid", "hello2");
+    kv_maps.insert("path", "path_to_file");
+    kv_maps.insert("inode", "2");
+    kv_maps.insert("parent", "3");
+    let result = parser::parse_unlink_deleted(kv_maps);
+    assert!(result.is_err());
+
+    // non-int inode
+    let mut kv_maps = HashMap::new();
+    kv_maps.insert("type", "file");
+    kv_maps.insert("pid", "2");
+    kv_maps.insert("path", "path_to_file");
+    kv_maps.insert("inode", "$$$");
+    kv_maps.insert("parent", "3");
+    let result = parser::parse_unlink_deleted(kv_maps);
+    assert!(result.is_err());
+
+    //non-int parent
+    let mut kv_maps = HashMap::new();
+    kv_maps.insert("type", "file");
+    kv_maps.insert("pid", "2");
+    kv_maps.insert("path", "path_to_file");
+    kv_maps.insert("inode", "2");
+    kv_maps.insert("parent", "parent");
+    let result = parser::parse_unlink_deleted(kv_maps);
+    assert!(result.is_err());
 }
 
 #[test]
-fn parse_event(){
+fn test_parse_event(){
     // TODO
     assert!(parser::parse_event("op: open, pid: 0, flags: 0, inode: 0").is_ok());
     assert!(parser::parse_event("op: close, pid: 0, inode: 0").is_ok());
     assert!(parser::parse_event("op: close, pid: 0, inode: 0, random: 6666").is_ok());
     assert!(parser::parse_event("op: create, pid: 0, path: hello.txt, mode: 33152, flags: 164034, inode: 0, parent:10").is_ok());
     assert!(parser::parse_event("op: symlink, pid: 0, path_1: hello.txt, path_2: test.txt").is_ok());
+    assert!(parser::parse_event("rename: 3, f1, 1, f3, Some(5), None, Some(7)").is_ok());
+    assert!(parser::parse_event("op: unlink_deleted, type: file, pid: 38567432, path: delete_file, inode: 8, parent: 1").is_ok());
+    assert!(parser::parse_event("op: unlink, type: file, pid: 38567432, path: delete_file, inode: 8, parent: 1").is_ok());
 }
