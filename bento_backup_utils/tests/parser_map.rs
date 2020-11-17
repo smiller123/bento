@@ -87,13 +87,23 @@ fn test_rename() {
             new_name: new_file_name.to_string(),
             moved_inode: Some(inode),
             swapped_inode: None,
-            overwritten_inode: None
+            overwritten_inode: None,
         });
 
         parser::update_inode_map(&mut inode_map, &events);
 
         let new_path: PathBuf = [new_parent_dir, new_file_name].iter().collect();
         assert_eq!(inode_map[&inode], new_path);
+
+
+        let updates = parser::files_to_update(&inode_map, &events);
+        if updates.len() != 2 {
+            println!("updates.len() == {}", updates.len());
+            for (file, action) in &updates {
+                println!("{}: {:?}", file.to_str().unwrap(), action);
+            }
+        }
+        assert!(updates.len() == 2);
     })
 }
 
@@ -142,16 +152,22 @@ fn test_update_delete_file() {
 
         let mut updates = parser::files_to_update(&inode_map, &events);
         assert!(updates.len() == 1);
-        match updates.get(&path_copy.as_path()) {
+
+        // match_action(updates, &path_copy.as_path(), Action::Delete);
+
+        match updates.get(&path_copy) {
             Some(Action::Delete) => (),
-            // TODO(nmonsees): could write an enum toString for actions to see the value
-            Some(action) => panic!("expected Action::Update, found another action instead"),
-            _ => panic!("path not found in updates"),
+            Some(Action::Update) => panic!("expected Delete, found update instead"),
+            None => panic!("path not found in updates"),
         }
     })
 }
 
-#[allow(unused_variables,unused_mut)] // TODO: Remove this
+// fn match_action(files_map: &HashMap::<&Path, Action>, file: &Path, action: Action) {
+
+// }
+
+#[allow(unused_variables,unused_mut)]
 #[test]
 #[serial]
 fn test_create_update_file() {
@@ -185,18 +201,15 @@ fn test_create_update_file() {
             inode: inode
         });
 
-        let mut updates = parser::files_to_update(&inode_map, &events);
+        let updates = parser::files_to_update(&inode_map, &events);
         assert!(updates.len() == 1);
-        match updates.get(&path_copy.as_path()) {
+        match updates.get(&path_copy) {
             Some(Action::Update) => (),
-            // TODO(nmonsees): could write an enum toString for actions to see the value
             Some(action) => panic!("expected Action::Update, found another action instead"),
             _ => panic!("path not found in updates"),
         }
     })
 }
-
-
 
 #[test]
 #[serial]

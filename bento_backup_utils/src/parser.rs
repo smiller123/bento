@@ -62,15 +62,10 @@ pub enum Event {
 
 //
 #[allow(dead_code)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum Action {
     Update,
     Delete,
-    // TODO(nmonsees): not worrying about SymLinks for now, but will we need to process these
-    // differently than just an update or deletion?
-    SymLink {
-        path1: Box<Path>,
-        path2: Box<Path>,
-    }
 }
 
 // Parse token in the format of key:value
@@ -465,35 +460,46 @@ pub fn update_inode_map(inode_map: &mut HashMap<u64, PathBuf>, events: &Vec<Even
 }
 
 // TODO: remove dead_code by adding tests
-// TODO: remove unused_variables
 #[allow(dead_code,unused_variables)]
-pub fn files_to_update<'a>(inode_map: &'a HashMap<u64, PathBuf>, events: &Vec<Event>) -> HashMap<&'a Path, Action> {
-    let mut files = HashMap::<&Path, Action>::new();
+pub fn files_to_update<'a>(inode_map: &'a HashMap<u64, PathBuf>, events: &Vec<Event>) -> HashMap<PathBuf, Action> {
+    let mut files = HashMap::<PathBuf, Action>::new();
     for event in events {
         match event {
             Event::Close { inode, ..} => {
                 match inode_map.get(inode) {
                     // mark inode for updating
-                    Some(v) => { files.insert(v.as_path(), Action::Update); },
+                    Some(v) => { files.insert(v.clone(), Action::Update); },
                     None => { println!("inode num {} not found in map", inode); }
                 }
             },
             Event::Create { inode, ..} => {
                 match inode_map.get(inode) {
-                    Some(v) => { files.insert(v.as_path(), Action::Update); },
+                    Some(v) => { files.insert(v.clone(), Action::Update); },
                     None => { println!("inode num {} not found in map", inode); }
                 }
             },
             Event::UnlinkDeleted { inode, ..} => {
                 match inode_map.get(inode) {
-                    Some(v) => { files.insert(v.as_path(), Action::Delete); },
+                    Some(v) => { files.insert(v.clone(), Action::Delete); },
                     None => { println!("inode num {} not found in map", inode); }
                 }
             },
-            // TODO(nmonsees): this will need to handle cases where a rename overwrites vs. swaps,
-            // which I think can be handled just by whether a swapped inode exists or not?
-            Event::Rename { old_name, new_name, moved_inode, ..} => {
 
+            Event::Rename { old_name, moved_inode, newparent_inode, parent_inode, overwritten_inode, ..} => {
+                // otherwise check swapped inode?
+                match inode_map.get(&parent_inode) {
+                    Some(v) => { files.insert(v.join(old_name), Action::Delete); },
+                    None => { println!("parent_inode not found in inode_map") },
+                }
+
+                if moved_inode.is_some() {
+                    match inode_map.get(&moved_inode.unwrap()) {
+                        Some(v) => { files.insert(v.clone(), Action::Update); },
+                        None => { println!("new inode not found in inode_map") },
+                    }
+                } else {
+                    panic!("moved_inode not in rename event");
+                }
             },
             _ => (),
         }
