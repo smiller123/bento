@@ -142,10 +142,32 @@ def rename_dir(directory: pathlib.Path, subdir: str):
     os.rename(src, dest)
 
 
-def run_rsync(src_path: str, dest_path: str) -> None:
+def modify(args: argparse.Namespace) -> None:
+    """
+    modify contents of the source folders
+    """
+    # Make modifications on src_path
+    iterate_files(modify_file, args.src_path, args.modfile_prob)
+    iterate_files(remove_file, args.src_path, args.rmfile_prob)
+    iterate_files(rename_file, args.src_path, args.renamefile_prob)
+    iterate_directories(remove_dir, args.src_path, args.rmdir_prob)
+    iterate_directories(rename_dir, args.src_path, args.renamedir_prob)
+
+
+def run_rsync(args: argparse.Namespace) -> None:
     """
     run rsync on the source directory
     """
+    src_path = args.src_path
+    dest_path = args.dest_path
+
+    # backup before
+    subprocess.call(['rsync', '-r', src_path + "/", dest_path])
+
+    # modify
+    modify(args)
+
+    # benchmark
     start_time = time.time()
     subprocess.call(['rsync', '-r', src_path + "/", dest_path])
     end_time = time.time()
@@ -153,7 +175,33 @@ def run_rsync(src_path: str, dest_path: str) -> None:
     print('rsync: {} s'.format(duration))
 
 
-def run_bento(src_path: str, dest_path: str) -> None:
+def run_cp(args: argparse.Namespace) -> None:
+    """
+    run cp on the source directory
+    """
+    src_path = args.src_path
+    dest_path = args.dest_path
+
+    # backup before
+    subprocess.call(['cp', '-r', src_path + "/", dest_path])
+
+    # modify
+    modify(args)
+
+    # benchmark
+    start_time = time.time()
+    subprocess.call(['cp', '-r', src_path + "/", dest_path])
+    end_time = time.time()
+    duration = end_time - start_time
+    print('cp: {} s'.format(duration))
+
+
+def run_bento(args: argparse.Namespace) -> None:
+    # TODO: backup before
+
+    # modify
+    modify(args)
+
     start_time = time.time()
     # TODO: get a list of files to be updated / removed
 
@@ -182,20 +230,13 @@ def main(args: argparse.Namespace) -> None:
                     repeat=args.max_depth,
                     payload=callback)
 
-    # TODO: copy src_path to dest_path
-
-    # Make modifications on src_path
-    iterate_files(modify_file, args.src_path, args.modfile_prob)
-    iterate_files(remove_file, args.src_path, args.rmfile_prob)
-    iterate_files(rename_file, args.src_path, args.renamefile_prob)
-    iterate_directories(remove_dir, args.src_path, args.rmdir_prob)
-    iterate_directories(rename_dir, args.src_path, args.renamedir_prob)
-
     # Run benchmark
     if args.mode == 'rsync':
-        run_rsync(args.src_path, args.dest_path)
+        run_rsync(args)
     elif args.mode == 'bento':
-        run_bento(args.src_path, args.dest_path)
+        run_bento(args)
+    elif args.mode == 'cp':
+        run_cp(args)
     else:
         raise NotImplementedError("mode not yet supported")
 
@@ -222,7 +263,7 @@ if __name__ == "__main__":
     # Directory tree parameters
     parser.add_argument('--n-files',
                         type=int,
-                        default=5,
+                        default=10,
                         help="")
     parser.add_argument('--n-dirs',
                         type=int,
