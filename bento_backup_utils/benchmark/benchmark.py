@@ -27,6 +27,7 @@ import os
 import random
 import time
 import subprocess
+import pdb
 from typing import Callable
 
 SRC_DIR = "src_dir"
@@ -39,18 +40,20 @@ def create_test_dir(src_dir: str,
                     max_depth: int,
                     repeat: int,
                     payload: Callable) -> None:
-    """
-    Create a test dir.
-    """
-    randomfiletree.iterative_gaussian_tree(
-        src_dir,
-        nfiles=n_files,
-        nfolders=n_folders,
-        maxdepth=max_depth,
-        repeat=repeat,
-        payload=callback,
-    )
+   """
+   Create a test dir.
+   """
 
+   all_dirs, all_files = randomfiletree.iterative_tree(
+      src_dir,
+      nfolders_func=lambda _: n_folders,
+      nfiles_func=lambda _: n_files,
+      maxdepth=max_depth,
+      repeat=repeat,
+      payload=callback
+   )
+   
+   return all_dirs, all_files
 
 def remove_test_dir(path: str) -> None:
     """
@@ -63,13 +66,11 @@ def callback(target_dir: pathlib.Path) -> pathlib.Path:
     """
     create a file at target_dir and return its path
     """
-    path = target_dir / randomfiletree.core.random_string()
-
     while True:
+        path = target_dir / randomfiletree.core.random_string()
         with path.open('w') as f:
             f.write('aaaa')
         yield path
-
 
 def iterate_files(action: Callable, src_dir: str, prob: float) -> None:
     """
@@ -227,7 +228,7 @@ def main(args: argparse.Namespace) -> None:
                     n_files=args.n_files,
                     n_folders=args.n_dirs,
                     max_depth=args.max_depth,
-                    repeat=args.max_depth,
+                    repeat=args.repeat,
                     payload=callback)
 
     # Run benchmark
