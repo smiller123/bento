@@ -9,8 +9,8 @@ mod fs;
 
 fn run_utility(mount_point: &Path, remote: &Path, scan_frequency: &u64) {
     let inode_map = HashMap::<u64, PathBuf>::new();
-    assert!(mount_point.is_dir());
-    assert!(remote.is_dir());
+    // assert!(mount_point.is_dir());
+    // assert!(remote.is_dir());
     let lin_file = mount_point.join(".lin");
     loop {
         println!("in loop!");
