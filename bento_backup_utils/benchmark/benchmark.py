@@ -155,22 +155,30 @@ def modify(args: argparse.Namespace) -> None:
     iterate_directories(rename_dir, args.src_path, args.renamedir_prob)
 
 
-def run_rsync(args: argparse.Namespace) -> None:
+def run_rsync(args: argparse.Namespace, checksum: bool=False) -> None:
     """
     run rsync on the source directory
+    if checksum is true, skip based on checksum instead of modified time and
+    filesize
     """
     src_path = args.src_path
     dest_path = args.dest_path
 
     # backup before
-    subprocess.call(['rsync', '-r', src_path + "/", dest_path])
+    if checksum:
+        subprocess.call(['rsync', '-c', '-r', src_path + "/", dest_path])
+    else:
+        subprocess.call(['rsync', '-r', src_path + "/", dest_path])
 
     # modify
     modify(args)
 
     # benchmark
     start_time = time.time()
-    subprocess.call(['rsync', '-r', src_path + "/", dest_path])
+    if checksum:
+        subprocess.call(['rsync', '-c', '-r', src_path + "/", dest_path])
+    else:
+        subprocess.call(['rsync', '-r', src_path + "/", dest_path])
     end_time = time.time()
     duration = end_time - start_time
     print('rsync: {} s'.format(duration))
@@ -234,6 +242,8 @@ def main(args: argparse.Namespace) -> None:
     # Run benchmark
     if args.mode == 'rsync':
         run_rsync(args)
+    elif args.mode =='rsync-checksum':
+        run_rsync(args, checksum=True)
     elif args.mode == 'bento':
         run_bento(args)
     elif args.mode == 'cp':
@@ -259,7 +269,7 @@ if __name__ == "__main__":
     parser.add_argument('--mode',
                         type=str,
                         default='rsync',
-                        help="'rsync' or 'bento'")
+                        help="'rsync' or 'rsync-checksum' or 'bento'")
 
     # Directory tree parameters
     parser.add_argument('--n-files',
