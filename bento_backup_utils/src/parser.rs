@@ -508,7 +508,7 @@ pub fn files_to_update<'a>(inode_map: &'a HashMap<u64, PathBuf>, events: &Vec<Ev
 }
 
 #[allow(dead_code)]
-fn read_lin_file(file_name: &str) -> Result<String, io::Error> {
+pub fn read_lin_file(file_name: &str) -> Result<String, io::Error> {
     fs::read_to_string(file_name)
 }
 
