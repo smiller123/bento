@@ -272,7 +272,7 @@ pub fn parse_rename(line: String) -> Result<Event, Box<dyn Error>> {
         _ => return Err(From::from("ParseError: prefix 'rename:' not found"))
     }
 
-    println!("debug {:?}", pairs);
+    // println!("debug {:?}", pairs);
     let vec: Vec<&str> = pairs.split(',').collect();
     if vec.len() < 6 {
         return Err(From::from("ParseError: expect at least 6 variables"))
@@ -391,7 +391,7 @@ pub fn parse_event(line: &str) -> Result<Event, Box<dyn Error>> {
         });
 
 
-    println!("{:?}", kv_maps);
+    // println!("{:?}", kv_maps);
     // parse open/close/create/symlink
     match kv_maps.get(&"op") {
         Some(&"open") => return parse_open(kv_maps),
@@ -405,7 +405,7 @@ pub fn parse_event(line: &str) -> Result<Event, Box<dyn Error>> {
     };
 
     // parse rename
-    println!("debug {:?}", kv_maps);
+    // println!("debug {:?}", kv_maps);
     match kv_maps.get(&"rename") {
         Some(_) => return parse_rename(line.to_string()),
         None => (),
@@ -423,7 +423,7 @@ pub fn update_inode_map(inode_map: &mut HashMap<u64, PathBuf>, events: &Vec<Even
                 match inode_map.get(&parent) {
                     Some(parent_path) => {
                         let full_path = Path::new(parent_path).join(path);
-                        println!("inserted {} {}", inode, full_path.display());
+                        // println!("inserted {} {}", inode, full_path.display());
                         inode_map.insert(*inode, full_path);
                     },
                     _ => println!("inode key {} is not found", *parent)
@@ -500,11 +500,17 @@ pub fn files_to_update<'a>(inode_map: &'a HashMap<u64, PathBuf>, events: &Vec<Ev
                     None => { println!("inode num {} not found in map", inode); }
                 }
             },
+            Event::Mkdir { inode, .. } => {
+                match inode_map.get(inode) {
+                    Some(v) => { files.insert(v.clone(), Action::Update); },
+                    None => { println!("inode num {} not found in map", inode); }
+                }
+            }
 
             Event::Rename { old_name, moved_inode, newparent_inode, parent_inode, overwritten_inode, ..} => {
                 // otherwise check swapped inode?
                 match inode_map.get(&parent_inode) {
-                    Some(v) => { files.insert(v.join(old_name), Action::Delete); },
+                    Some(v) => { files.insert(v.join(old_name), Action::Delete); println!("marking for deletion!"); },
                     None => { println!("parent_inode not found in inode_map") },
                 }
 
@@ -524,12 +530,13 @@ pub fn files_to_update<'a>(inode_map: &'a HashMap<u64, PathBuf>, events: &Vec<Ev
 }
 
 #[allow(dead_code)]
-fn read_lin_file(file_name: &str) -> Result<String, io::Error> {
-    fs::read_to_string(file_name)
+pub fn read_lin_file(file_name: &str) -> Result<String, io::Error> {
+    Ok(String::from_utf8_lossy(&fs::read(file_name)?).into_owned())
+    // fs::read_to_string(file_name)
 }
 
 #[allow(dead_code)]
-fn populate_events(events: &mut Vec::<Event>, lin: String) {
+pub fn populate_events(events: &mut Vec::<Event>, lin: String) {
     let vec: Vec<&str> = lin.split('\n').collect();
     vec.iter()
         .for_each(|p| {
@@ -537,7 +544,8 @@ fn populate_events(events: &mut Vec::<Event>, lin: String) {
                 let result = parse_event(p);
                 match result {
                     Ok(event) => {println!("ok {:?}", event); events.push(event); },
-                    Err(_e) => {println!("error {:?}", p);},
+                    // Err(_e) => {println!("error {:?}", p);},
+                    Err(_e) => {println!("error, not showing for now")},
                 }
             }
         });
