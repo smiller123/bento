@@ -429,8 +429,7 @@ pub fn update_inode_map(inode_map: &mut HashMap<u64, PathBuf>, events: &Vec<Even
                     _ => println!("inode key {} is not found", *parent)
                 }
             },
-            Event::Rename {parent_inode: _, old_name: _, newparent_inode, new_name, moved_inode, swapped_inode: _ , overwritten_inode} => {
-                // TODO: handle swapped and overwritten events
+            Event::Rename {parent_inode, old_name: _, newparent_inode, new_name, moved_inode, swapped_inode , overwritten_inode} => {
                 match inode_map.get(&newparent_inode) {
                     Some(parent_path) => {
                         let full_path = Path::new(parent_path).join(new_name);
@@ -442,6 +441,23 @@ pub fn update_inode_map(inode_map: &mut HashMap<u64, PathBuf>, events: &Vec<Even
                 if overwritten_inode.is_some() {
                     let inode = overwritten_inode.unwrap();
                     inode_map.remove(&inode);
+                }
+
+                if swapped_inode.is_some() {
+                    let swapped_inode = swapped_inode.unwrap();
+                    match inode_map.get(&parent_inode) {
+                        Some(dest_parent_path) => {
+                            match inode_map.get(&swapped_inode) {
+                                Some(src_path) => {
+                                    let file_name = Path::new(src_path).file_name().unwrap();
+                                    let full_path = Path::new(dest_parent_path).join(file_name);
+                                    inode_map.insert(swapped_inode, full_path);
+                                },
+                                _ => println!("inode key {} is not found", swapped_inode)
+                            }
+                        },
+                        _ => println!("inode key {} is not found", *parent_inode)
+                    }
                 }
             },
             Event::Mkdir { pid: _, path, mode: _, inode, parent } => {
