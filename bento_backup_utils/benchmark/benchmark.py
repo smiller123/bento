@@ -232,12 +232,13 @@ def main(args: argparse.Namespace) -> None:
         remove_test_dir(args.dest_path)
 
     # Create a random directory tree
-    create_test_dir(args.src_path,
+    all_dirs, all_files = create_test_dir(args.src_path,
                     n_files=args.n_files,
                     n_folders=args.n_dirs,
                     max_depth=args.max_depth,
                     repeat=args.repeat,
                     payload=callback)
+    print('{} files and {} folders created'.format(len(all_dirs), len(all_files)))
 
     # Run benchmark
     if args.mode == 'rsync':
