@@ -107,6 +107,56 @@ fn test_rename() {
     })
 }
 
+#[test]
+#[serial]
+fn test_rename_swapped() {
+    run_test(||{
+        let mut inode_map = HashMap::<u64, PathBuf>::new();
+        let mut events = Vec::<Event>::new();
+
+        let parent_inode = 2;
+        let parent_dir = "/test_dir";
+        let parent_path = PathBuf::from(parent_dir);
+        inode_map.insert(parent_inode, parent_path);
+
+        let inode = 3;
+        let file_name = "file_name";
+        let path: PathBuf = [parent_dir, file_name].iter().collect();
+        inode_map.insert(inode, path);
+
+        let new_parent_inode = 4;
+        let new_parent_dir = "/new_dir";
+        let new_parent_path = PathBuf::from(new_parent_dir);
+        inode_map.insert(new_parent_inode, new_parent_path);
+
+        let swapped_inode = 5;
+        let swapped_file_name = "file_name_2";
+        let swapped_path: PathBuf = [new_parent_dir, swapped_file_name].iter().collect();
+        inode_map.insert(swapped_inode, swapped_path);
+
+        let new_file_name = "new_name";
+        events.push(Event::Rename{
+            parent_inode,
+            old_name: file_name.to_string(),
+            newparent_inode: new_parent_inode,
+            new_name: new_file_name.to_string(),
+            moved_inode: Some(inode),
+            swapped_inode: Some(swapped_inode),
+            overwritten_inode: None,
+        });
+
+        parser::update_inode_map(&mut inode_map, &events);
+
+        let new_path: PathBuf = [new_parent_dir, new_file_name].iter().collect();
+        assert_eq!(inode_map[&inode], new_path);
+        let swapped_new_path: PathBuf = [parent_dir, swapped_file_name].iter().collect();
+        assert_eq!(inode_map[&swapped_inode], swapped_new_path);
+
+        let updates = parser::files_to_update(&inode_map, &events);
+        assert!(updates.len() == 2);
+    })
+}
+
 #[allow(unused_variables,unused_mut)] // TODO: Remove this
 #[test]
 #[serial]
