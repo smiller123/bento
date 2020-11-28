@@ -540,6 +540,10 @@ pub fn read_lin_file(file_name: &str) -> Result<String, io::Error> {
     Ok(String::from_utf8_lossy(&fs::read(file_name)?).into_owned())
 }
 
+pub fn get_lin_size(file_name: &str) -> u64 {
+    fs::metadata(file_name).unwrap().len()
+}
+
 #[allow(dead_code)]
 pub fn populate_events(events: &mut Vec::<Event>, lin: String) {
     let vec: Vec<&str> = lin.split('\n').collect();
@@ -548,7 +552,7 @@ pub fn populate_events(events: &mut Vec::<Event>, lin: String) {
             if !p.is_empty() {
                 let result = parse_event(p);
                 match result {
-                    Ok(event) => {println!("ok {:?}", event); events.push(event); },
+                    Ok(event) => { /* println!("ok {:?}", event); */ events.push(event); },
                     // Err(_e) => {println!("error {:?}", p);},
                     Err(_e) => {println!("error, not showing contents for now")},
                 }

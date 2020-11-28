@@ -17,24 +17,23 @@ fn run_utility(mount_point: &Path, remote: &Path, scan_frequency: &u64) {
     inode_map.insert(1, PathBuf::from(mount_point));
 
     let lin_file = mount_point.join(".lin");
-    let mut prev_size = 0;  // index to read new .lin contents from
+    let mut prev_size: usize = 0;  // index to read new .lin contents from
     loop {
         println!("in loop!");
         let mut events = Vec::<parser::Event>::new();
         assert!(events.len() == 0);
 
-        // TODO(nmonsees): eventually this should just return the subset based on prev size
-        let mut lin_contents = parser::read_lin_file(lin_file.to_str().unwrap()).expect("Unable to read lin file from mount point");
-        let lin_slice = lin_contents.get(prev_size..lin_contents.len()).unwrap();
-        prev_size = lin_contents.len();
+        // TODO(nmonsees): ideally this should read in only prev_size..lin_size.len() from disk, but I can't find
+        // an fs function to do that
+        let lin_contents = parser::read_lin_file(lin_file.to_str().unwrap()).expect("Unable to read lin file from mount point");
+        let lin_slice = lin_contents.get(prev_size..lin_contents.len()).unwrap();  // new events from previous scan
+
+        println!("lin_contents len: {}", lin_contents.len());
+        println!("lin_contents len from parser: {}", parser::get_lin_size(lin_file.to_str().unwrap()));
+        println!("lin_slice len: {}", lin_slice.len());
 
         parser::populate_events(&mut events, String::from(lin_slice));  // TODO(nmonsees): will print error, need to change in parser
-
-
         parser::update_inode_map(&mut inode_map, &events);
-        for (key, value) in &inode_map {
-            println!("{}: {}", key, value.display());
-        }
 
         let files: HashMap<PathBuf, parser::Action> = parser::files_to_update(&inode_map, &events);
 
@@ -47,7 +46,21 @@ fn run_utility(mount_point: &Path, remote: &Path, scan_frequency: &u64) {
             }
         }
 
-        println!("prev_size: {}", prev_size);
+
+        // fs actions will add log entries to .lin, so need to grab prev_size after performing
+        // copy/deletes to remote
+
+        // prev_size = parser::get_lin_size(lin_file.to_str().unwrap()) as usize;
+        // println!("prev_size metadata: {}", prev_size);
+
+        // TODO(nmonsees): it turns out that the metadata isn't immediately synchronized after
+        // writes to the log, so the hack in place here is just to read in the whole contents from
+        // disk again, and grab the len
+        //
+        // This works, but it would be great to have a sync on the .lin to just fetch the metadata
+        let lin_post_contents = parser::read_lin_file(lin_file.to_str().unwrap()).expect("Unable to read lin file from mount point");
+        prev_size = lin_post_contents.len();
+        println!("prev_size from file: {}", prev_size);
 
         thread::sleep(time::Duration::from_millis(*scan_frequency));
     }
