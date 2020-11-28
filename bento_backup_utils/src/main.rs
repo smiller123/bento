@@ -17,26 +17,37 @@ fn run_utility(mount_point: &Path, remote: &Path, scan_frequency: &u64) {
     inode_map.insert(1, PathBuf::from(mount_point));
 
     let lin_file = mount_point.join(".lin");
+    let mut prev_size = 0;  // index to read new .lin contents from
     loop {
         println!("in loop!");
         let mut events = Vec::<parser::Event>::new();
         assert!(events.len() == 0);
 
         // TODO(nmonsees): eventually this should just return the subset based on prev size
-        let lin_contents = parser::read_lin_file(lin_file.to_str().unwrap()).expect("Unable to read lin file from mount point");
-        parser::populate_events(&mut events, lin_contents);  // TODO(nmonsees): will print error, need to change in parser
+        let mut lin_contents = parser::read_lin_file(lin_file.to_str().unwrap()).expect("Unable to read lin file from mount point");
+        let lin_slice = lin_contents.get(prev_size..lin_contents.len()).unwrap();
+        prev_size = lin_contents.len();
 
-        //events.iter().for_each(|e| { println!("event! {:?}", e) });
+        parser::populate_events(&mut events, String::from(lin_slice));  // TODO(nmonsees): will print error, need to change in parser
+
 
         parser::update_inode_map(&mut inode_map, &events);
         for (key, value) in &inode_map {
             println!("{}: {}", key, value.display());
         }
 
-        let files = parser::files_to_update(&inode_map, &events);
-        for (key, value) in &files {
-            println!("{}: {:?}", key.to_str().unwrap(), value);
+        let files: HashMap<PathBuf, parser::Action> = parser::files_to_update(&inode_map, &events);
+
+        for (file, action) in &files {
+            match action {
+                // TODO(nmonsees): unsure how to avoid the file clone here, passing a ref doesn't
+                // guarantee lifetime, but this does seem not great
+                parser::Action::Update => { fs::copy(file.clone(), mount_point, remote).expect("Unable to perform copy to remote"); },
+                parser::Action::Delete => { fs::delete(file.clone(), mount_point, remote).expect("Unable to perform deletion from remote"); },
+            }
         }
+
+        println!("prev_size: {}", prev_size);
 
         thread::sleep(time::Duration::from_millis(*scan_frequency));
     }

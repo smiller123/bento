@@ -469,25 +469,29 @@ pub fn files_to_update<'a>(inode_map: &'a HashMap<u64, PathBuf>, events: &Vec<Ev
                 match inode_map.get(inode) {
                     // mark inode for updating
                     Some(v) => { files.insert(v.clone(), Action::Update); },
-                    None => { println!("inode num {} not found in map", inode); }
+                    // None => { println!("inode num {} not found in map", inode); }
+                    None => { (); }
                 }
             },
             Event::Create { inode, ..} => {
                 match inode_map.get(inode) {
                     Some(v) => { files.insert(v.clone(), Action::Update); },
-                    None => { println!("inode num {} not found in map", inode); }
+                    // None => { println!("inode num {} not found in map", inode); }
+                    None => { (); }
                 }
             },
             Event::UnlinkDeleted { inode, ..} => {
                 match inode_map.get(inode) {
                     Some(v) => { files.insert(v.clone(), Action::Delete); },
-                    None => { println!("inode num {} not found in map", inode); }
+                    // None => { println!("inode num {} not found in map", inode); }
+                    None => { (); }
                 }
             },
             Event::Mkdir { inode, .. } => {
                 match inode_map.get(inode) {
                     Some(v) => { files.insert(v.clone(), Action::Update); },
-                    None => { println!("inode num {} not found in map", inode); }
+                    // None => { println!("inode num {} not found in map", inode); }
+                    None => { (); }
                 }
             }
 
@@ -495,13 +499,15 @@ pub fn files_to_update<'a>(inode_map: &'a HashMap<u64, PathBuf>, events: &Vec<Ev
                 // otherwise check swapped inode?
                 match inode_map.get(&parent_inode) {
                     Some(v) => { files.insert(v.join(old_name), Action::Delete); println!("marking for deletion!"); },
-                    None => { println!("parent_inode not found in inode_map") },
+                    // None => { println!("parent_inode not found in inode_map") },
+                    None => { (); }
                 }
 
                 if moved_inode.is_some() {
                     match inode_map.get(&moved_inode.unwrap()) {
                         Some(v) => { files.insert(v.clone(), Action::Update); },
-                        None => { println!("new inode not found in inode_map") },
+                        // None => { println!("new inode not found in inode_map") },
+                        None => { (); }
                     }
                 } else {
                     panic!("moved_inode not in rename event");
@@ -516,7 +522,6 @@ pub fn files_to_update<'a>(inode_map: &'a HashMap<u64, PathBuf>, events: &Vec<Ev
 #[allow(dead_code)]
 pub fn read_lin_file(file_name: &str) -> Result<String, io::Error> {
     Ok(String::from_utf8_lossy(&fs::read(file_name)?).into_owned())
-    // fs::read_to_string(file_name)
 }
 
 #[allow(dead_code)]
@@ -529,7 +534,7 @@ pub fn populate_events(events: &mut Vec::<Event>, lin: String) {
                 match result {
                     Ok(event) => {println!("ok {:?}", event); events.push(event); },
                     // Err(_e) => {println!("error {:?}", p);},
-                    Err(_e) => {println!("error, not showing for now")},
+                    Err(_e) => {println!("error, not showing contents for now")},
                 }
             }
         });
