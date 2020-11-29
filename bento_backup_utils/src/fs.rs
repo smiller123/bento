@@ -14,7 +14,7 @@ pub fn copy(file_list: Vec<String>, base_dir: &Path, target_dir: &Path) -> Resul
     for path in file_list.iter() {
         let source_path = base_dir.join(path);
         let target_path = target_dir.join(path);
-        println!("Copy from {:?} ==> to {:?}", source_path.to_str(), target_path.to_str());
+        // println!("Copy from {:?} ==> to {:?}", source_path.to_str(), target_path.to_str());
 
         // If the source path is a directory, simply create a directory.
         if source_path.is_dir() {
@@ -35,7 +35,7 @@ pub fn copy(file_list: Vec<String>, base_dir: &Path, target_dir: &Path) -> Resul
                 let handler = |process_info: TransitProcess| {
                     tx.send(process_info).unwrap();
                 };
-                fs_extra::file::copy_with_progress(&source_path, &target_path, &options, handler).unwrap();
+                fs_extra::file::copy_with_progress(&source_path, &target_path, &options, handler);
             });
 
             loop {
@@ -75,7 +75,7 @@ pub fn delete(file_list: Vec<String>, target_dir: &Path) -> Result<(), Box<dyn E
     // Do the actual remove
     for path in file_list.iter() {
         let target_path = target_dir.join(path);
-        println!("Remove {:?}", target_path.to_str());
+        // println!("Remove {:?}", target_path.to_str());
 
         // Directory
         if target_path.is_dir() {

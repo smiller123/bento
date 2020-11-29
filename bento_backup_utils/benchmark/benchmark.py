@@ -210,6 +210,7 @@ def run_bento(args: argparse.Namespace) -> None:
     mount_path = args.mount_path
     src_path = args.src_path
     dest_path = args.dest_path
+    subprocess.call(['cargo', 'build'])
     subprocess.call(['cargo', 'run', mount_path, src_path, dest_path])
 
     # modify

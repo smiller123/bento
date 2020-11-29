@@ -42,7 +42,6 @@ pub fn files_to_update(inode_map: &mut HashMap<u64, PathBuf>, events: &[parser::
                 match inode_map.get(&parent) {
                     Some(parent_path) => {
                         let full_path = Path::new(parent_path).join(path);
-                        println!("inserted {} {}", inode, full_path.display());
                         inode_map.insert(*inode, full_path);
                     },
                     _ => println!("inode key {} is not found", *parent)
