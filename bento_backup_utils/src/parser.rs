@@ -1,8 +1,5 @@
 use std::error::Error;
-use std::path::{Path, PathBuf};
 use std::collections::HashMap;
-use std::io;
-use std::fs;
 
 #[derive(Eq, PartialEq, Debug)]
 pub enum Event {
@@ -60,13 +57,6 @@ pub enum Event {
     },
 }
 
-//
-#[allow(dead_code)]
-#[derive(Eq, PartialEq, Debug)]
-pub enum Action {
-    Update,
-    Delete,
-}
 
 // Parse token in the format of key:value
 pub fn parse_key_value(token: &str) -> Result<(&str, &str), Box<dyn Error>>{
@@ -101,9 +91,9 @@ pub fn parse_open(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<dyn Error>>
     }
 
     Ok(Event::Open {
-        pid: pid,
-        flags: flags,
-        inode: inode,
+        pid,
+        flags,
+        inode
     })
 }
 
@@ -122,8 +112,8 @@ pub fn parse_close(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<dyn Error>
     }
 
     Ok(Event::Close {
-        pid: pid,
-        inode: inode,
+        pid,
+        inode,
     })
 }
 
@@ -160,11 +150,11 @@ pub fn parse_mkdir(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<dyn Error>
     }
 
     Ok(Event::Mkdir {
-        pid: pid,
-        path: path,
-        mode: mode,
-        inode: inode,
-        parent: parent,
+        pid,
+        path,
+        mode,
+        inode,
+        parent,
     })
 }
 
@@ -207,12 +197,12 @@ pub fn parse_create(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<dyn Error
     }
 
     Ok(Event::Create {
-        pid: pid,
-        path: path,
-        mode: mode,
-        flags: flags,
-        inode: inode,
-        parent: parent
+        pid,
+        path,
+        mode,
+        flags,
+        inode,
+        parent
     })
 }
 
@@ -237,9 +227,9 @@ pub fn parse_symlink(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<dyn Erro
     }
 
     Ok(Event::SymLink {
-        pid: pid,
-        path_1: path_1,
-        path_2: path_2,
+        pid,
+        path_1,
+        path_2,
     })
 }
 
@@ -260,7 +250,7 @@ pub fn parse_optional_inode(inode_str: &str) -> Result<Option<u64>, Box<dyn Erro
 
         match inode.unwrap().parse::<u64>() {
             Ok(v) => Ok(Some(v)),
-            _ => return Err(From::from("ParseError: expect integer"))
+            _ => Err(From::from("ParseError: expect integer"))
         }
     }
 }
@@ -272,7 +262,6 @@ pub fn parse_rename(line: String) -> Result<Event, Box<dyn Error>> {
         _ => return Err(From::from("ParseError: prefix 'rename:' not found"))
     }
 
-    // println!("debug {:?}", pairs);
     let vec: Vec<&str> = pairs.split(',').collect();
     if vec.len() < 6 {
         return Err(From::from("ParseError: expect at least 6 variables"))
@@ -286,13 +275,13 @@ pub fn parse_rename(line: String) -> Result<Event, Box<dyn Error>> {
     let overwritten_inode: Option<u64> = parse_optional_inode(vec[6])?;
 
     Ok(Event::Rename {
-        parent_inode: parent_inode,
-        old_name: old_name,
-        newparent_inode: newparent_inode,
-        new_name: new_name,
-        moved_inode: moved_inode,
-        swapped_inode: swapped_inode,
-        overwritten_inode: overwritten_inode,
+        parent_inode,
+        old_name,
+        newparent_inode,
+        new_name,
+        moved_inode,
+        swapped_inode,
+        overwritten_inode,
     })
 }
 
@@ -328,11 +317,11 @@ pub fn parse_unlink(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<dyn Error
     }
 
     Ok(Event::Unlink {
-        r#type: r#type,
-        pid: pid,
-        path: path,
-        inode: inode,
-        parent: parent
+        r#type,
+        pid,
+        path,
+        inode,
+        parent
     })
 }
 
@@ -368,13 +357,12 @@ pub fn parse_unlink_deleted(kv_maps: HashMap<&str, &str>) -> Result<Event, Box<d
     }
 
     Ok(Event::UnlinkDeleted {
-        r#type: r#type,
-        pid: pid,
-        path: path,
-        inode: inode,
-        parent: parent
+        r#type,
+        pid,
+        path,
+        inode,
+        parent
     })
-
 }
 
 pub fn parse_event(line: &str) -> Result<Event, Box<dyn Error>> {
@@ -390,8 +378,6 @@ pub fn parse_event(line: &str) -> Result<Event, Box<dyn Error>> {
             };
         });
 
-
-    // println!("{:?}", kv_maps);
     // parse open/close/create/symlink
     match kv_maps.get(&"op") {
         Some(&"open") => return parse_open(kv_maps),
@@ -405,217 +391,626 @@ pub fn parse_event(line: &str) -> Result<Event, Box<dyn Error>> {
     };
 
     // parse rename
-    // println!("debug {:?}", kv_maps);
-    match kv_maps.get(&"rename") {
-        Some(_) => return parse_rename(line.to_string()),
-        None => (),
-    };
+    if kv_maps.get(&"rename").is_some() { return parse_rename(line.to_string()) }
 
     Err(From::from("error"))
 }
 
-// TODO: remove dead_code by adding tests
-#[allow(dead_code)]
-pub fn update_inode_map(inode_map: &mut HashMap<u64, PathBuf>, events: &Vec<Event>) {
-    for event in events {
-        match event {
-            Event::Create { pid: _, path, mode: _, flags: _, inode, parent } => {
-                match inode_map.get(&parent) {
-                    Some(parent_path) => {
-                        let full_path = Path::new(parent_path).join(path);
-                        // println!("inserted {} {}", inode, full_path.display());
-                        inode_map.insert(*inode, full_path);
-                    },
-                    _ => println!("inode key {} is not found", *parent)
-                }
-            },
-            Event::Rename {parent_inode, old_name: _, newparent_inode, new_name, moved_inode, swapped_inode , overwritten_inode} => {
-                match inode_map.get(&newparent_inode) {
-                    Some(parent_path) => {
-                        let full_path = Path::new(parent_path).join(new_name);
-                        inode_map.insert(moved_inode.unwrap(), full_path);
-                    },
-                    _ => println!("inode key {} is not found", *newparent_inode)
-                }
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+    use super::*;
 
-                if overwritten_inode.is_some() {
-                    let inode = overwritten_inode.unwrap();
-                    inode_map.remove(&inode);
-                }
+    #[test]
+    fn test_parse_key_value(){
+        // no key
+        assert!(parse_key_value("test").is_err());
+        assert!(parse_key_value("").is_err());
+        assert!(parse_key_value(" ").is_err());
+        assert!(parse_key_value(" test ").is_err());
 
-                if swapped_inode.is_some() {
-                    let swapped_inode = swapped_inode.unwrap();
-                    match inode_map.get(&parent_inode) {
-                        Some(dest_parent_path) => {
-                            match inode_map.get(&swapped_inode) {
-                                Some(src_path) => {
-                                    let file_name = Path::new(src_path).file_name().unwrap();
-                                    let full_path = Path::new(dest_parent_path).join(file_name);
-                                    inode_map.insert(swapped_inode, full_path);
-                                },
-                                _ => println!("inode key {} is not found", swapped_inode)
-                            }
-                        },
-                        _ => println!("inode key {} is not found", *parent_inode)
-                    }
-                }
-            },
-            Event::Mkdir { pid: _, path, mode: _, inode, parent } => {
-                match inode_map.get(&parent) {
-                    Some(parent_path) => {
-                        let full_path = Path::new(parent_path).join(path);
-                        println!("inserted {} {}", inode, full_path.display());
-                        inode_map.insert(*inode, full_path);
-                    },
-                    _ => println!("inode key {} is not found", *parent)
-                }
-            },
-            _ => (),
+        // ok
+        assert!(parse_key_value("key:value").is_ok());
+        assert_eq!(parse_key_value("key:value").unwrap(), ("key", "value"));
+
+        // ok: empty value
+        assert!(parse_key_value("key:").is_ok());
+        assert_eq!(parse_key_value("key:").unwrap(), ("key", ""));
+
+        // ok: prefix with spaces
+        assert!(parse_key_value("key: value").is_ok());
+        assert_eq!(parse_key_value("key: value").unwrap(), ("key", "value"));
+
+        // ok: prefix with spacdes
+        assert!(parse_key_value(" key: value").is_ok());
+        assert_eq!(parse_key_value(" key: value").unwrap(), ("key", "value"));
+
+        // ok: prefix/suffix with spaces
+        assert!(parse_key_value(" key: value ").is_ok());
+        assert_eq!(parse_key_value(" key: value ").unwrap(), ("key", "value"));
+
+        // more than one delimiters
+        assert!(parse_key_value("key: value: value2").is_err());
+        assert!(parse_key_value("key::").is_err());
+        assert!(parse_key_value("key: \"hello:\"").is_err());
+    }
+
+    #[test]
+    fn test_parse_open(){
+        // empty
+        let kv_maps = HashMap::new();
+        assert!(parse_open(kv_maps).is_err());
+
+        // ok
+        let mut kv_maps = HashMap::new();
+        kv_maps.insert("pid", "111");
+        kv_maps.insert("flags", "1");
+        kv_maps.insert("inode", "1");
+        let result = parse_open(kv_maps);
+        let expected = Event::Open { pid: 111, flags: 1, inode: 1};
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), expected);
+
+        // extra
+        let mut kv_maps = HashMap::new();
+        kv_maps.insert("pid", "111");
+        kv_maps.insert("flags", "1");
+        kv_maps.insert("inode", "1");
+        kv_maps.insert("extra", "112312312");
+        let result = parse_open(kv_maps);
+        let expected = Event::Open { pid: 111, flags: 1, inode: 1};
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), expected);
+
+        // non-int pid
+        let mut kv_maps = HashMap::new();
+        kv_maps.insert("pid", "aaa");
+        kv_maps.insert("flags", "1");
+        kv_maps.insert("inode", "1");
+        let result = parse_open(kv_maps);
+        assert!(result.is_err());
+
+        // non-int flags
+        let mut kv_maps = HashMap::new();
+        kv_maps.insert("pid", "111");
+        kv_maps.insert("flags", "aaa");
+        kv_maps.insert("inode", "1");
+        let result = parse_open(kv_maps);
+        assert!(result.is_err());
+
+        // non-int inode
+        let mut kv_maps = HashMap::new();
+        kv_maps.insert("pid", "111");
+        kv_maps.insert("flags", "1");
+        kv_maps.insert("inode", "aaa");
+        let result = parse_open(kv_maps);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_close(){
+        // empty
+        let kv_maps = HashMap::new();
+        assert!(parse_close(kv_maps).is_err());
+
+        // ok
+        let mut kv_maps = HashMap::new();
+        kv_maps.insert("pid", "111");
+        kv_maps.insert("inode", "1");
+        let result = parse_close(kv_maps);
+        let expected = Event::Close { pid: 111, inode: 1};
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), expected);
+
+        // extra
+        let mut kv_maps = HashMap::new();
+        kv_maps.insert("pid", "111");
+        kv_maps.insert("inode", "1");
+        kv_maps.insert("extra", "1sfdafd");
+        let result = parse_close(kv_maps);
+        let expected = Event::Close { pid: 111, inode: 1};
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), expected);
+
+        // non-int pid
+        let mut kv_maps = HashMap::new();
+        kv_maps.insert("pid", "aaa");
+        kv_maps.insert("inode", "1");
+        let result = parse_close(kv_maps);
+        assert!(result.is_err());
+
+        // non-int inode
+        let mut kv_maps = HashMap::new();
+        kv_maps.insert("pid", "111");
+        kv_maps.insert("inode", "aaa");
+        let result = parse_close(kv_maps);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_mkdir(){
+        // empty
+        let kv_maps = HashMap::new();
+        assert!(parse_mkdir(kv_maps).is_err());
+
+        // ok
+        let mut kv_maps = HashMap::new();
+        kv_maps.insert("pid", "111");
+        kv_maps.insert("path", "test.txt");
+        kv_maps.insert("mode", "1");
+        kv_maps.insert("inode", "111");
+        kv_maps.insert("parent", "1234");
+        let result = parse_mkdir(kv_maps);
+        let expected = Event::Mkdir { pid: 111,
+                                            path: "test.txt".to_string(),
+                                            mode: 1,
+                                            inode: 111,
+                                            parent: 1234,};
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), expected);
+
+        // extra
+        let mut kv_maps = HashMap::new();
+        kv_maps.insert("pid", "111");
+        kv_maps.insert("path", "test.txt");
+        kv_maps.insert("mode", "1");
+        kv_maps.insert("inode", "111");
+        kv_maps.insert("parent", "1234");
+        kv_maps.insert("extra", "asdfsafk123123");
+        let result = parse_mkdir(kv_maps);
+        let expected = Event::Mkdir { pid: 111,
+                                            path: "test.txt".to_string(),
+                                            mode: 1,
+                                            inode: 111,
+                                            parent: 1234,};
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), expected);
+
+        // non-int pid
+        let mut kv_maps = HashMap::new();
+        kv_maps.insert("pid", "aa");
+        kv_maps.insert("path", "test.txt");
+        kv_maps.insert("mode", "1");
+        kv_maps.insert("inode", "111");
+        kv_maps.insert("parent", "1234");
+        let result = parse_mkdir(kv_maps);
+        assert!(result.is_err());
+
+        // non-int mode
+        let mut kv_maps = HashMap::new();
+        kv_maps.insert("pid", "111");
+        kv_maps.insert("path", "test.txt");
+        kv_maps.insert("mode", "aa");
+        kv_maps.insert("inode", "111");
+        kv_maps.insert("parent", "1234");
+        let result = parse_mkdir(kv_maps);
+        assert!(result.is_err());
+
+        // non-int inode
+        let mut kv_maps = HashMap::new();
+        kv_maps.insert("pid", "111");
+        kv_maps.insert("path", "test.txt");
+        kv_maps.insert("mode", "1");
+        kv_maps.insert("inode", "aaa");
+        kv_maps.insert("parent", "1234");
+        let result = parse_mkdir(kv_maps);
+        assert!(result.is_err());
+
+        // non-int parent
+        let mut kv_maps = HashMap::new();
+        kv_maps.insert("pid", "111");
+        kv_maps.insert("path", "test.txt");
+        kv_maps.insert("mode", "1");
+        kv_maps.insert("inode", "111");
+        kv_maps.insert("parent", "aaa");
+        let result = parse_mkdir(kv_maps);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_create(){
+        // empty
+        let kv_maps = HashMap::new();
+        assert!(parse_create(kv_maps).is_err());
+
+        // ok
+        let mut kv_maps = HashMap::new();
+        kv_maps.insert("pid", "111");
+        kv_maps.insert("path", "test.txt");
+        kv_maps.insert("mode", "1");
+        kv_maps.insert("flags", "11");
+        kv_maps.insert("inode", "111");
+        kv_maps.insert("parent", "1234");
+        let result = parse_create(kv_maps);
+        let expected = Event::Create {
+            pid: 111,
+            path: "test.txt".to_string(),
+            mode: 1,
+            flags: 11,
+            inode: 111,
+            parent: 1234,
+        };
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), expected);
+
+        // extra
+        let mut kv_maps = HashMap::new();
+        kv_maps.insert("pid", "111");
+        kv_maps.insert("path", "test.txt");
+        kv_maps.insert("mode", "1");
+        kv_maps.insert("flags", "11");
+        kv_maps.insert("inode", "111");
+        kv_maps.insert("parent", "1234");
+        kv_maps.insert("extra", "asdfsafk123123");
+        let result = parse_create(kv_maps);
+        let expected = Event::Create {
+            pid: 111,
+            path: "test.txt".to_string(),
+            mode: 1,
+            flags: 11,
+            inode: 111,
+            parent: 1234,
+        };
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), expected);
+
+        // non-int pid
+        let mut kv_maps = HashMap::new();
+        kv_maps.insert("pid", "aa");
+        kv_maps.insert("path", "test.txt");
+        kv_maps.insert("mode", "1");
+        kv_maps.insert("flags", "11");
+        kv_maps.insert("inode", "111");
+        kv_maps.insert("parent", "1234");
+        let result = parse_create(kv_maps);
+        assert!(result.is_err());
+
+        // non-int mode
+        let mut kv_maps = HashMap::new();
+        kv_maps.insert("pid", "111");
+        kv_maps.insert("path", "test.txt");
+        kv_maps.insert("mode", "aa");
+        kv_maps.insert("flags", "11");
+        kv_maps.insert("inode", "111");
+        kv_maps.insert("parent", "1234");
+        let result = parse_create(kv_maps);
+        assert!(result.is_err());
+
+        // non-int flags
+        let mut kv_maps = HashMap::new();
+        kv_maps.insert("pid", "111");
+        kv_maps.insert("path", "test.txt");
+        kv_maps.insert("mode", "aa");
+        kv_maps.insert("flags", "11");
+        kv_maps.insert("inode", "111");
+        kv_maps.insert("parent", "1234");
+        let result = parse_create(kv_maps);
+        assert!(result.is_err());
+
+        // non-int inode
+        let mut kv_maps = HashMap::new();
+        kv_maps.insert("pid", "111");
+        kv_maps.insert("path", "test.txt");
+        kv_maps.insert("mode", "1");
+        kv_maps.insert("flags", "11");
+        kv_maps.insert("inode", "aaa");
+        kv_maps.insert("parent", "1234");
+        let result = parse_create(kv_maps);
+        assert!(result.is_err());
+
+        // non-int parent
+        let mut kv_maps = HashMap::new();
+        kv_maps.insert("pid", "111");
+        kv_maps.insert("path", "test.txt");
+        kv_maps.insert("mode", "1");
+        kv_maps.insert("flags", "11");
+        kv_maps.insert("inode", "111");
+        kv_maps.insert("parent", "aaa");
+        let result = parse_create(kv_maps);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_symlink(){
+        // empty
+        let kv_maps = HashMap::new();
+        assert!(parse_symlink(kv_maps).is_err());
+
+        // ok
+        let mut kv_maps = HashMap::new();
+        kv_maps.insert("pid", "111");
+        kv_maps.insert("path_1", "test1.txt");
+        kv_maps.insert("path_2", "test2.txt");
+        let result = parse_symlink(kv_maps);
+        let expected = Event::SymLink {
+            pid: 111,
+            path_1: "test1.txt".to_string(),
+            path_2: "test2.txt".to_string(),
+        };
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), expected);
+
+        // extra
+        let mut kv_maps = HashMap::new();
+        kv_maps.insert("pid", "111");
+        kv_maps.insert("path_1", "test1.txt");
+        kv_maps.insert("path_2", "test2.txt");
+        kv_maps.insert("extra", "asdfsafk123123");
+        let result = parse_symlink(kv_maps);
+        let expected = Event::SymLink {
+            pid: 111,
+            path_1: "test1.txt".to_string(),
+            path_2: "test2.txt".to_string(),
+        };
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), expected);
+
+        // non-int pid
+        let mut kv_maps = HashMap::new();
+        kv_maps.insert("pid", "aaa");
+        kv_maps.insert("path_1", "test1.txt");
+        kv_maps.insert("path_2", "test2.txt");
+        let result = parse_create(kv_maps);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_optional_inode(){
+        // empty string
+        let inode: &str = "";
+        let result = parse_optional_inode(inode);
+        assert!(result.is_err());
+
+        // invalid string
+        let inode_str = "abcd";
+        let result = parse_optional_inode(inode_str);
+        assert!(result.is_err());
+
+        // Some(<inode_num>)
+        let inode_str = "Some(abcd)";
+        let result = parse_optional_inode(inode_str);
+        assert!(result.is_err());
+
+        // Some(<inode_num>)
+        let inode_num = 2;
+        let inode_str = "Some(2)";
+        let result = parse_optional_inode(inode_str);
+        match result {
+            Ok(v) => assert_eq!(v, Some(inode_num)),
+            _ => assert!(false)
+        }
+
+        // None
+        let inode_str = "None";
+        let result = parse_optional_inode(inode_str);
+        match result {
+            Ok(v) => assert_eq!(v, None),
+            _ => assert!(false)
         }
     }
-}
 
-// TODO: remove dead_code by adding tests
-#[allow(dead_code,unused_variables)]
-pub fn files_to_update<'a>(inode_map: &'a HashMap<u64, PathBuf>, events: &Vec<Event>) -> HashMap<PathBuf, Action> {
-    let mut files = HashMap::<PathBuf, Action>::new();
-    for event in events {
-        match event {
-            Event::Close { inode, ..} => {
-                match inode_map.get(inode) {
-                    // mark inode for updating
-                    Some(v) => { files.insert(v.clone(), Action::Update); },
-                    // None => { println!("inode num {} not found in map", inode); }
-                    None => { (); }
-                }
-            },
-            Event::Create { inode, ..} => {
-                match inode_map.get(inode) {
-                    Some(v) => { files.insert(v.clone(), Action::Update); },
-                    // None => { println!("inode num {} not found in map", inode); }
-                    None => { (); }
-                }
-            },
-            Event::UnlinkDeleted { inode, ..} => {
-                match inode_map.get(inode) {
-                    Some(v) => { files.insert(v.clone(), Action::Delete); },
-                    // None => { println!("inode num {} not found in map", inode); }
-                    None => { (); }
-                }
-            },
-            Event::Mkdir { inode, .. } => {
-                match inode_map.get(inode) {
-                    Some(v) => { files.insert(v.clone(), Action::Update); },
-                    // None => { println!("inode num {} not found in map", inode); }
-                    None => { (); }
-                }
-            }
+    #[test]
+    fn test_parse_rename(){
+        // empty
+        let line = "".to_string();
+        assert!(parse_rename(line).is_err());
 
-            Event::Rename { old_name, moved_inode, newparent_inode, parent_inode, overwritten_inode, ..} => {
-                // otherwise check swapped inode?
-                match inode_map.get(&parent_inode) {
-                    Some(v) => { files.insert(v.join(old_name), Action::Delete); println!("marking for deletion!"); },
-                    // None => { println!("parent_inode not found in inode_map") },
-                    None => { (); }
-                }
+        // missing values
+        let line = "rename: 3, f1, 1, f3, Some(5)".to_string();
+        let result = parse_rename(line);
+        assert!(result.is_err());
 
-                if moved_inode.is_some() {
-                    match inode_map.get(&moved_inode.unwrap()) {
-                        Some(v) => { files.insert(v.clone(), Action::Update); },
-                        // None => { println!("new inode not found in inode_map") },
-                        None => { (); }
-                    }
-                } else {
-                    panic!("moved_inode not in rename event");
-                }
-            },
-            _ => (),
-        }
+        // ok
+        let line = "rename: 3, f1, 1, f3, Some(5), None, Some(7)".to_string();
+        let result = parse_rename(line);
+        let expected = Event::Rename {
+            parent_inode: 3,
+            old_name: "f1".to_string(),
+            newparent_inode: 1,
+            new_name: "f3".to_string(),
+            moved_inode: Some(5),
+            swapped_inode: None,
+            overwritten_inode: Some(7),
+        };
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), expected);
+
+        //extra
+        let line = "rename: 3, f1, 1, f3, Some(5), None, Some(7), f, 3".to_string();
+        let result = parse_rename(line);
+        let expected = Event::Rename {
+            parent_inode: 3,
+            old_name: "f1".to_string(),
+            newparent_inode: 1,
+            new_name: "f3".to_string(),
+            moved_inode: Some(5),
+            swapped_inode: None,
+            overwritten_inode: Some(7),
+        };
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), expected);
+
+        // non-int parent inode
+        let line = "rename: x, f1, 1, f3, Some(5), None, Some(7)".to_string();
+        let result = parse_rename(line);
+        assert!(result.is_err());
+
+        // non-int inode
+        let line = "rename: 4, f1, x, f3, Some(5), None, Some(7)".to_string();
+        let result = parse_rename(line);
+        assert!(result.is_err());
+
+        // non-int moved inode
+        let line = "rename: 4, f1, 5, f3, Some(hello), None, Some(7)".to_string();
+        let result = parse_rename(line);
+        assert!(result.is_err());
     }
-    files
+
+    #[test]
+    fn test_parse_unlink(){
+        // empty
+        let kv_maps = HashMap::new();
+        assert!(parse_unlink(kv_maps).is_err());
+
+        // ok
+        let mut kv_maps = HashMap::new();
+        kv_maps.insert("type", "file");
+        kv_maps.insert("pid", "2");
+        kv_maps.insert("path", "path_to_file");
+        kv_maps.insert("inode", "2");
+        kv_maps.insert("parent", "3");
+        let result = parse_unlink(kv_maps);
+        let expected = Event::Unlink {
+            r#type: "file".to_string(),
+            pid: 2,
+            path: "path_to_file".to_string(),
+            inode: 2,
+            parent: 3,
+        };
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), expected);
+
+        // extra
+        let mut kv_maps = HashMap::new();
+        kv_maps.insert("type", "file");
+        kv_maps.insert("pid", "2");
+        kv_maps.insert("path", "path_to_file");
+        kv_maps.insert("inode", "2");
+        kv_maps.insert("parent", "3");
+        kv_maps.insert("extra", "4");
+        let result = parse_unlink(kv_maps);
+        let expected = Event::Unlink{
+            r#type: "file".to_string(),
+            pid: 2,
+            path: "path_to_file".to_string(),
+            inode: 2,
+            parent: 3,
+        };
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), expected);
+
+        // non-int pid
+        let mut kv_maps = HashMap::new();
+        kv_maps.insert("type", "file");
+        kv_maps.insert("pid", "hello2");
+        kv_maps.insert("path", "path_to_file");
+        kv_maps.insert("inode", "2");
+        kv_maps.insert("parent", "3");
+        let result = parse_unlink(kv_maps);
+        assert!(result.is_err());
+
+        // non-int inode
+        let mut kv_maps = HashMap::new();
+        kv_maps.insert("type", "file");
+        kv_maps.insert("pid", "2");
+        kv_maps.insert("path", "path_to_file");
+        kv_maps.insert("inode", "$$$");
+        kv_maps.insert("parent", "3");
+        let result = parse_unlink(kv_maps);
+        assert!(result.is_err());
+
+        //non-int parent
+        let mut kv_maps = HashMap::new();
+        kv_maps.insert("type", "file");
+        kv_maps.insert("pid", "2");
+        kv_maps.insert("path", "path_to_file");
+        kv_maps.insert("inode", "2");
+        kv_maps.insert("parent", "parent");
+        let result = parse_unlink(kv_maps);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_unlink_deleted(){
+        // empty
+        let kv_maps = HashMap::new();
+        assert!(parse_unlink_deleted(kv_maps).is_err());
+
+        // ok
+        let mut kv_maps = HashMap::new();
+        kv_maps.insert("type", "file");
+        kv_maps.insert("pid", "2");
+        kv_maps.insert("path", "path_to_file");
+        kv_maps.insert("inode", "2");
+        kv_maps.insert("parent", "3");
+        let result = parse_unlink_deleted(kv_maps);
+        let expected = Event::UnlinkDeleted {
+            r#type: "file".to_string(),
+            pid: 2,
+            path: "path_to_file".to_string(),
+            inode: 2,
+            parent: 3,
+        };
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), expected);
+
+        // extra
+        let mut kv_maps = HashMap::new();
+        kv_maps.insert("type", "file");
+        kv_maps.insert("pid", "2");
+        kv_maps.insert("path", "path_to_file");
+        kv_maps.insert("inode", "2");
+        kv_maps.insert("parent", "3");
+        kv_maps.insert("extra", "4");
+        let result = parse_unlink_deleted(kv_maps);
+        let expected = Event::UnlinkDeleted {
+            r#type: "file".to_string(),
+            pid: 2,
+            path: "path_to_file".to_string(),
+            inode: 2,
+            parent: 3,
+        };
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), expected);
+
+        // non-int pid
+        let mut kv_maps = HashMap::new();
+        kv_maps.insert("type", "file");
+        kv_maps.insert("pid", "hello2");
+        kv_maps.insert("path", "path_to_file");
+        kv_maps.insert("inode", "2");
+        kv_maps.insert("parent", "3");
+        let result = parse_unlink_deleted(kv_maps);
+        assert!(result.is_err());
+
+        // non-int inode
+        let mut kv_maps = HashMap::new();
+        kv_maps.insert("type", "file");
+        kv_maps.insert("pid", "2");
+        kv_maps.insert("path", "path_to_file");
+        kv_maps.insert("inode", "$$$");
+        kv_maps.insert("parent", "3");
+        let result = parse_unlink_deleted(kv_maps);
+        assert!(result.is_err());
+
+        //non-int parent
+        let mut kv_maps = HashMap::new();
+        kv_maps.insert("type", "file");
+        kv_maps.insert("pid", "2");
+        kv_maps.insert("path", "path_to_file");
+        kv_maps.insert("inode", "2");
+        kv_maps.insert("parent", "parent");
+        let result = parse_unlink_deleted(kv_maps);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_event(){
+        assert!(parse_event("op: open, pid: 0, flags: 0, inode: 0").is_ok());
+        assert!(parse_event("op: close, pid: 0, inode: 0").is_ok());
+        assert!(parse_event("op: close, pid: 0, inode: 0, random: 6666").is_ok());
+        assert!(parse_event("op: create, pid: 0, path: hello.txt, mode: 33152, flags: 164034, inode: 0, parent:10").is_ok());
+        assert!(parse_event("op: symlink, pid: 0, path_1: hello.txt, path_2: test.txt").is_ok());
+        assert!(parse_event("rename: 3, f1, 1, f3, Some(5), None, Some(7)").is_ok());
+        assert!(parse_event("op: unlink_deleted, type: file, pid: 38567432, path: delete_file, inode: 8, parent: 1").is_ok());
+        assert!(parse_event("op: unlink, type: file, pid: 38567432, path: delete_file, inode: 8, parent: 1").is_ok());
+
+        assert!(parse_event("").is_err());
+        // Unknown op
+        assert!(parse_event("op: new_op, hi: 1234").is_err());
+        // Invalid key
+        assert!(parse_event("op: open, id: 0, flags: 0, inode: None").is_err());
+        // Missing a value
+        assert!(parse_event("rename: 3, 1, f3, Some(5), None, Some(7)").is_err());
+    }
 }
-
-#[allow(dead_code)]
-pub fn read_lin_file(file_name: &str) -> Result<String, io::Error> {
-    Ok(String::from_utf8_lossy(&fs::read(file_name)?).into_owned())
-}
-
-pub fn get_lin_size(file_name: &str) -> u64 {
-    fs::metadata(file_name).unwrap().len()
-}
-
-#[allow(dead_code)]
-pub fn populate_events(events: &mut Vec::<Event>, lin: String) {
-    let vec: Vec<&str> = lin.split('\n').collect();
-    vec.iter()
-        .for_each(|p| {
-            if !p.is_empty() {
-                let result = parse_event(p);
-                match result {
-                    Ok(event) => { /* println!("ok {:?}", event); */ events.push(event); },
-                    // Err(_e) => {println!("error {:?}", p);},
-                    Err(_e) => {println!("error, not showing contents for now")},
-                }
-            }
-        });
-}
-
-// pub fn main(){
-//     let mut events = Vec::<Event>::new();
-//     let mut inode_map = HashMap::new();
-
-//     let lin = read_lin_file(".lin/mv");
-//     let lin = match lin {
-//         Ok(file) => file,
-//         Err(error) => panic!("Problem opening the file: {:?}", error),
-//     };
-
-//     populate_events(&mut events, lin);
-
-//     let mut root = PathBuf::new();
-//     root.push("/");
-//     inode_map.insert(1, root);
-//     update_inode_map(&mut inode_map, &events);
-
-//     for (key, value) in &inode_map {
-//         println!("{}: {}", key, value.display());
-//     }
-//     let files = files_to_update(&inode_map, &events);
-//     files.iter().for_each(|f| { println!("file to update {:?}", f); });
-
-
-    // println!("{:?}", parse_key_value("op: open"));
-    // println!("{:?}", parse_key_value("op: open: ss"));
-    // println!("{:?}", parse_key_value("op:"));
-    // println!("{:?}", parse_key_value("op"));
-
-    // println!("{:?}", parse_event("op: open, pid: 0, flags: 0, inode: 0"));
-    // println!("{:?}", parse_event("op: open, pid: 0, flags: 0, inoded: 0"));
-    // println!("{:?}", parse_event("op: close, pid: 0, inode: 0"));
-    // println!("{:?}", parse_event("op: close, pid: 0, inode: 0, random: 6666"));
-    // println!("{:?}", parse_event("op: create, pid: 0, path: hello.txt, mode: 33152, flags: 164034, inode: 0"));
-    // println!("{:?}", parse_event("op: symlink, pid: 0, path_1: hello.txt, path_2: test.txt"));
-    // println!("{:?}", parse_event("rename: 1, hello.txt, 1, hello.txt~"));
-
-    // Ok(("op", "open"))
-    // Err("ParseError")
-    // Ok(("op", ""))
-    // Err("ParseError")
-    // {"pid": "0", "op": "open", "flags": "0", "inode": "0"}
-    // Ok(Open { pid: 0, flags: 0, inode: 0 })
-    // {"flags": "0", "inoded": "0", "pid": "0", "op": "open"}
-    // Err("ParseError")
-    // {"op": "close", "pid": "0", "inode": "0"}
-    // Ok(Close { pid: 0, inode: 0 })
-    // {"pid": "0", "op": "close", "random": "6666", "inode": "0"}
-    // Ok(Close { pid: 0, inode: 0 })
-    // {"pid": "0", "path": "hello.txt", "flags": "164034", "inode": "0", "op": "create", "mode": "33152"}
-    // Ok(Create { pid: 0, path: "hello.txt", mode: 33152, flags: 164034, inode: 0 })
-    // {"op": "symlink", "path_1": "hello.txt", "path_2": "test.txt", "pid": "0"}
-    // Ok(SymLink { pid: 0, path_1: "hello.txt", path_2: "test.txt" })
-    // {"rename": "1"}
-    // debug {"rename": "1"}
-    // debug " 1, hello.txt, 1, hello.txt~"
-    // Ok(Rename { parent_inode: 1, old_name: "hello.txt", newparent_inode: 1, new_name: "hello.txt~" })
-// }
- 
