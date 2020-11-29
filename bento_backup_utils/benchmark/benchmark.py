@@ -53,7 +53,7 @@ def create_test_dir(src_dir: str,
       repeat=repeat,
       payload=callback
    )
-   
+
    return all_dirs, all_files
 
 def remove_test_dir(path: str) -> None:
@@ -80,7 +80,6 @@ def iterate_files(action: Callable, src_dir: str, prob: float) -> None:
     if not (0 <= prob <= 1):
         raise ValueError("prob must be >= 0 and <=1")
 
-    # TODO: change to pathlib
     for directory, subdirs, files in os.walk(src_dir):
         for filename in files:
             r = random.random()
@@ -240,7 +239,7 @@ def main(args: argparse.Namespace) -> None:
                     max_depth=args.max_depth,
                     repeat=args.repeat,
                     payload=callback)
-    print('{} files and {} folders created'.format(len(all_dirs), len(all_files)))
+    print('{} files and {} folders created'.format(len(all_files), len(all_dirs)))
 
     # Run benchmark
     if args.mode == 'rsync':
@@ -276,47 +275,47 @@ if __name__ == "__main__":
     parser.add_argument('--mode',
                         type=str,
                         default='rsync',
-                        help="'rsync' or 'rsync-checksum' or 'bento'")
+                        help="'cp' or 'rsync' or 'rsync-checksum' or 'bento'")
 
     # Directory tree parameters
     parser.add_argument('--n-files',
                         type=int,
                         default=10,
-                        help="")
+                        help="Number of files to create")
     parser.add_argument('--n-dirs',
                         type=int,
                         default=5,
-                        help="")
+                        help="Number of folders to create")
     parser.add_argument('--max-depth',
                         type=int,
                         default=5,
-                        help="")
+                        help="Maximum depth to descend into the file tree")
     parser.add_argument('--repeat',
                         type=int,
                         default=3,
-                        help="")
+                        help="Number of rounds to repeat file and folders creation")
 
     # File/directory modification parameters
     parser.add_argument('--modfile-prob',
                         type=float,
                         default=0.5,
-                        help="")
+                        help="The probability of modifying a file [0-1]")
     parser.add_argument('--rmfile-prob',
                         type=float,
                         default=0.3,
-                        help="")
+                        help="The probability of removing a file [0-1]")
     parser.add_argument('--renamefile-prob',
                         type=float,
                         default=0.3,
-                        help="")
+                        help="The probability of renaming a file [0-1]")
     parser.add_argument('--rmdir-prob',
                         type=float,
                         default=0.3,
-                        help="")
+                        help="The probability of removing a directory [0-1]")
     parser.add_argument('--renamedir-prob',
                         type=float,
                         default=0.3,
-                        help="")
+                        help="The probability of renaming a directory [0-1]")
     parser.add_argument(
         '--skip-cleanup',
         type=bool,
