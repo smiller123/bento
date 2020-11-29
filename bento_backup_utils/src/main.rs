@@ -1,69 +1,115 @@
 use std::env;
+use std::io;
+use std::fs::File;
+use std::io::{BufReader, SeekFrom};
+use std::io::prelude::*;
+use std::error::Error;
 use std::path::{Path, PathBuf};
-use std::{thread, time};
 use std::collections::HashMap;
 
-
+mod analyzer;
 mod parser;
 mod fs;
 
-fn run_utility(mount_point: &Path, remote: &Path, scan_frequency: &u64) {
+const LIN_FILE: &str = ".lin";
+const OUTPUT_FILE: &str = ".backup";
+
+pub fn read_file_and_seek(prev_size: u64, file_name: &str) -> Result<(String, u64), io::Error> {
+    let mut file = File::open(file_name)?;
+    file.seek(SeekFrom::Start(prev_size))?;
+    let mut content = Vec::new();
+    file.read_to_end(&mut content)?;
+    let n_bytes = content.len() as u64;
+    let safe_content = String::from_utf8_lossy(&content).into_owned();
+
+    Ok((safe_content, n_bytes))
+}
+
+pub fn load_from_file(mount_point: &str) -> (HashMap::<u64, PathBuf>, u64) {
+    // Open the file in read-only mode with buffer.
+    let mut inode_map = HashMap::<u64, PathBuf>::new();
+    inode_map.insert(1, PathBuf::from(mount_point));
+    let default = (inode_map, 0);
+
+    let file = File::open(Path::new(mount_point).join(OUTPUT_FILE));
+    let file = match file {
+        Ok(f) => f,
+        _ => return default
+    };
+
+    let reader = BufReader::new(file);
+    let output = serde_json::from_reader(reader);
+    match output {
+        Ok((a,b)) => (a, b),
+        _ => default,
+    }
+}
+
+pub fn save_to_file(mount_point: &str, inode_map: HashMap::<u64, PathBuf>, prev_size: u64) -> Result<(), Box<dyn Error>> {
+    let output_file = File::create(Path::new(mount_point).join(OUTPUT_FILE))?;
+    serde_json::to_writer(output_file, &(inode_map, prev_size))?;
+    Ok(())
+}
+
+fn run_utility(mount_point: &Path, source_dir: &Path, remote: &Path) {
     assert!(mount_point.is_dir());
+    assert!(source_dir.is_dir());
     assert!(remote.is_dir());
 
-    let mut inode_map = HashMap::<u64, PathBuf>::new();
+    let (inode_map, prev_size) = load_from_file(mount_point.to_str().unwrap());
+
+    let mut inode_map = inode_map;
+    let mut prev_size = prev_size;
 
     // add root to map, since its creation isn't logged
-    inode_map.insert(1, PathBuf::from(mount_point));
+    let lin_file = mount_point.join(LIN_FILE);
 
-    let lin_file = mount_point.join(".lin");
-    let mut prev_size: usize = 0;  // index to read new .lin contents from
-    loop {
-        println!("in loop!");
-        let mut events = Vec::<parser::Event>::new();
-        assert!(events.len() == 0);
+    let mut events = Vec::<parser::Event>::new();
+    assert!(events.is_empty());
 
-        // TODO(nmonsees): ideally this should read in only prev_size..lin_size.len() from disk, but I can't find
-        // an fs function to do that
-        let lin_contents = parser::read_lin_file(lin_file.to_str().unwrap()).expect("Unable to read lin file from mount point");
-        let lin_slice = lin_contents.get(prev_size..lin_contents.len()).unwrap();  // new events from previous scan
+    // This read in only prev_size..lin_size.len() from disk
+    let (lin_contents, n_bytes) = read_file_and_seek(prev_size, lin_file.to_str().unwrap()).expect("Unable to read lin file from mount point");
+    println!("Read a string of length {} (n_bytes = {})", lin_contents.len(), n_bytes);
 
-        println!("lin_contents len: {}", lin_contents.len());
-        println!("lin_contents len from parser: {}", parser::get_lin_size(lin_file.to_str().unwrap()));
-        println!("lin_slice len: {}", lin_slice.len());
+    analyzer::populate_events(&mut events, lin_contents);  // TODO(nmonsees): will print error, need to change in parser
+    // analyzer::update_inode_map(&mut inode_map, &events);
 
-        parser::populate_events(&mut events, String::from(lin_slice));  // TODO(nmonsees): will print error, need to change in parser
-        parser::update_inode_map(&mut inode_map, &events);
+    let files: HashMap<PathBuf, analyzer::Action> = analyzer::files_to_update(&mut inode_map, &events);
+    let base_path = Path::new(source_dir);
 
-        let files: HashMap<PathBuf, parser::Action> = parser::files_to_update(&inode_map, &events);
-
-        for (file, action) in &files {
-            match action {
-                // TODO(nmonsees): unsure how to avoid the file clone here, passing a ref doesn't
-                // guarantee lifetime, but this does seem not great
-                parser::Action::Update => { fs::copy(file.clone(), mount_point, remote).expect("Unable to perform copy to remote"); },
-                parser::Action::Delete => { fs::delete(file.clone(), mount_point, remote).expect("Unable to perform deletion from remote"); },
-            }
-        }
-
-
-        // fs actions will add log entries to .lin, so need to grab prev_size after performing
-        // copy/deletes to remote
-
-        // prev_size = parser::get_lin_size(lin_file.to_str().unwrap()) as usize;
-        // println!("prev_size metadata: {}", prev_size);
-
-        // TODO(nmonsees): it turns out that the metadata isn't immediately synchronized after
-        // writes to the log, so the hack in place here is just to read in the whole contents from
-        // disk again, and grab the len
-        //
-        // This works, but it would be great to have a sync on the .lin to just fetch the metadata
-        let lin_post_contents = parser::read_lin_file(lin_file.to_str().unwrap()).expect("Unable to read lin file from mount point");
-        prev_size = lin_post_contents.len();
-        println!("prev_size from file: {}", prev_size);
-
-        thread::sleep(time::Duration::from_millis(*scan_frequency));
+    // Copy files
+    let update_files = files.iter()
+                        .filter(|(f, _)| f.as_path().starts_with(source_dir))
+                        .filter(|(_, act)| matches!(act, analyzer::Action::Update))
+                        .map(|(f, _)| f.as_path().strip_prefix(base_path).unwrap().display().to_string())
+                        .collect();
+    if fs::copy(update_files, source_dir, remote).is_err() {
+        println!("Warning: Some files can't be copied. This may happen if \
+                  you try to copy the files the are already deleted.");
     }
+
+    // Delete files
+    let delete_files = files.iter()
+                        .filter(|(f, _)| f.as_path().starts_with(source_dir))
+                        .filter(|(_, act)| matches!(act, analyzer::Action::Delete))
+                        .map(|(f, _)| f.as_path().strip_prefix(base_path).unwrap().display().to_string())
+                        .collect();
+    if fs::delete(delete_files, remote).is_err() {
+        println!("Warning: Some files can't be copied. This may happen if \
+                  there is no files to remove at the remote or if \
+                  you have no permission.");
+    }
+
+    // fs actions will add log entries to .lin, so need to grab prev_size after performing
+    // copy/deletes to remote
+
+    // read lin after back up
+    prev_size += n_bytes;
+    let (_, n_bytes) = read_file_and_seek(prev_size, lin_file.to_str().unwrap()).expect("Unable to read lin file from mount point");
+    prev_size += n_bytes;
+    println!("Last byte read on this run: {:?}", prev_size);
+
+    save_to_file(mount_point.to_str().unwrap(), inode_map, prev_size).unwrap();
 }
 
 // main script for backup utility, runs in a loop, fetching updates from .lin, updating
@@ -71,12 +117,168 @@ fn run_utility(mount_point: &Path, remote: &Path, scan_frequency: &u64) {
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() != 4 {
-        panic!("Arguments: <path to file system mount point> <path to remote backup> <backup frequency in milliseconds>");
+        panic!("Arguments: <path to file system mount point> <path to source dir> <path to remote backup>");
     }
 
     let mount_point = Path::new(&args[1]);
-    let remote = Path::new(&args[2]);
-    let scan_frequency = &args[3].parse::<u64>().unwrap();
+    let source_dir = Path::new(&args[2]);
+    let remote = Path::new(&args[3]);
 
-    run_utility(&mount_point, &remote, &scan_frequency);
+    run_utility(&mount_point, &source_dir, &remote);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs as rust_fs;
+    use std::panic;
+    use serial_test::serial;
+
+    const TEST_FOLDER: &'static str = "./tmp";
+
+    fn setup() {
+        if Path::new(TEST_FOLDER).exists() {
+            rust_fs::remove_dir_all(TEST_FOLDER).unwrap();
+        }
+        rust_fs::create_dir(Path::new(TEST_FOLDER)).unwrap();
+    }
+
+    fn teardown() {
+        if Path::new(TEST_FOLDER).exists() {
+            rust_fs::remove_dir_all(TEST_FOLDER).unwrap();
+        }
+    }
+    fn run_test<T>(test: T) -> ()
+    where
+        T: FnOnce() -> () + panic::UnwindSafe
+    {
+        setup();
+        let result = panic::catch_unwind(|| {
+            test()
+        });
+        teardown();
+        assert!(result.is_ok())
+    }
+
+    #[test]
+    #[serial]
+    fn test_save_to_file() {
+        run_test(||{
+            rust_fs::create_dir(Path::new(TEST_FOLDER).join("test_save_to_file")).unwrap();
+            let mount_point = Path::new(TEST_FOLDER).join("test_save_to_file");
+            let mount_point = mount_point.to_str().unwrap();
+
+            // ok
+            let mut inode_map = HashMap::<u64, PathBuf>::new();
+            inode_map.insert(1, PathBuf::from(mount_point));
+            let res = save_to_file(mount_point, inode_map, 0);
+            assert!(res.is_ok());
+        });
+    }
+
+    #[test]
+    #[serial]
+    fn test_load_from_file() {
+        run_test(||{
+            rust_fs::create_dir(Path::new(TEST_FOLDER).join("test_load_from_file")).unwrap();
+            let mount_point = Path::new(TEST_FOLDER).join("test_load_from_file");
+            let mount_point = mount_point.to_str().unwrap();
+
+            // load from empty file
+            let res = load_from_file(mount_point);
+            let mut inode_map = HashMap::<u64, PathBuf>::new();
+            inode_map.insert(1, PathBuf::from(mount_point));
+            assert_eq!(inode_map.len(), res.0.len()); // compare length
+            assert!(inode_map.keys().all(|k| { res.0.contains_key(k) & (inode_map.get(k).unwrap() == res.0.get(k).unwrap()) }));
+            assert_eq!(0, res.1);
+
+            // save to file
+            let mut inode_map = HashMap::<u64, PathBuf>::new();
+            inode_map.insert(1, PathBuf::from(mount_point));
+            inode_map.insert(100, PathBuf::from("hello"));
+            let res = save_to_file(mount_point, inode_map, 100);
+            assert!(res.is_ok());
+
+            // load from file
+            let mut inode_map = HashMap::<u64, PathBuf>::new();
+            inode_map.insert(1, PathBuf::from(mount_point));
+            inode_map.insert(100, PathBuf::from("hello"));
+            let res = load_from_file(mount_point);
+            assert_eq!(inode_map, res.0);
+            assert!(inode_map.keys().all(|k| { res.0.contains_key(k) & (inode_map.get(k).unwrap() == res.0.get(k).unwrap()) }));
+            assert_eq!(100, res.1);
+        });
+    }
+
+    #[test]
+    #[serial]
+    fn test_read_file_and_seek() {
+        run_test(||{
+            rust_fs::create_dir(Path::new(TEST_FOLDER).join("test_read_file_and_seek")).unwrap();
+            let file_path = Path::new(TEST_FOLDER).join("test_read_file_and_seek").join(OUTPUT_FILE);
+
+            // check file doesn't exist
+            let ret = file_path.to_str().unwrap();
+            assert!(!Path::new(ret).exists());
+
+            // expect error when reading non-exist file.
+            let ret = read_file_and_seek(0, file_path.to_str().unwrap());
+            assert!(ret.is_err());
+
+            // simple case
+            rust_fs::write(file_path.to_str().unwrap(), b"abcdef").unwrap();
+            let ret = read_file_and_seek(0, file_path.to_str().unwrap());
+            assert!(ret.is_ok());
+            let (output, n_bytes) = ret.unwrap();
+            assert_eq!(output, "abcdef");
+            assert_eq!(n_bytes, 6);
+
+            // simple with shift
+            rust_fs::write(file_path.to_str().unwrap(), b"abcdef").unwrap();
+            let ret = read_file_and_seek(3, file_path.to_str().unwrap());
+            assert!(ret.is_ok());
+            let (output, n_bytes) = ret.unwrap();
+            assert_eq!(output, "def");
+            assert_eq!(n_bytes, 3);
+
+            // multiple lines
+            rust_fs::write(file_path.to_str().unwrap(), b"\n\n1234\n5678\n\n").unwrap();
+            let ret = read_file_and_seek(0, file_path.to_str().unwrap());
+            assert!(ret.is_ok());
+            let (output, n_bytes) = ret.unwrap();
+            assert_eq!(output, "\n\n1234\n5678\n\n");
+            assert_eq!(n_bytes, 13);
+
+            // multiple lines with shift
+            rust_fs::write(file_path.to_str().unwrap(), b"\n\n1234\n5678\n\n").unwrap();
+            let ret = read_file_and_seek(2, file_path.to_str().unwrap());
+            assert!(ret.is_ok());
+            let (output, n_bytes) = ret.unwrap();
+            assert_eq!(output, "1234\n5678\n\n");
+            assert_eq!(n_bytes, 11);
+
+            // weird character
+            let input_string = vec![72, 101, 108, 108, 111, 32, 240, 144, 128, 87, 111, 114, 108, 100];
+            rust_fs::write(file_path.to_str().unwrap(), input_string).unwrap();
+            let ret = read_file_and_seek(0, file_path.to_str().unwrap());
+            assert!(ret.is_ok());
+            let (output, n_bytes) = ret.unwrap();
+            assert_eq!(output, "Hello �World");
+            let ref_output_bytes: [u8; 14] = [72, 101, 108, 108, 111, 32, 239, 191, 189, 87, 111, 114, 108, 100];
+            assert_eq!(output.as_bytes(), &ref_output_bytes);
+            assert_eq!(n_bytes, 14);
+
+            // weird character with shift
+            //                      H   e    l    l    o   <sp> <err><err><err><err> W  o    r    l    d
+            let input_string = vec![72, 101, 108, 108, 111, 32, 240, 144, 128, 254, 87, 111, 114, 108, 100];
+            rust_fs::write(file_path.to_str().unwrap(), input_string).unwrap();
+            let ret = read_file_and_seek(6, file_path.to_str().unwrap());
+            assert!(ret.is_ok());
+            let (output, n_bytes) = ret.unwrap();
+            assert_eq!(output, "��World");
+            let ref_output_bytes: [u8; 11] = [239, 191, 189, 239, 191, 189, 87, 111, 114, 108, 100];
+            assert_eq!(output.as_bytes(), &ref_output_bytes);
+            assert_eq!(n_bytes, 9);
+        });
+    }
 }
