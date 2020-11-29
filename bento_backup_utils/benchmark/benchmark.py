@@ -30,6 +30,7 @@ import subprocess
 import pdb
 from typing import Callable
 
+BASE_DIR = "/mnt/xv6fs_prov"
 SRC_DIR = "src_dir"
 DEST_DIR = "dest_dir"
 
@@ -206,17 +207,17 @@ def run_cp(args: argparse.Namespace) -> None:
 
 
 def run_bento(args: argparse.Namespace) -> None:
-    # TODO: backup before
+    mount_path = args.mount_path
+    src_path = args.src_path
+    dest_path = args.dest_path
+    subprocess.call(['cargo', 'run', mount_path, src_path, dest_path])
 
     # modify
     modify(args)
 
+    # start benchmarking
     start_time = time.time()
-    # TODO: get a list of files to be updated / removed
-
-    # TODO: filter the list based on src_path and dest_path
-
-    # TODO: run fs copy
+    subprocess.call(['cargo', 'run', mount_path, src_path, dest_path])
 
     end_time = time.time()
     duration = end_time - start_time
@@ -259,6 +260,10 @@ def main(args: argparse.Namespace) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument('--mount-path',
+                        type=str,
+                        default=BASE_DIR,
+                        help="Mount directory")
     parser.add_argument('--src-path',
                         type=str,
                         default=SRC_DIR,
