@@ -54,7 +54,14 @@ pub fn copy(file_list: Vec<String>, base_dir: &Path, target_dir: &Path) -> Resul
                 let handler = |process_info: TransitProcess| {
                     tx.send(process_info).unwrap();
                 };
-                fs_extra::file::copy_with_progress(&source_path, &target_path, &options, handler);
+
+                if fs_extra::file::copy_with_progress(&source_path,
+                                                      &target_path,
+                                                      &options,
+                                                      handler
+                                                    ).is_err() {
+                    // println!("error copy with progress");
+                };
             });
 
             loop {
