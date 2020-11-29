@@ -1,6 +1,6 @@
 [package]
 name = "bento_backup_utils"
-version = "0.1.0"
+version = "1.0.0"
 authors = ["Teerapat Jenrungrot", "Pat Kosakanchit", "Nicolas Monsees"]
 edition = "2018"
 
