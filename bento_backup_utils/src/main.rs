@@ -6,6 +6,7 @@ use std::io::prelude::*;
 use std::error::Error;
 use std::path::{Path, PathBuf};
 use std::collections::HashMap;
+use std::fs as rust_fs;
 
 mod analyzer;
 mod parser;
@@ -54,7 +55,9 @@ pub fn save_to_file(mount_point: &str, inode_map: HashMap::<u64, PathBuf>, prev_
 fn run_utility(mount_point: &Path, source_dir: &Path, remote: &Path) {
     assert!(mount_point.is_dir());
     assert!(source_dir.is_dir());
-    assert!(remote.is_dir());
+    if !remote.is_dir() {
+        rust_fs::create_dir(Path::new(remote)).unwrap();
+    }
 
     let (inode_map, prev_size) = load_from_file(mount_point.to_str().unwrap());
 
