@@ -19,43 +19,37 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN 
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 import argparse
-import randomfiletree
 import pathlib
 import shutil
-import itertools
 import os
 import random
 import time
 import subprocess
-import pdb
-import checksumdir
 from typing import Callable
+import randomfiletree
+import checksumdir
 
 BASE_DIR = "/mnt/xv6fs_prov"
 SRC_DIR = "/mnt/xv6fs_prov/src_dir"
 DEST_DIR = "dest_dir"
 
 
-def create_test_dir(src_dir: str,
-                    n_files: int,
-                    n_folders: int,
-                    max_depth: int,
-                    repeat: int,
-                    payload: Callable) -> None:
-   """
-   Create a test dir.
-   """
+def create_test_dir(src_dir: str, n_files: int, n_folders: int, max_depth: int,
+                    repeat: int, payload: Callable) -> None:
+    """
+    Create a test dir.
+    """
 
-   all_dirs, all_files = randomfiletree.iterative_tree(
-      src_dir,
-      nfolders_func=lambda _: n_folders,
-      nfiles_func=lambda _: n_files,
-      maxdepth=max_depth,
-      repeat=repeat,
-      payload=callback
-   )
+    all_dirs, all_files = randomfiletree.iterative_tree(
+        src_dir,
+        nfolders_func=lambda _: n_folders,
+        nfiles_func=lambda _: n_files,
+        maxdepth=max_depth,
+        repeat=repeat,
+        payload=payload)
 
-   return all_dirs, all_files
+    return all_dirs, all_files
+
 
 def remove_test_dir(path: str) -> None:
     """
@@ -74,14 +68,15 @@ def callback(target_dir: pathlib.Path) -> pathlib.Path:
             f.write('aaaa')
         yield path
 
+
 def iterate_files(action: Callable, src_dir: str, prob: float) -> None:
     """
     iterate over the files in SRC_DIR and perform action
     """
-    if not (0 <= prob <= 1):
+    if not 0 <= prob <= 1:
         raise ValueError("prob must be >= 0 and <=1")
 
-    for directory, subdirs, files in os.walk(src_dir):
+    for directory, _, files in os.walk(src_dir):
         for filename in files:
             r = random.random()
             if r < prob:
@@ -118,10 +113,10 @@ def iterate_directories(action: Callable, src_dir: str, prob: float) -> None:
     """
     iterate over subdir in SRC_DIR and perform action
     """
-    if not (0 <= prob <= 1):
+    if not 0 <= prob <= 1:
         raise ValueError("prob must be >= 0 and <=1")
 
-    for directory, subdirs, files in os.walk(src_dir):
+    for directory, subdirs, _ in os.walk(src_dir):
         for subdir in subdirs:
             r = random.random()
             if r < prob:
@@ -136,12 +131,14 @@ def create_file(directory: pathlib.Path, subdir: str) -> None:
     with open(path, 'w') as f:
         f.write('n')
 
+
 def create_dir(directory: pathlib.Path, subdir: str) -> None:
     """
     create filename in directory
     """
     path = directory / subdir / randomfiletree.core.random_string()
     os.mkdir(path)
+
 
 def remove_dir(directory: pathlib.Path, subdir: str):
     """
@@ -173,6 +170,7 @@ def get_tree(src_dir: str) -> dict:
 
     return src_dir_tree
 
+
 def compare_trees(tree1: dict, tree2: dict) -> (int, int):
     modified_files = 0
     modified_dirs = 0
@@ -197,13 +195,14 @@ def compare_trees(tree1: dict, tree2: dict) -> (int, int):
                 modified_files += 1
     return (modified_files, modified_dirs)
 
+
 def modify(args: argparse.Namespace) -> None:
     """
     modify contents of the source folders
     """
 
     tree1 = get_tree(args.src_path)
-    subprocess.call(['tree', args.src_path])
+    # subprocess.call(['tree', args.src_path])
 
     # Make modifications on src_path
     iterate_files(modify_file, args.src_path, args.modfile_prob)
@@ -216,12 +215,14 @@ def modify(args: argparse.Namespace) -> None:
     # iterate_directories(create_file, args.src_path, args.createfile_prob)
 
     tree2 = get_tree(args.src_path)
-    subprocess.call(['tree', args.src_path])
+    # subprocess.call(['tree', args.src_path])
 
     modified_files, modified_dirs = compare_trees(tree1, tree2)
-    print("{} files and {} folders modified".format(modified_files, modified_dirs))
+    print("{} files and {} folders modified".format(modified_files,
+                                                    modified_dirs))
 
-def run_rsync(args: argparse.Namespace, checksum: bool=False) -> None:
+
+def run_rsync(args: argparse.Namespace, checksum: bool = False) -> None:
     """
     run rsync on the source directory
     if checksum is true, skip based on checksum instead of modified time and
@@ -244,15 +245,20 @@ def run_rsync(args: argparse.Namespace, checksum: bool=False) -> None:
     # benchmark
     start_time = time.time()
     if checksum:
-        subprocess.call(['rsync', '--delete', '--checksum', '--recursive', src_path + "/", dest_path])
+        subprocess.call([
+            'rsync', '--delete', '--checksum', '--recursive', src_path + "/",
+            dest_path
+        ])
     else:
-        subprocess.call(['rsync', '--delete', '--recursive', src_path + "/", dest_path])
+        subprocess.call(
+            ['rsync', '--delete', '--recursive', src_path + "/", dest_path])
     end_time = time.time()
     duration = end_time - start_time
     print('rsync: {} s'.format(duration))
 
     print("src path hash: {}".format(checksumdir.dirhash(src_path)))
     print("dest path hash: {}".format(checksumdir.dirhash(dest_path)))
+
 
 def run_cp(args: argparse.Namespace) -> None:
     """
@@ -304,6 +310,7 @@ def run_bento(args: argparse.Namespace) -> None:
 
 
 def main(args: argparse.Namespace) -> None:
+
     random.seed(args.seed)
     # Remove target directory if it exists beforehand
     if os.path.isdir(args.src_path):
@@ -314,17 +321,18 @@ def main(args: argparse.Namespace) -> None:
 
     # Create a random directory tree
     all_dirs, all_files = create_test_dir(args.src_path,
-                    n_files=args.n_files,
-                    n_folders=args.n_dirs,
-                    max_depth=args.max_depth,
-                    repeat=args.repeat,
-                    payload=callback)
-    print('{} files and {} folders created'.format(len(all_files), len(all_dirs)))
+                                          n_files=args.n_files,
+                                          n_folders=args.n_dirs,
+                                          max_depth=args.max_depth,
+                                          repeat=args.repeat,
+                                          payload=callback)
+    print('{} files and {} folders created'.format(len(all_files),
+                                                   len(all_dirs)))
 
     # Run benchmark
     if args.mode == 'rsync':
         run_rsync(args)
-    elif args.mode =='rsync-checksum':
+    elif args.mode == 'rsync-checksum':
         run_rsync(args, checksum=True)
     elif args.mode == 'bento':
         run_bento(args)
@@ -370,16 +378,14 @@ if __name__ == "__main__":
                         type=int,
                         default=1,
                         help="Maximum depth to descend into the file tree")
-    parser.add_argument('--repeat',
-                        type=int,
-                        default=1,
-                        help="Number of rounds to repeat file and folders creation")
+    parser.add_argument(
+        '--repeat',
+        type=int,
+        default=1,
+        help="Number of rounds to repeat file and folders creation")
 
     # File/directory modification parameters
-    parser.add_argument('--seed',
-                        type=int,
-                        default=3,
-                        help="Random seed")
+    parser.add_argument('--seed', type=int, default=3, help="Random seed")
     parser.add_argument('--createfile-prob',
                         type=float,
                         default=0.2,
