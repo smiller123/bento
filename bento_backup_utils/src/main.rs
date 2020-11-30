@@ -26,7 +26,7 @@ use std::error::Error;
 use std::path::{Path, PathBuf};
 use std::collections::HashMap;
 use std::fs as rust_fs;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 mod analyzer;
 mod parser;
