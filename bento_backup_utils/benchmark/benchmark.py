@@ -28,6 +28,7 @@ import random
 import time
 import subprocess
 import pdb
+import checksumdir
 from typing import Callable
 
 BASE_DIR = "/mnt/xv6fs_prov"
@@ -193,9 +194,11 @@ def run_cp(args: argparse.Namespace) -> None:
 
     # backup before
     subprocess.call(['cp', '-r', src_path + "/", dest_path])
+    print("src path hash: {}".format(checksumdir.dirhash(src_path))
 
     # modify
     modify(args)
+    print("src path hash: {}".format(checksumdir.dirhash(src_path))
 
     # benchmark
     start_time = time.time()
@@ -203,6 +206,8 @@ def run_cp(args: argparse.Namespace) -> None:
     end_time = time.time()
     duration = end_time - start_time
     print('cp: {} s'.format(duration))
+    print("src path hash: {}".format(checksumdir.dirhash(src_path))
+    print("dest path hash: {}".format(checksumdir.dirhash(dest_path))
 
 
 def run_bento(args: argparse.Namespace) -> None:
@@ -225,6 +230,7 @@ def run_bento(args: argparse.Namespace) -> None:
 
 
 def main(args: argparse.Namespace) -> None:
+    random.seed(555)
     # Remove target directory if it exists beforehand
     if os.path.isdir(args.src_path):
         remove_test_dir(args.src_path)
