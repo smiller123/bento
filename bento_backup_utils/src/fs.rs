@@ -44,40 +44,42 @@ pub fn copy(file_list: Vec<String>, base_dir: &Path, target_dir: &Path) -> Resul
             let target_parent_dir = target_path.parent().unwrap();
             fs_extra::dir::create_all(&target_parent_dir, false).unwrap();
 
-            let options = CopyOptions {
-                overwrite: true,
-                skip_exist: false,
-                buffer_size: 64000,
-            };
-            let (tx, rx) = mpsc::channel();
-            thread::spawn(move || {
-                let handler = |process_info: TransitProcess| {
-                    tx.send(process_info).unwrap();
-                };
+            let options = fs_extra::file::CopyOptions::new();
+            fs_extra::file::copy(&source_path, &target_path, &options)?;
+            // let options = CopyOptions {
+            //     overwrite: true,
+            //     skip_exist: false,
+            //     buffer_size: 64000,
+            // };
+            // let (tx, rx) = mpsc::channel();
+            // thread::spawn(move || {
+            //     let handler = |process_info: TransitProcess| {
+            //         tx.send(process_info).unwrap();
+            //     };
 
-                if fs_extra::file::copy_with_progress(&source_path,
-                                                      &target_path,
-                                                      &options,
-                                                      handler
-                                                    ).is_err() {
-                    // println!("error copy with progress");
-                };
-            });
+            //     if fs_extra::file::copy_with_progress(&source_path,
+            //                                           &target_path,
+            //                                           &options,
+            //                                           handler
+            //                                         ).is_err() {
+            //         // println!("error copy with progress");
+            //     };
+            // });
 
-            loop {
-                match rx.try_recv() {
-                    Ok(_process_info) => {
-                        // println!("{} of {} bytes",
-                        //         process_info.copied_bytes,
-                        //         process_info.total_bytes);
-                    }
-                    Err(TryRecvError::Disconnected) => {
-                        // println!("finished");
-                        break;
-                    }
-                    Err(TryRecvError::Empty) => {}
-                }
-            }
+            // loop {
+            //     match rx.try_recv() {
+            //         Ok(_process_info) => {
+            //             // println!("{} of {} bytes",
+            //             //         process_info.copied_bytes,
+            //             //         process_info.total_bytes);
+            //         }
+            //         Err(TryRecvError::Disconnected) => {
+            //             // println!("finished");
+            //             break;
+            //         }
+            //         Err(TryRecvError::Empty) => {}
+            //     }
+            // }
         }
     }
 
