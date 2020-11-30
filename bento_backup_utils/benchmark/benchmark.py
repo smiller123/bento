@@ -128,6 +128,21 @@ def iterate_directories(action: Callable, src_dir: str, prob: float) -> None:
                 action(pathlib.Path(directory), subdir)
 
 
+def create_file(directory: pathlib.Path, subdir: str) -> None:
+    """
+    create filename in directory
+    """
+    path = directory / subdir / randomfiletree.core.random_string()
+    with open(path, 'w') as f:
+        f.write('n')
+
+def create_dir(directory: pathlib.Path, subdir: str) -> None:
+    """
+    create filename in directory
+    """
+    path = directory / subdir / randomfiletree.core.random_string()
+    os.mkdir(path)
+
 def remove_dir(directory: pathlib.Path, subdir: str):
     """
     remove the specified subdir in directory
@@ -144,10 +159,52 @@ def rename_dir(directory: pathlib.Path, subdir: str):
     os.rename(src, dest)
 
 
+def get_tree(src_dir: str) -> dict:
+    src_dir_tree = {}
+    for directory, subdirs, files in os.walk(src_dir):
+        for filename in files:
+            file_path = directory + "/" + filename
+            with open(file_path) as f:
+                file_content = f.read()
+            src_dir_tree[file_path] = file_content
+        for subdir in subdirs:
+            dir_path = directory + "/" + subdir
+            src_dir_tree[dir_path] = "<dir>"
+
+    return src_dir_tree
+
+def compare_trees(tree1: dict, tree2: dict) -> (int, int):
+    modified_files = 0
+    modified_dirs = 0
+    for path, content in tree1.items():
+        if path not in tree2.keys():
+            if content == '<dir>':
+                modified_dirs += 1
+            else:
+                modified_files += 1
+        else:
+            if content != tree2[path]:
+                modified_files += 1
+
+    for path, content in tree2.items():
+        if path not in tree1.keys():
+            if content == '<dir>':
+                modified_dirs += 1
+            else:
+                modified_files += 1
+        else:
+            if content != tree1[path]:
+                modified_files += 1
+    return (modified_files, modified_dirs)
+
 def modify(args: argparse.Namespace) -> None:
     """
     modify contents of the source folders
     """
+
+    tree1 = get_tree(args.src_path)
+    subprocess.call(['tree', args.src_path])
+
     # Make modifications on src_path
     iterate_files(modify_file, args.src_path, args.modfile_prob)
     iterate_files(remove_file, args.src_path, args.rmfile_prob)
@@ -155,6 +212,14 @@ def modify(args: argparse.Namespace) -> None:
     iterate_directories(remove_dir, args.src_path, args.rmdir_prob)
     iterate_directories(rename_dir, args.src_path, args.renamedir_prob)
 
+    # iterate_directories(create_dir, args.src_path, args.createdir_prob)
+    # iterate_directories(create_file, args.src_path, args.createfile_prob)
+
+    tree2 = get_tree(args.src_path)
+    subprocess.call(['tree', args.src_path])
+
+    modified_files, modified_dirs = compare_trees(tree1, tree2)
+    print("{} files and {} folders modified".format(modified_files, modified_dirs))
 
 def run_rsync(args: argparse.Namespace, checksum: bool=False) -> None:
     """
@@ -239,7 +304,7 @@ def run_bento(args: argparse.Namespace) -> None:
 
 
 def main(args: argparse.Namespace) -> None:
-    random.seed(555)
+    random.seed(args.seed)
     # Remove target directory if it exists beforehand
     if os.path.isdir(args.src_path):
         remove_test_dir(args.src_path)
@@ -311,25 +376,37 @@ if __name__ == "__main__":
                         help="Number of rounds to repeat file and folders creation")
 
     # File/directory modification parameters
+    parser.add_argument('--seed',
+                        type=int,
+                        default=3,
+                        help="Random seed")
+    parser.add_argument('--createfile-prob',
+                        type=float,
+                        default=0.2,
+                        help="The probability of creating a file [0-1]")
     parser.add_argument('--modfile-prob',
                         type=float,
-                        default=0.5,
+                        default=0.2,
                         help="The probability of modifying a file [0-1]")
     parser.add_argument('--rmfile-prob',
                         type=float,
-                        default=0.5,
+                        default=0.2,
                         help="The probability of removing a file [0-1]")
     parser.add_argument('--renamefile-prob',
                         type=float,
-                        default=0.5,
+                        default=0.1,
                         help="The probability of renaming a file [0-1]")
+    parser.add_argument('--createdir-prob',
+                        type=float,
+                        default=0.2,
+                        help="The probability of creating a directory [0-1]")
     parser.add_argument('--rmdir-prob',
                         type=float,
-                        default=0.5,
+                        default=0.2,
                         help="The probability of removing a directory [0-1]")
     parser.add_argument('--renamedir-prob',
                         type=float,
-                        default=0.5,
+                        default=0.2,
                         help="The probability of renaming a directory [0-1]")
     parser.add_argument(
         '--skip-cleanup',
