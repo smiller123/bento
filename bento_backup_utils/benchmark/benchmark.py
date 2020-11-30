@@ -179,9 +179,9 @@ def run_rsync(args: argparse.Namespace, checksum: bool=False) -> None:
     # benchmark
     start_time = time.time()
     if checksum:
-        subprocess.call(['rsync', '-c', '-r', src_path + "/", dest_path])
+        subprocess.call(['rsync', '--delete', '--checksum', '--recursive', src_path + "/", dest_path])
     else:
-        subprocess.call(['rsync', '-r', src_path + "/", dest_path])
+        subprocess.call(['rsync', '--delete', '--recursive', src_path + "/", dest_path])
     end_time = time.time()
     duration = end_time - start_time
     print('rsync: {} s'.format(duration))
@@ -197,7 +197,7 @@ def run_cp(args: argparse.Namespace) -> None:
     dest_path = args.dest_path
 
     # backup before
-    subprocess.call(['cp', '-r', src_path + "/", dest_path])
+    subprocess.call(['cp', '-rf', src_path + "/", dest_path])
     print("src path hash: {}".format(checksumdir.dirhash(src_path)))
 
     # modify
@@ -206,7 +206,8 @@ def run_cp(args: argparse.Namespace) -> None:
 
     # benchmark
     start_time = time.time()
-    subprocess.call(['cp', '-r', src_path + "/", dest_path])
+    subprocess.call(['rm', '-rf', dest_path])
+    subprocess.call(['cp', '-rf', src_path + "/", dest_path])
     end_time = time.time()
     duration = end_time - start_time
     print('cp: {} s'.format(duration))
@@ -294,19 +295,19 @@ if __name__ == "__main__":
     # Directory tree parameters
     parser.add_argument('--n-files',
                         type=int,
-                        default=10,
+                        default=5,
                         help="Number of files to create")
     parser.add_argument('--n-dirs',
                         type=int,
-                        default=5,
+                        default=1,
                         help="Number of folders to create")
     parser.add_argument('--max-depth',
                         type=int,
-                        default=5,
+                        default=1,
                         help="Maximum depth to descend into the file tree")
     parser.add_argument('--repeat',
                         type=int,
-                        default=3,
+                        default=1,
                         help="Number of rounds to repeat file and folders creation")
 
     # File/directory modification parameters
