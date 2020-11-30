@@ -170,9 +170,11 @@ def run_rsync(args: argparse.Namespace, checksum: bool=False) -> None:
         subprocess.call(['rsync', '-c', '-r', src_path + "/", dest_path])
     else:
         subprocess.call(['rsync', '-r', src_path + "/", dest_path])
+    print("src path hash: {}".format(checksumdir.dirhash(src_path)))
 
     # modify
     modify(args)
+    print("src path hash: {}".format(checksumdir.dirhash(src_path)))
 
     # benchmark
     start_time = time.time()
@@ -184,6 +186,8 @@ def run_rsync(args: argparse.Namespace, checksum: bool=False) -> None:
     duration = end_time - start_time
     print('rsync: {} s'.format(duration))
 
+    print("src path hash: {}".format(checksumdir.dirhash(src_path)))
+    print("dest path hash: {}".format(checksumdir.dirhash(dest_path)))
 
 def run_cp(args: argparse.Namespace) -> None:
     """
@@ -194,11 +198,11 @@ def run_cp(args: argparse.Namespace) -> None:
 
     # backup before
     subprocess.call(['cp', '-r', src_path + "/", dest_path])
-    print("src path hash: {}".format(checksumdir.dirhash(src_path))
+    print("src path hash: {}".format(checksumdir.dirhash(src_path)))
 
     # modify
     modify(args)
-    print("src path hash: {}".format(checksumdir.dirhash(src_path))
+    print("src path hash: {}".format(checksumdir.dirhash(src_path)))
 
     # benchmark
     start_time = time.time()
@@ -206,8 +210,8 @@ def run_cp(args: argparse.Namespace) -> None:
     end_time = time.time()
     duration = end_time - start_time
     print('cp: {} s'.format(duration))
-    print("src path hash: {}".format(checksumdir.dirhash(src_path))
-    print("dest path hash: {}".format(checksumdir.dirhash(dest_path))
+    print("src path hash: {}".format(checksumdir.dirhash(src_path)))
+    print("dest path hash: {}".format(checksumdir.dirhash(dest_path)))
 
 
 def run_bento(args: argparse.Namespace) -> None:
@@ -216,9 +220,11 @@ def run_bento(args: argparse.Namespace) -> None:
     dest_path = args.dest_path
     subprocess.call(['cargo', 'build'])
     subprocess.call(['cargo', 'run', mount_path, src_path, dest_path])
+    print("src path hash: {}".format(checksumdir.dirhash(src_path)))
 
     # modify
     modify(args)
+    print("src path hash: {}".format(checksumdir.dirhash(src_path)))
 
     # start benchmarking
     start_time = time.time()
@@ -227,6 +233,8 @@ def run_bento(args: argparse.Namespace) -> None:
     end_time = time.time()
     duration = end_time - start_time
     print("bento: {} s".format(duration))
+    print("src path hash: {}".format(checksumdir.dirhash(src_path)))
+    print("dest path hash: {}".format(checksumdir.dirhash(dest_path)))
 
 
 def main(args: argparse.Namespace) -> None:
