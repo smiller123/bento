@@ -31,7 +31,7 @@ import pdb
 from typing import Callable
 
 BASE_DIR = "/mnt/xv6fs_prov"
-SRC_DIR = "src_dir"
+SRC_DIR = "/mnt/xv6fs_prov/src_dir"
 DEST_DIR = "dest_dir"
 
 

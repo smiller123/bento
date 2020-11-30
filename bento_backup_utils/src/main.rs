@@ -26,6 +26,7 @@ use std::error::Error;
 use std::path::{Path, PathBuf};
 use std::collections::HashMap;
 use std::fs as rust_fs;
+use std::time::{Duration, Instant};
 
 mod analyzer;
 mod parser;
@@ -78,7 +79,11 @@ fn run_utility(mount_point: &Path, source_dir: &Path, remote: &Path) {
         rust_fs::create_dir(Path::new(remote)).unwrap();
     }
 
+    println!("load_from_file");
+    let timer = Instant::now();
     let (inode_map, prev_size) = load_from_file(mount_point.to_str().unwrap());
+    let duration = timer.elapsed();
+    println!("Time elapsed in load_from_file() is: {:?}", duration);
 
     let mut inode_map = inode_map;
     let mut prev_size = prev_size;
@@ -90,16 +95,30 @@ fn run_utility(mount_point: &Path, source_dir: &Path, remote: &Path) {
     assert!(events.is_empty());
 
     // This read in only prev_size..lin_size.len() from disk
+    println!("read_file_and_seek");
+    let timer = Instant::now();
     let (lin_contents, n_bytes) = read_file_and_seek(prev_size, lin_file.to_str().unwrap()).expect("Unable to read lin file from mount point");
     println!("Read a string of length {} (n_bytes = {})", lin_contents.len(), n_bytes);
+    let duration = timer.elapsed();
+    println!("Time elapsed in read_file_and_seek() is: {:?}", duration);
 
+    println!("populate_events");
+    let timer = Instant::now();
     analyzer::populate_events(&mut events, lin_contents);  // TODO(nmonsees): will print error, need to change in parser
-    // analyzer::update_inode_map(&mut inode_map, &events);
+    let duration = timer.elapsed();
+    println!("Time elapsed in populate_events() is: {:?}", duration);
 
+    println!("files_to_update");
+    let timer = Instant::now();
     let files: HashMap<PathBuf, analyzer::Action> = analyzer::files_to_update(&mut inode_map, &events);
+    let duration = timer.elapsed();
+    println!("Time elapsed in files_to_update() is: {:?}", duration);
+
     let base_path = Path::new(source_dir);
 
     // Copy files
+    println!("populate update_files and copy");
+    let timer = Instant::now();
     let update_files = files.iter()
                         .filter(|(f, _)| f.as_path().starts_with(source_dir))
                         .filter(|(_, act)| matches!(act, analyzer::Action::Update))
@@ -109,8 +128,12 @@ fn run_utility(mount_point: &Path, source_dir: &Path, remote: &Path) {
         println!("Warning: Some files can't be copied. This may happen if \
                   you try to copy the files the are already deleted.");
     }
+    let duration = timer.elapsed();
+    println!("Time elapsed in copying is: {:?}", duration);
 
     // Delete files
+    println!("populate delete_files and delete");
+    let timer = Instant::now();
     let delete_files = files.iter()
                         .filter(|(f, _)| f.as_path().starts_with(source_dir))
                         .filter(|(_, act)| matches!(act, analyzer::Action::Delete))
@@ -121,17 +144,29 @@ fn run_utility(mount_point: &Path, source_dir: &Path, remote: &Path) {
                   there is no files to remove at the remote or if \
                   you have no permission.");
     }
+    let duration = timer.elapsed();
+    println!("Time elapsed in deletion is: {:?}", duration);
 
     // fs actions will add log entries to .lin, so need to grab prev_size after performing
     // copy/deletes to remote
 
     // read lin after back up
     prev_size += n_bytes;
+
+    println!("read_file_and_seek after backup");
+    let timer = Instant::now();
     let (_, n_bytes) = read_file_and_seek(prev_size, lin_file.to_str().unwrap()).expect("Unable to read lin file from mount point");
+    let duration = timer.elapsed();
+    println!("Time elapsed in read_file_and_seek is: {:?}", duration);
+    
     prev_size += n_bytes;
     println!("Last byte read on this run: {:?}", prev_size);
 
+    println!("save_to_file");
+    let timer = Instant::now();
     save_to_file(mount_point.to_str().unwrap(), inode_map, prev_size).unwrap();
+    let duration = timer.elapsed();
+    println!("Time elapsed in save_to_file is: {:?}", duration);
 }
 
 // main script for backup utility, runs in a loop, fetching updates from .lin, updating
