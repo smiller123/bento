@@ -302,19 +302,19 @@ if __name__ == "__main__":
                         help="The probability of modifying a file [0-1]")
     parser.add_argument('--rmfile-prob',
                         type=float,
-                        default=0.3,
+                        default=0.5,
                         help="The probability of removing a file [0-1]")
     parser.add_argument('--renamefile-prob',
                         type=float,
-                        default=0.3,
+                        default=0.5,
                         help="The probability of renaming a file [0-1]")
     parser.add_argument('--rmdir-prob',
                         type=float,
-                        default=0.3,
+                        default=0.5,
                         help="The probability of removing a directory [0-1]")
     parser.add_argument('--renamedir-prob',
                         type=float,
-                        default=0.3,
+                        default=0.5,
                         help="The probability of renaming a directory [0-1]")
     parser.add_argument(
         '--skip-cleanup',
