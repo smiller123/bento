@@ -44,7 +44,11 @@ pub fn copy(file_list: Vec<String>, base_dir: &Path, target_dir: &Path) -> Resul
             let target_parent_dir = target_path.parent().unwrap();
             fs_extra::dir::create_all(&target_parent_dir, false).unwrap();
 
-            let options = fs_extra::file::CopyOptions::new();
+            let options = fs_extra::file::CopyOptions {
+                overwrite: true,
+                skip_exist: false,
+                buffer_size: 64000,
+            };
             fs_extra::file::copy(&source_path, &target_path, &options)?;
             // let options = CopyOptions {
             //     overwrite: true,
