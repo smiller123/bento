@@ -1,0 +1,27 @@
+**Time elapsed in load_from_file() is: 48.201µs
+**Time elapsed in read_file_and_seek() is: 739.89µs
+Read a string of length 119308 (n_bytes = 119308)
+**Time elapsed in populate_events() is: 118.653065ms
+**Time elapsed in files_to_update() is: 23.400537ms
+**Time elapsed in fs:copy is: 936.790641ms
+**Time elapsed in fs:delete is: 4.572µs
+**Time elapsed in read_file_and_seek is: 2.028143ms
+Last byte read on this run: 337193
+**Time elapsed in save_to_file is: 30.201584ms
+**Time elapsed in load_from_file() is: 50.073636ms
+**Time elapsed in read_file_and_seek() is: 8.428091ms
+Read a string of length 310872 (n_bytes = 310872)
+**Time elapsed in populate_events() is: 181.874778ms
+**Time elapsed in files_to_update() is: 32.288782ms
+**Time elapsed in fs:copy is: 327.030481ms
+**Time elapsed in fs:delete is: 3.599602ms
+**Time elapsed in read_file_and_seek is: 680.975µs
+Last byte read on this run: 721204
+**Time elapsed in save_to_file is: 20.062409ms
+960 files and 120 folders created
+src path hash: 33c8cf44480411b166b82736ca90fd78
+219 files and 12 folders modified
+src path hash: d11c32a82fffe975e8c716cdf3f0f29b
+bento: 0.8042778968811035 s
+src path hash: d11c32a82fffe975e8c716cdf3f0f29b
+dest path hash: d11c32a82fffe975e8c716cdf3f0f29b

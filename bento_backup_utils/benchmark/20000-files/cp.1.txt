@@ -1,0 +1,7 @@
+20800 files and 2600 folders created
+src path hash: 92cbe084ce91f9e2a871a5c34120c5d5
+7562 files and 762 folders modified
+src path hash: ae1a6a7d9ac94f5714a118d1d3c213aa
+cp: 4.888313293457031 s
+src path hash: ae1a6a7d9ac94f5714a118d1d3c213aa
+dest path hash: ae1a6a7d9ac94f5714a118d1d3c213aa
