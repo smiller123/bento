@@ -218,8 +218,10 @@ def modify(args: argparse.Namespace) -> None:
     # subprocess.call(['tree', args.src_path])
 
     modified_files, modified_dirs = compare_trees(tree1, tree2)
-    print("{} files and {} folders modified".format(modified_files,
+    if not args.csv:
+        print("{} files and {} folders modified".format(modified_files,
                                                     modified_dirs))
+    return modified_files, modified_dirs
 
 
 def run_rsync(args: argparse.Namespace, checksum: bool = False) -> None:
@@ -236,11 +238,12 @@ def run_rsync(args: argparse.Namespace, checksum: bool = False) -> None:
         subprocess.call(['rsync', '-c', '-r', src_path + "/", dest_path])
     else:
         subprocess.call(['rsync', '-r', src_path + "/", dest_path])
-    print("src path hash: {}".format(checksumdir.dirhash(src_path)))
+
+    if not args.csv:
+        print("src path hash: {}".format(checksumdir.dirhash(src_path)))
 
     # modify
-    modify(args)
-    print("src path hash: {}".format(checksumdir.dirhash(src_path)))
+    m_files, m_dirs = modify(args)
 
     # benchmark
     start_time = time.time()
@@ -254,10 +257,13 @@ def run_rsync(args: argparse.Namespace, checksum: bool = False) -> None:
             ['rsync', '--delete', '--recursive', src_path + "/", dest_path])
     end_time = time.time()
     duration = end_time - start_time
-    print('rsync: {} s'.format(duration))
 
-    print("src path hash: {}".format(checksumdir.dirhash(src_path)))
-    print("dest path hash: {}".format(checksumdir.dirhash(dest_path)))
+    if not args.csv:
+        print('rsync{}: {} s'.format("-checksum" if checksum else "", duration))
+        print("src path hash: {}".format(checksumdir.dirhash(src_path)))
+        print("dest path hash: {}".format(checksumdir.dirhash(dest_path)))
+
+    return duration, m_files, m_dirs
 
 
 def run_cp(args: argparse.Namespace) -> None:
@@ -269,11 +275,11 @@ def run_cp(args: argparse.Namespace) -> None:
 
     # backup before
     subprocess.call(['cp', '-rf', src_path + "/", dest_path])
-    print("src path hash: {}".format(checksumdir.dirhash(src_path)))
+    if not args.csv:
+        print("src path hash: {}".format(checksumdir.dirhash(src_path)))
 
     # modify
-    modify(args)
-    print("src path hash: {}".format(checksumdir.dirhash(src_path)))
+    m_files, m_dirs = modify(args)
 
     # benchmark
     start_time = time.time()
@@ -281,32 +287,50 @@ def run_cp(args: argparse.Namespace) -> None:
     subprocess.call(['cp', '-rf', src_path + "/", dest_path])
     end_time = time.time()
     duration = end_time - start_time
-    print('cp: {} s'.format(duration))
-    print("src path hash: {}".format(checksumdir.dirhash(src_path)))
-    print("dest path hash: {}".format(checksumdir.dirhash(dest_path)))
+    if not args.csv:
+        print('cp: {} s'.format(duration))
+        print("src path hash: {}".format(checksumdir.dirhash(src_path)))
+        print("dest path hash: {}".format(checksumdir.dirhash(dest_path)))
+
+    return duration, m_files, m_dirs
 
 
 def run_bento(args: argparse.Namespace) -> None:
     mount_path = args.mount_path
     src_path = args.src_path
     dest_path = args.dest_path
-    subprocess.call(['cargo', 'build'])
-    subprocess.call(['cargo', 'run', mount_path, src_path, dest_path])
-    print("src path hash: {}".format(checksumdir.dirhash(src_path)))
+    if not args.csv:
+        subprocess.call(['cargo', 'build'])
+        subprocess.call(['cargo', 'run', mount_path, src_path, dest_path])
+        print("src path hash: {}".format(checksumdir.dirhash(src_path)))
+    else:
+        subprocess.call(['cargo', 'build'],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.STDOUT)
+        subprocess.call(['cargo', 'run', mount_path, src_path, dest_path],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.STDOUT)
 
     # modify
-    modify(args)
-    print("src path hash: {}".format(checksumdir.dirhash(src_path)))
+    m_files, m_dirs = modify(args)
 
     # start benchmarking
     start_time = time.time()
-    subprocess.call(['cargo', 'run', mount_path, src_path, dest_path])
+    if not args.csv:
+        subprocess.call(['cargo', 'run', mount_path, src_path, dest_path])
+    else:
+        subprocess.call(['cargo', 'run', mount_path, src_path, dest_path],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.STDOUT)
 
     end_time = time.time()
     duration = end_time - start_time
-    print("bento: {} s".format(duration))
-    print("src path hash: {}".format(checksumdir.dirhash(src_path)))
-    print("dest path hash: {}".format(checksumdir.dirhash(dest_path)))
+    if not args.csv:
+        print("bento: {} s".format(duration))
+        print("src path hash: {}".format(checksumdir.dirhash(src_path)))
+        print("dest path hash: {}".format(checksumdir.dirhash(dest_path)))
+
+    return duration, m_files, m_dirs
 
 
 def main(args: argparse.Namespace) -> None:
@@ -326,24 +350,46 @@ def main(args: argparse.Namespace) -> None:
                                           max_depth=args.max_depth,
                                           repeat=args.repeat,
                                           payload=callback)
-    print('{} files and {} folders created'.format(len(all_files),
+    if not args.csv:
+        print('{} files and {} folders created'.format(len(all_files),
                                                    len(all_dirs)))
 
     # Run benchmark
     if args.mode == 'rsync':
-        run_rsync(args)
+        duration, m_files, m_dirs = run_rsync(args)
     elif args.mode == 'rsync-checksum':
-        run_rsync(args, checksum=True)
+        duration, m_files, m_dirs = run_rsync(args, checksum=True)
     elif args.mode == 'bento':
-        run_bento(args)
+        duration, m_files, m_dirs = run_bento(args)
     elif args.mode == 'cp':
-        run_cp(args)
+        duration, m_files, m_dirs = run_cp(args)
     else:
         raise NotImplementedError("mode not yet supported")
 
     if not args.skip_cleanup:
         remove_test_dir(args.src_path)
         remove_test_dir(args.dest_path)
+
+    if args.csv:
+        print("{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}".format(
+            args.mode,
+            args.seed,
+            args.n_files,
+            args.n_dirs,
+            args.max_depth,
+            args.repeat,
+            args.createfile_prob,
+            args.modfile_prob,
+            args.rmfile_prob,
+            args.renamefile_prob,
+            args.createdir_prob,
+            args.rmdir_prob,
+            args.renamedir_prob,
+            len(all_files),
+            len(all_dirs),
+            m_files,
+            m_dirs,
+            duration))
 
 
 if __name__ == "__main__":
@@ -416,8 +462,12 @@ if __name__ == "__main__":
                         help="The probability of renaming a directory [0-1]")
     parser.add_argument(
         '--skip-cleanup',
-        type=bool,
-        default=False,
+        action='store_true',
         help="Whether to remove tmp directory tree after benchmark")
+    parser.add_argument(
+        '--csv',
+        action='store_true',
+        help="Print the result in csv format"
+    )
     args = parser.parse_args()
     main(args)

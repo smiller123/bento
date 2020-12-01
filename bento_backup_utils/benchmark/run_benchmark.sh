@@ -11,7 +11,7 @@ REPEAT=2
 for mode in bento cp rsync rsync-checksum
 do
 
-   for i in 1 #2 3 4 5
+   for i in 1 2 3 4 5
    do
       # create file image
       cd $REPO_DIR
@@ -27,8 +27,8 @@ do
 
       # run benchmark.py
       cd ${REPO_DIR}/bento_backup_utils
-      echo "python3 benchmark/benchmark.py  --mode $mode --n-files $N_FILES --n-dirs $N_FOLDERS --repeat $REPEAT --max-depth $MAX_DEPTH --createfile-prob $PROB --modfile-prob $PROB --rmfile-prob $PROB --renamefile-prob $PROB --createdir-prob $PROB --rmdir-prob $PROB --renamedir-prob $PROB"
-      python3 benchmark/benchmark.py  --mode $mode --n-files $N_FILES --n-dirs $N_FOLDERS --repeat $REPEAT --max-depth $MAX_DEPTH --createfile-prob $PROB --modfile-prob $PROB --rmfile-prob $PROB --renamefile-prob $PROB --createdir-prob $PROB --rmdir-prob $PROB --renamedir-prob $PROB > "${mode}.${i}.txt"
+      echo "python3 benchmark/benchmark.py  --mode $mode --n-files $N_FILES --n-dirs $N_FOLDERS --repeat $REPEAT --max-depth $MAX_DEPTH --createfile-prob $PROB --modfile-prob $PROB --rmfile-prob $PROB --renamefile-prob $PROB --createdir-prob $PROB --rmdir-prob $PROB --renamedir-prob $PROB --csv"
+      python3 benchmark/benchmark.py  --mode $mode --n-files $N_FILES --n-dirs $N_FOLDERS --repeat $REPEAT --max-depth $MAX_DEPTH --createfile-prob $PROB --modfile-prob $PROB --rmfile-prob $PROB --renamefile-prob $PROB --createdir-prob $PROB --rmdir-prob $PROB --renamedir-prob $PROB --csv>> "${N_FILES}.${N_FOLDERS}.txt"
 
       # unmount image
       sudo umount /mnt/xv6fs_prov
