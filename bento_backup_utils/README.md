@@ -21,3 +21,6 @@ pip install -r requirements.txt
 python benchmark.py --mode bento
 ```
 
+To generate the data in .csv format, use --csv option. The program will print comma-separated values which can be imported directly into the Google sheet.
+
+If you want to automate the process of running benchmark.py, run run_benchmark.sh using sudo. The script run benchmark.py on all the modes. Change the repo dir and other settings before running the script. The output will be appended to {N_FILES}-{N_FOLDERS}.txt file. Note that the script assumes that bento is already cloned and compiled.
