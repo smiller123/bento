@@ -12,6 +12,7 @@
 #include <linux/backing-dev.h>
 #include <linux/module.h>
 #include <linux/jbd2.h>
+//#include "../../../jbd2/jbd2.h"
 #include <linux/namei.h>
 #include <linux/path.h>
 #include <linux/mount.h>
@@ -224,4 +225,16 @@ void rs_jbd2_journal_set_async_commit(journal_t *journal) {
 struct timespec current_kernel_time_rs(void)
 {
 	return current_kernel_time();
+}
+
+void rs_jbd2_journal_setup(journal_t *journal) {
+	jbd2_journal_clear_features(journal,
+                        JBD2_FEATURE_COMPAT_CHECKSUM, 0,
+                        JBD2_FEATURE_INCOMPAT_CSUM_V3 |
+                        JBD2_FEATURE_INCOMPAT_CSUM_V2);
+	jbd2_journal_set_features(journal,
+                        0, 0,
+                        JBD2_FEATURE_INCOMPAT_CSUM_V3);
+        jbd2_journal_clear_features(journal, 0, 0,
+                        JBD2_FEATURE_INCOMPAT_ASYNC_COMMIT);
 }

@@ -123,6 +123,7 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
         fc_info.want |= FUSE_BIG_WRITES;
         fc_info.want |= FUSE_ATOMIC_O_TRUNC;
         fc_info.want |= FUSE_WRITEBACK_CACHE;
+        fc_info.want |= FUSE_PARALLEL_DIROPS;
 
         fc_info.max_readahead = max_readahead;
         fc_info.max_background = 0;
@@ -327,7 +328,7 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
                 return;
             }
         };
-        let mut internals = match inode_guard.internals.write() {
+        let internals = match inode_guard.internals.read() {
             Ok(x) => x,
             Err(_) => {
                 reply.error(libc::EIO);
@@ -335,7 +336,7 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
             }
         };
         let mut poff = 0;
-        let child = match self.dirlookup(&mut internals, name, &mut poff) {
+        let child = match self.dirlookup(&internals, name, &mut poff) {
             Ok(x) => x,
             Err(x) => {
                 reply.error(x);
@@ -445,7 +446,6 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
         let mut file_off = 0;
         while i < n {
             let log = self.log.as_ref().unwrap();
-            let handle = log.begin_op(MAXOPBLOCKS as u32);
             let inode = match self.iget(nodeid) {
                 Ok(x) => x,
                 Err(x) => {
@@ -481,7 +481,8 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
                 n1 = max;
             }
             let data_region = &data[file_off..];
-            let r = match self.writei(data_region, off, n1, &mut internals, inode.inum, &handle) {
+            let handle = log.begin_op(3 as u32);
+            let r = match self.writei(data_region, off, n1, &mut internals, inode.inum, &handle, false) {
                 Ok(x) => x,
                 Err(x) => {
                     reply.error(x);
@@ -776,6 +777,55 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
         }
     }
 
+    fn bento_mknod(
+        &self,
+        _req: &Request,
+        parent: u64,
+        name: &OsStr,
+        _mode: u32,
+        _rdev: u32,
+        reply: ReplyEntry,
+    ) {
+        // Check if the file already exists
+        let log = self.log.as_ref().unwrap();
+        let handle = log.begin_op(16);
+        let child = match self.create_internal(parent, T_FILE, name, &handle) {
+            Ok(x) => x,
+            Err(x) => {
+                reply.error(x);
+                return;
+            }
+        };
+
+        let icache = self.ilock_cache.as_ref().unwrap();
+        let inode_guard = match self.ilock(child.idx, &icache, child.inum) {
+            Ok(x) => x,
+            Err(x) => {
+                reply.error(x);
+                return;
+            }
+        };
+        let internals = match inode_guard.internals.read() {
+            Ok(x) => x,
+            Err(_) => {
+                reply.error(libc::EIO);
+                return;
+            }
+        };
+
+        let nodeid = child.inum as u64;
+        let generation = 0;
+        let attr_valid = Timespec::new(1, 999999999);
+        match self.stati(nodeid, &internals) {
+            Ok(attr) => {
+                reply.entry(&attr_valid, &attr, generation);
+            }
+            Err(x) => {
+                reply.error(x);
+            }
+        }
+    }
+
     fn bento_mkdir(
         &self,
         _req: &Request,
@@ -786,6 +836,7 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
     ) {
         let log = self.log.as_ref().unwrap();
         let handle = log.begin_op(MAXOPBLOCKS as u32);
+        //let handle = log.begin_op(16);
         let child = match self.create_internal(parent, T_DIR, &name, &handle) {
             Ok(x) => x,
             Err(x) => {
@@ -828,6 +879,7 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
     fn bento_rmdir(&self, _req: &Request, parent: u64, name: &OsStr, reply: ReplyEmpty) {
         let log = self.log.as_ref().unwrap();
         let handle = log.begin_op(MAXOPBLOCKS as u32);
+        //let handle = log.begin_op(16);
         match self.dounlink(parent, name, &handle) {
             Ok(_) => reply.ok(),
             Err(x) => reply.error(x),
@@ -837,6 +889,7 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
     fn bento_unlink(&self, _req: &Request, parent: u64, name: &OsStr, reply: ReplyEmpty) {
         let log = self.log.as_ref().unwrap();
         let handle = log.begin_op(MAXOPBLOCKS as u32);
+        //let handle = log.begin_op(16);
         match self.dounlink(parent, name, &handle) {
             Ok(_) => {
                 reply.ok();
@@ -867,6 +920,7 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
     ) {
         let log = self.log.as_ref().unwrap();
         let handle = log.begin_op(MAXOPBLOCKS as u32);
+        //let handle = log.begin_op(16);
         // Create new file
         let child = match self.create_internal(nodeid, T_LNK, name, &handle) {
             Ok(x) => x,
@@ -904,6 +958,7 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
             &mut internals,
             child.inum,
             &handle,
+            true
         ) {
             reply.error(x);
             return;
@@ -916,6 +971,7 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
             &mut internals,
             child.inum,
             &handle,
+            true
         ) {
             reply.error(x);
             return;
@@ -1009,6 +1065,7 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
     ) {
         let log = self.log.as_ref().unwrap();
         let handle = log.begin_op(MAXOPBLOCKS as u32);
+        //let handle = log.begin_op(16);
         let no_replace = (flags & libc::RENAME_NOREPLACE as u32) > 0;
         let exchange = (flags & libc::RENAME_EXCHANGE as u32) > 0;
         // Get and lock old and new parent directories
@@ -1114,7 +1171,8 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
                         buf_len,
                         &mut new_parent_internals,
                         new_parent.inum,
-                        &handle
+                        &handle,
+                        true
                     ) {
                         Ok(x) => x,
                         Err(_) => {
@@ -1191,7 +1249,8 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
                         buf_len,
                         &mut new_parent_internals,
                         new_parent.inum,
-                        &handle
+                        &handle,
+                        true
                     ) {
                         Ok(x) => x,
                         Err(_) => {
@@ -1211,7 +1270,8 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
                 buf_len,
                 &mut old_parent_internals,
                 old_parent.inum,
-                &handle
+                &handle,
+                true
             ) {
                 Ok(x) => x,
                 Err(_) => {
@@ -1329,7 +1389,8 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
                         buf_len,
                         &mut parent_internals,
                         parent.inum,
-                        &handle
+                        &handle,
+                        true
                     ) {
                         Ok(x) => x,
                         Err(_) => {
@@ -1373,7 +1434,8 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
                         buf_len,
                         &mut parent_internals,
                         parent.inum,
-                        &handle
+                        &handle,
+                        true
                     ) {
                         Ok(x) => x,
                         Err(_) => {
@@ -1391,7 +1453,8 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
                 buf_len,
                 &mut parent_internals,
                 parent.inum,
-                &handle
+                &handle,
+                true
             ) {
                 Ok(x) => x,
                 Err(_) => {
@@ -1645,7 +1708,8 @@ impl Xv6FileSystem {
             buf_len,
             &mut parent_internals,
             parent.inum,
-            handle
+            handle,
+            true
         )?;
 
         if r != buf_len {

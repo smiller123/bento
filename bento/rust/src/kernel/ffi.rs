@@ -278,6 +278,7 @@ extern "C" {
     pub fn rs_jbd2_journal_force_commit(journal: *const raw::c_void) -> i32;
     pub fn rs_jbd2_journal_set_barrier(journal: *const raw::c_void);
     pub fn rs_jbd2_journal_set_async_commit(journal: *const raw::c_void);
+    pub fn rs_jbd2_journal_setup(journal: *const raw::c_void);
     pub fn rs_lock_buffer(bh: *const raw::c_void);
     pub fn unlock_buffer(bh: *const raw::c_void);
 

@@ -66,7 +66,7 @@ impl Htree_index {
 }
 
 #[repr(C)]
-#[derive(DataBlock, Copy, Clone)]
+#[derive(DataBlock, Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Htree_entry {
     pub name_hash: u32,
     pub block: u32,
