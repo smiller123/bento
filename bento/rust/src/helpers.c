@@ -18,6 +18,7 @@
 #include <linux/in.h>
 #include <linux/net.h>
 #include <linux/kthread.h>
+#include <linux/timekeeping32.h>
 
 void
 wait_a_bit(void) {
@@ -218,4 +219,9 @@ void rs_jbd2_journal_set_async_commit(journal_t *journal) {
 			JBD2_FEATURE_INCOMPAT_CSUM_V2);
 	jbd2_journal_clear_features(journal, 0,
 			0, JBD2_FEATURE_INCOMPAT_ASYNC_COMMIT);
+}
+
+struct timespec current_kernel_time_rs(void)
+{
+	return current_kernel_time();
 }
