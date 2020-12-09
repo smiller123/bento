@@ -648,13 +648,18 @@ impl Xv6FileSystem {
             T_LNK => FileType::Symlink,
             _ => FileType::RegularFile,
         };
+        let mtime = if ino == self.provino.unwrap() {
+            *self.provino_mtime.as_ref().unwrap().read().unwrap()
+        } else{
+            Timespec::new(0,0)
+        };
         let attr = FileAttr {
             ino: ino,
             size: internals.size,
             blocks: 0,
             atime: Timespec::new(0, 0),
-            mtime: Timespec::new(0, 0),
-            ctime: Timespec::new(0, 0),
+            mtime: mtime,
+            ctime: mtime,
             crtime: Timespec::new(0, 0),
             kind: file_kind,
             perm: 0o077,

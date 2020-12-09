@@ -47,6 +47,7 @@ fn main() {
         balloc_lock: None,
         diskname: Some(disk_name.to_str().unwrap().to_string()),
         provino: None,
+        provino_mtime: None,
     };
 
     let mountpoint = env::args_os().nth(2).unwrap();

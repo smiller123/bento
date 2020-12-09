@@ -57,6 +57,7 @@ const INCLUDED_TYPES: &[&str] = &[
     "fuse_in_header",
     "fuse_out_header",
     "timespec",
+    "timespec64",
     "fuse_link_in",
     "sockaddr_in",
     "sockaddr_in6",

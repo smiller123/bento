@@ -46,6 +46,8 @@ use crate::xv6fs_log::*;
 use std::ffi::OsStr;
 use std::path::Path;
 use std::sync::RwLock;
+use std::time as std_time;
+use std::time::SystemTime;
 
 use time::*;
 
@@ -71,6 +73,7 @@ pub struct Xv6FileSystem {
     pub balloc_lock: Option<RwLock<usize>>,
     pub diskname: Option<String>,
     pub provino: Option<u64>,
+    pub provino_mtime: Option<RwLock<Timespec>>,
 }
 
 impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
@@ -1868,6 +1871,12 @@ impl Xv6FileSystem {
             provino = Some(child.inum as u64);
         }
         self.provino = provino;
+        let now = SystemTime::now();
+        if let Ok(dur_since_epoch) = now.duration_since(std_time::UNIX_EPOCH) {
+            let mtime = Timespec::new(dur_since_epoch.as_secs() as i64,
+                        dur_since_epoch.subsec_nanos() as i32);
+            self.provino_mtime = Some(RwLock::new(mtime));
+        }
     }
 
     fn write_prov_file(&self, msg: String, handle: &Handle) -> Result<(), libc::c_int> {
@@ -1893,6 +1902,12 @@ impl Xv6FileSystem {
             inode.inum,
             handle,
         ).map_err(|_| {libc::EIO})?;
+        let now = SystemTime::now();
+        if let Ok(dur_since_epoch) = now.duration_since(std_time::UNIX_EPOCH) {
+            let mut mtime = self.provino_mtime.as_ref().unwrap().write().unwrap();
+            *mtime = Timespec::new(dur_since_epoch.as_secs() as i64,
+                        dur_since_epoch.subsec_nanos() as i32);
+        }
         return Ok(());
     }
 }

@@ -45,6 +45,7 @@ pub static XV6FS: Xv6FileSystem = Xv6FileSystem {
     balloc_lock: None,
     diskname: None,
     provino: None,
+    provino_mtime: None,
 };
 
 #[no_mangle]
