@@ -240,7 +240,9 @@ impl Xv6FileSystem {
             let disk = self.disk.as_ref().unwrap();
             let iblock_new = iblock(block_inum, &sb) as u64;
             /* TODO: not actually correct for reusing blocks */
-            let new_blk = iblock_new > iblock(last_segment, &sb) as u64;
+            let curr_most_recent = LAST_INODE.load(Ordering::SeqCst);
+            let curr_last_segment = curr_most_recent - curr_most_recent % IPB;
+            let new_blk = iblock_new > iblock(curr_last_segment, &sb) as u64;
             let mut bh = if new_blk {
                 let mut bh = disk.getblk(iblock_new)?;
                 bh.lock();
@@ -1540,29 +1542,6 @@ impl Xv6FileSystem {
         new_ie.block = num_blocks as u32;
         leaf_vec.push(new_ie);
         leaf_vec.sort_unstable_by(|a, b| b.name_hash.partial_cmp(&a.name_hash).unwrap());
-
-        //let num_entries = index.entries as usize;
-
-        //// sort old entries in index node
-        //let mut ie_map: BTreeMap<u32, Htree_entry> = BTreeMap::new();
-        //while let Some(ie) = leaf_vec.pop() {
-        //    ie_map.insert(ie.name_hash, ie);
-        //}
-
-        //let mut new_ie = Htree_entry::new();
-        //new_ie.name_hash = leaf2_lower;
-        //new_ie.block = num_blocks as u32;
-        //ie_map.insert(new_ie.name_hash, new_ie);
-
-        // store ie's in reverse order [10, 9, 8, ..]
-        //{
-        //    let mut keys: Vec<_> = ie_map.keys().cloned().collect();
-        //    while let Some(key) = keys.pop() {
-        //        if let Some(val) = ie_map.remove(&key) {
-        //            leaf_vec.push(val);
-        //        }
-        //    }
-        //}
 
         // enough space in current index node
         if num_entries < ((BSIZE - hindex_len) / hentry_len) {
