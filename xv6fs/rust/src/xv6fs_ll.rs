@@ -398,7 +398,7 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
                 return;
             }
         };
-        let mut internals = match inode_guard.internals.write() {
+        let internals = match inode_guard.internals.read() {
             Ok(x) => x,
             Err(_) => {
                 reply.error(libc::EIO);
@@ -418,7 +418,7 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
         let mut buf_vec: Vec<u8> = vec![0; n as usize];
         let buf_slice = buf_vec.as_mut_slice();
 
-        let read_rs = match self.readi(buf_slice, off, n, &mut internals) {
+        let read_rs = match self.readi(buf_slice, off, n, &internals) {
             Ok(x) => x,
             Err(x) => {
                 reply.error(x);
@@ -523,7 +523,8 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
                 return;
             }
         };
-        let mut internals = match inode_guard.internals.write() {
+        //let mut internals = match inode_guard.internals.write() {
+        let internals = match inode_guard.internals.read() {
             Ok(x) => x,
             Err(_) => {
                 reply.error(libc::EIO);
@@ -547,7 +548,7 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
 
         // try reading directory root
         let mut root = Htree_root::new();
-        match self.readi(hroot_slice, 0, hroot_len, &mut internals) {
+        match self.readi(hroot_slice, 0, hroot_len, &internals) {
             Ok(x) if x != hroot_len => {
                 reply.error(1);
                 return;
@@ -579,7 +580,7 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
                 break;
             }
             let mut hie = Htree_entry::new();
-            match self.readi(hie_slice, off as usize, hentry_len, &mut internals) {
+            match self.readi(hie_slice, off as usize, hentry_len, &internals) {
                 Ok(x) if x != hentry_len => {
                     reply.error(1);
                     return;
@@ -602,7 +603,7 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
                 ind_arr_slice,
                 BSIZE * hie.block as usize,
                 BSIZE,
-                &mut internals,
+                &internals,
             ) {
                 Ok(x) if x != BSIZE => {
                     reply.error(1);
@@ -649,7 +650,7 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
                     de_block_slice,
                     BSIZE * dblock_off as usize,
                     BSIZE,
-                    &mut internals,
+                    &internals,
                 ) {
                     Err(x) => {
                         reply.error(x);
@@ -1225,7 +1226,7 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
                             return;
                         },
                     };
-                    let mut new_inode_internals = match new_inode_guard.internals.write() {
+                    let new_inode_internals = match new_inode_guard.internals.read() {
                         Ok(x) => x,
                         Err(_) => {
                             reply.error(libc::EIO);
@@ -1233,7 +1234,7 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
                         },
                     };
                     if new_inode_internals.inode_type == T_DIR {
-                        match self.isdirempty(&mut new_inode_internals) {
+                        match self.isdirempty(&new_inode_internals) {
                             Ok(true) => {}
                             _ => {
                                 reply.error(libc::ENOTEMPTY);
@@ -1410,7 +1411,7 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
                             return;
                         },
                     };
-                    let mut new_inode_internals = match new_inode_guard.internals.write() {
+                    let new_inode_internals = match new_inode_guard.internals.read() {
                         Ok(x) => x,
                         Err(_) => {
                             reply.error(libc::EIO);
@@ -1418,7 +1419,7 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
                         },
                     };
                     if new_inode_internals.inode_type == T_DIR {
-                        match self.isdirempty(&mut new_inode_internals) {
+                        match self.isdirempty(&new_inode_internals) {
                             Ok(true) => {}
                             _ => {
                                 reply.error(libc::ENOTEMPTY);
@@ -1552,7 +1553,7 @@ impl Xv6FileSystem {
         return Ok(inode);
     }
 
-    fn isdirempty(&self, internals: &mut InodeInternal) -> Result<bool, libc::c_int> {
+    fn isdirempty(&self, internals: &InodeInternal) -> Result<bool, libc::c_int> {
         let hroot_len = mem::size_of::<Htree_root>();
         let hindex_len = mem::size_of::<Htree_index>();
         let hentry_len = mem::size_of::<Htree_entry>();
@@ -1692,7 +1693,7 @@ impl Xv6FileSystem {
         }
 
         if inode_internals.inode_type == T_DIR {
-            match self.isdirempty(&mut inode_internals) {
+            match self.isdirempty(&inode_internals) {
                 Ok(true) => {}
                 _ => {
                     return Err(libc::ENOTEMPTY);

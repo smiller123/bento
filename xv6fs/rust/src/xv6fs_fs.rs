@@ -772,7 +772,7 @@ impl Xv6FileSystem {
         buf: &mut [u8],
         _off: usize,
         _n: usize,
-        internals: &mut InodeInternal,
+        internals: &InodeInternal,
         ) -> Result<usize, libc::c_int> {
         let mut n = _n;
         let mut off = _off;
@@ -789,7 +789,7 @@ impl Xv6FileSystem {
 
         while tot < n {
             m = min(n - tot, BSIZE - off % BSIZE);
-            let block_no = self.bmap(internals, off / BSIZE, None)?;
+            let block_no = self.bmap_noalloc(internals, off / BSIZE)?;
             let disk = self.disk.as_ref().unwrap();
             let bh = disk.bread(block_no as u64)?;
             let data_slice = bh.data();
