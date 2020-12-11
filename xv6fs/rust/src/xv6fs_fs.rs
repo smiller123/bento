@@ -450,7 +450,7 @@ impl Xv6FileSystem {
         let dinode = dinode_lock.read().map_err(|_| {libc::EIO})?;
         let mut dinode_nref = dinode.nref.write().unwrap();
         *dinode_nref -= 1;
-        if *dinode_nref == 0 && map.len() > 200 {
+        if *dinode_nref == 0 {
             map.remove(&(inode.inum as u64));
         }
         return Ok(());
