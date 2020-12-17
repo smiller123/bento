@@ -164,8 +164,7 @@ fn run_utility(mount_point: &Path, source_dir: &Path, remote: &Path) {
     println!("**Time elapsed in save_to_file is: {:?}", duration);
 }
 
-// main script for backup utility, runs in a loop, fetching updates from .lin, updating
-// to backup fs
+// main script for backup utility which performs a single backup
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() != 4 {

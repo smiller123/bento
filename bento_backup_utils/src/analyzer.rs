@@ -28,11 +28,14 @@ pub enum Action {
     Delete,
 }
 
+// Given inode-to-path map and the list of events,
+// update inode-to-path map and return the map of files to update and their action
 pub fn files_to_update(inode_map: &mut HashMap<u64, PathBuf>, events: &[parser::Event]) -> HashMap<PathBuf, Action> {
     let mut files = HashMap::<PathBuf, Action>::new();
     for event in events {
         match event {
             parser::Event::Close { inode, ..} => {
+                // add update action
                 if let Some(v) = inode_map.get(inode) {
                     files.insert(v.clone(), Action::Update);
                 }
@@ -52,6 +55,7 @@ pub fn files_to_update(inode_map: &mut HashMap<u64, PathBuf>, events: &[parser::
                 }
             },
             parser::Event::UnlinkDeleted { inode, ..} => {
+                // add update action
                 if let Some(v) = inode_map.get(inode) {
                     files.insert(v.clone(), Action::Delete);
                 }
@@ -124,6 +128,7 @@ pub fn files_to_update(inode_map: &mut HashMap<u64, PathBuf>, events: &[parser::
     files
 }
 
+// parse the .lin file and populate the given events vector
 pub fn populate_events(events: &mut Vec::<parser::Event>, lin: String) {
     let vec: Vec<&str> = lin.split('\n').collect();
     vec.iter()
