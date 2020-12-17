@@ -25,7 +25,7 @@ use alloc::vec::Vec;
 use core::cmp::min;
 use core::mem;
 use core::str;
-use core::sync::atomic::{AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use datablock::DataBlock;
 
@@ -49,6 +49,7 @@ use time::Timespec;
 
 static LAST_BLOCK: AtomicUsize = AtomicUsize::new(0);
 static LAST_INODE: AtomicUsize = AtomicUsize::new(0);
+static FIRST_I_LOOP: AtomicBool = AtomicBool::new(true);
 
 impl Xv6FileSystem {
     // Read xv6 superblock from disk
@@ -240,9 +241,10 @@ impl Xv6FileSystem {
             let disk = self.disk.as_ref().unwrap();
             let iblock_new = iblock(block_inum, &sb) as u64;
             /* TODO: not actually correct for reusing blocks */
+            let is_first_loop = FIRST_I_LOOP.load(Ordering::SeqCst);
             let curr_most_recent = LAST_INODE.load(Ordering::SeqCst);
             let curr_last_segment = curr_most_recent - curr_most_recent % IPB;
-            let new_blk = iblock_new > iblock(curr_last_segment, &sb) as u64;
+            let new_blk = (iblock_new > iblock(curr_last_segment, &sb) as u64) && is_first_loop;
             let mut bh = if new_blk {
                 let mut bh = disk.getblk(iblock_new)?;
                 bh.lock();
@@ -286,7 +288,9 @@ impl Xv6FileSystem {
                         bh.unlock();
                     }
                     handle.journal_write(&mut bh);
-                    LAST_INODE.store(inum as usize, Ordering::SeqCst);
+                    if !first || inum > curr_most_recent {
+                        LAST_INODE.store(inum as usize, Ordering::SeqCst);
+                    }
                     return self.iget(inum as u64);
                 }
             }
@@ -294,6 +298,7 @@ impl Xv6FileSystem {
             if block_inum >= num_inodes as usize {
                 block_inum = 0;
                 first = false;
+                FIRST_I_LOOP.store(false, Ordering::SeqCst);
             }
         }
         return Err(libc::EIO);
