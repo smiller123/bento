@@ -211,8 +211,8 @@ def modify(args: argparse.Namespace) -> None:
     iterate_directories(remove_dir, args.src_path, args.rmdir_prob)
     iterate_directories(rename_dir, args.src_path, args.renamedir_prob)
 
-    # iterate_directories(create_dir, args.src_path, args.createdir_prob)
-    # iterate_directories(create_file, args.src_path, args.createfile_prob)
+    iterate_directories(create_dir, args.src_path, args.createdir_prob)
+    iterate_directories(create_file, args.src_path, args.createfile_prob)
 
     tree2 = get_tree(args.src_path)
     # subprocess.call(['tree', args.src_path])
