@@ -44,7 +44,7 @@ pub fn files_to_update(inode_map: &mut HashMap<u64, PathBuf>, events: &[parser::
                         let full_path = Path::new(parent_path).join(path);
                         inode_map.insert(*inode, full_path);
                     },
-                    _ => println!("inode key {} is not found", *parent)
+                    _ => ()
                 }
                 // add update action
                 if let Some(v) = inode_map.get(inode) {
@@ -63,7 +63,7 @@ pub fn files_to_update(inode_map: &mut HashMap<u64, PathBuf>, events: &[parser::
                         let full_path = Path::new(parent_path).join(path);
                         inode_map.insert(*inode, full_path);
                     },
-                    _ => println!("inode key {} is not found", *parent)
+                    _ => ()
                 }
 
                 // add update action
@@ -79,7 +79,7 @@ pub fn files_to_update(inode_map: &mut HashMap<u64, PathBuf>, events: &[parser::
                         let full_path = Path::new(parent_path).join(new_name);
                         inode_map.insert(moved_inode.unwrap(), full_path);
                     },
-                    _ => println!("inode key {} is not found", *newparent_inode)
+                    _ => ()
                 }
 
                 if overwritten_inode.is_some() {
@@ -97,10 +97,10 @@ pub fn files_to_update(inode_map: &mut HashMap<u64, PathBuf>, events: &[parser::
                                     let full_path = Path::new(dest_parent_path).join(file_name);
                                     inode_map.insert(swapped_inode, full_path);
                                 },
-                                _ => println!("inode key {} is not found", swapped_inode)
+                                _ => ()
                             }
                         },
-                        _ => println!("inode key {} is not found", *parent_inode)
+                        _ => ()
                     }
                 }
 
@@ -108,7 +108,6 @@ pub fn files_to_update(inode_map: &mut HashMap<u64, PathBuf>, events: &[parser::
                 // otherwise check swapped inode?
                 if let Some(v) = inode_map.get(&parent_inode) {
                     files.insert(v.join(old_name), Action::Delete);
-                    // println!("marking for deletion!");
                 }
 
                 if moved_inode.is_some() {
@@ -132,10 +131,8 @@ pub fn populate_events(events: &mut Vec::<parser::Event>, lin: String) {
             if !p.is_empty() {
                 let result = parser::parse_event(p);
                 match result {
-                    // TODO: Need cleanup
-                    Ok(event) => { /* println!("ok {:?}", event); */ events.push(event); },
-                    // Err(_e) => {println!("error {:?}", p);},
-                    Err(_e) => {println!("error, not showing contents for now")},
+                    Ok(event) => { events.push(event); },
+                    Err(_e) => (),
                 }
             }
         });
