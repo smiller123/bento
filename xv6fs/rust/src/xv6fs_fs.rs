@@ -550,7 +550,7 @@ impl Xv6FileSystem {
             let mut cell_data = [0; 4];
             let cell_segment = &b_data[dind_idx * 4 .. (dind_idx + 1) * 4];
             cell_data.copy_from_slice(cell_segment);
-            let cell = u32::from_ne_bytes(cell_data);
+            let mut cell = u32::from_ne_bytes(cell_data);
 
             if cell == 0 {
                 let h = match handle {
@@ -565,6 +565,7 @@ impl Xv6FileSystem {
                 let result_blk_data = result_blk_id.to_ne_bytes();
                 cell_segment.copy_from_slice(&result_blk_data);
                 h.journal_write(&mut bh);
+                cell = result_blk_id;
             }
 
             let mut dbh = disk.bread(cell as u64)?;
@@ -588,6 +589,8 @@ impl Xv6FileSystem {
                 result_blk_id = self.balloc(h)?;
                 let result_blk_data = result_blk_id.to_ne_bytes();
                 dcell_segment.copy_from_slice(&result_blk_data);
+                let mut dcell_data = [0; 4];
+                dcell_data.copy_from_slice(dcell_segment);
                 h.journal_write(&mut dbh);
             } else {
                 result_blk_id = dcell;
@@ -1059,7 +1062,9 @@ impl Xv6FileSystem {
             if de.inum == 0 {
                 continue;
             }
-            if de.name[0..search_name_bytes.len()] == *search_name_bytes {
+            let bytes_len = search_name_bytes.len();
+            if de.name[0..bytes_len] == *search_name_bytes &&
+                (de.name.get(bytes_len).is_none() || de.name.get(bytes_len) == Some(&0)) {
                 *poff = (leaf_idx as usize * BSIZE + de_idx * de_len) as u64;
                 return self.iget(de.inum as u64);
             }
@@ -1230,7 +1235,6 @@ impl Xv6FileSystem {
                 return Err(libc::EIO);
             }
 
-            //println!("dirlink 1");
             return Ok(0);
         }
 
@@ -1336,7 +1340,6 @@ impl Xv6FileSystem {
             if self.writei(root2_slice, 0, hroot_len, internals, parent_inum, handle, true)? != hroot_len {
                 return Err(libc::EIO);
             }
-            //println!("dirlink 2");
             return Ok(0);
         }
 
@@ -1410,7 +1413,6 @@ impl Xv6FileSystem {
                 {
                     return Err(libc::EIO);
                 }
-                //println!("dirlink 3");
                 return Ok(0);
             }
         }

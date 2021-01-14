@@ -481,8 +481,9 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
                 n1 = max;
             }
             let data_region = &data[file_off..];
-            let handle = log.begin_op(3 as u32);
-            let r = match self.writei(data_region, off, n1, &mut internals, inode.inum, &handle, false) {
+            //let handle = log.begin_op(3 as u32);
+            let handle = log.begin_op(MAXOPBLOCKS as u32);
+            let r = match self.writei(data_region, off, n1, &mut internals, inode.inum, &handle, true) {
                 Ok(x) => x,
                 Err(x) => {
                     reply.error(x);
@@ -738,7 +739,7 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
     ) {
         // Check if the file already exists
         let log = self.log.as_ref().unwrap();
-        let handle = log.begin_op(16);
+        let handle = log.begin_op(32);
         let child = match self.create_internal(parent, T_FILE, name, &handle) {
             Ok(x) => x,
             Err(x) => {

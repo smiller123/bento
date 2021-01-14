@@ -25,7 +25,7 @@ use alloc::vec::Vec;
 use core::cmp::min;
 use core::mem;
 use core::str;
-use core::sync::atomic::{AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use datablock::DataBlock;
 
@@ -49,6 +49,7 @@ use time::Timespec;
 
 static LAST_BLOCK: AtomicUsize = AtomicUsize::new(0);
 static LAST_INODE: AtomicUsize = AtomicUsize::new(0);
+static FIRST_I_LOOP: AtomicBool = AtomicBool::new(true);
 
 impl Xv6FileSystem {
     // Read xv6 superblock from disk
@@ -70,7 +71,7 @@ impl Xv6FileSystem {
 
         let b_slice = bh.data_mut();
         b_slice.fill(0);
-        bh.set_buffer_uptodate();
+        //bh.set_buffer_uptodate();
         bh.unlock();
 
         handle.journal_write(&mut bh);
@@ -238,9 +239,25 @@ impl Xv6FileSystem {
         while first || block_inum < last_segment {
             let _guard = self.ialloc_lock.as_ref().unwrap().write();
             let disk = self.disk.as_ref().unwrap();
-            let mut bh = disk.bread(iblock(block_inum, &sb) as u64)?;
-            handle.get_write_access(&bh);
+            let iblock_new = iblock(block_inum, &sb) as u64;
+            let is_first_loop = FIRST_I_LOOP.load(Ordering::SeqCst);
+            let curr_most_recent = LAST_INODE.load(Ordering::SeqCst);
+            let curr_last_segment = curr_most_recent - curr_most_recent % IPB;
+            let new_blk = (iblock_new > iblock(curr_last_segment, &sb) as u64) && is_first_loop;
+            let mut bh = if new_blk {
+                let mut bh = disk.getblk(iblock_new)?;
+                bh.lock();
+                handle.get_create_access(&bh);
+                bh
+            } else {
+                let bh = disk.bread(iblock_new)?;
+                handle.get_write_access(&bh);
+                bh
+            };
             let data_slice = bh.data_mut();
+            if new_blk {
+                data_slice.fill(0);
+            }
             for inum_idx in (block_inum % IPB)..IPB {
                 let inum = block_inum + inum_idx;
                 if inum == 0 {
@@ -265,8 +282,14 @@ impl Xv6FileSystem {
                     dinode.inode_type = i_type;
                     dinode.nlink = 1;
                     dinode.dump_into(inode_slice).map_err(|_| libc::EIO)?;
+                    if new_blk {
+                        bh.set_buffer_uptodate();
+                        bh.unlock();
+                    }
                     handle.journal_write(&mut bh);
-                    LAST_INODE.store(inum as usize, Ordering::SeqCst);
+                    if !first || inum > curr_most_recent {
+                        LAST_INODE.store(inum as usize, Ordering::SeqCst);
+                    }
                     return self.iget(inum as u64);
                 }
             }
@@ -274,6 +297,7 @@ impl Xv6FileSystem {
             if block_inum >= num_inodes as usize {
                 block_inum = 0;
                 first = false;
+                FIRST_I_LOOP.store(false, Ordering::SeqCst);
             }
         }
         return Err(libc::EIO);
@@ -526,7 +550,7 @@ impl Xv6FileSystem {
             let mut cell_data = [0; 4];
             let cell_segment = &b_data[dind_idx * 4 .. (dind_idx + 1) * 4];
             cell_data.copy_from_slice(cell_segment);
-            let cell = u32::from_ne_bytes(cell_data);
+            let mut cell = u32::from_ne_bytes(cell_data);
 
             if cell == 0 {
                 let h = match handle {
@@ -541,6 +565,7 @@ impl Xv6FileSystem {
                 let result_blk_data = result_blk_id.to_ne_bytes();
                 cell_segment.copy_from_slice(&result_blk_data);
                 h.journal_write(&mut bh);
+                cell = result_blk_id;
             }
 
             let mut dbh = disk.bread(cell as u64)?;
@@ -565,6 +590,87 @@ impl Xv6FileSystem {
                 let result_blk_data = result_blk_id.to_ne_bytes();
                 dcell_segment.copy_from_slice(&result_blk_data);
                 h.journal_write(&mut dbh);
+            } else {
+                result_blk_id = dcell;
+            }
+            return Ok(result_blk_id);
+        }
+
+        return Err(libc::EIO);
+    }
+
+    // A version of bmap that won't allocate new blocks
+    fn bmap_noalloc(&self, inode: &InodeInternal, blk_idx: usize) -> Result<u32, libc::c_int> {
+        let mut idx = blk_idx;
+
+        if idx < NDIRECT as usize {
+            let addr = inode.addrs.get(idx).ok_or(libc::EIO)?;
+            if *addr == 0 {
+                return Err(libc::ENOENT);
+            }
+            return Ok(*addr);
+        }
+
+        idx -= NDIRECT as usize;
+        if idx < NINDIRECT as usize {
+            // indirect block
+            let ind_blk_id = inode.addrs.get(NDIRECT as usize).ok_or(libc::EIO)?;
+            if *ind_blk_id == 0 {
+                return Err(libc::ENOENT);
+            }
+
+            let result_blk_id: u32;
+            let disk = self.disk.as_ref().unwrap();
+            let bh = disk.bread(*ind_blk_id as u64)?;
+            let b_data = bh.data();
+
+            let mut cell_data = [0; 4];
+            let cell_segment = &b_data[idx * 4 .. (idx + 1) * 4];
+            cell_data.copy_from_slice(cell_segment);
+            let cell = u32::from_ne_bytes(cell_data);
+            if cell == 0 {
+                return Err(libc::ENOENT);
+            } else {
+                // just return the blk
+                result_blk_id = cell;
+            }
+
+            return Ok(result_blk_id);
+        }
+
+        if idx < (MAXFILE - NDIRECT) as usize {
+            idx -= NINDIRECT as usize;
+            // double indirect block
+            let dind_blk_id = inode.addrs.get(NDIRECT as usize + 1).ok_or(libc::EIO)?;
+            if *dind_blk_id == 0 {
+                return Err(libc::ENOENT);
+            }
+
+            let disk = self.disk.as_ref().unwrap();
+            let bh = disk.bread(*dind_blk_id as u64)?;
+            let b_data = bh.data();
+            let dind_idx = idx / NINDIRECT as usize;
+
+            let mut cell_data = [0; 4];
+            let cell_segment = &b_data[dind_idx * 4 .. (dind_idx + 1) * 4];
+            cell_data.copy_from_slice(cell_segment);
+            let cell = u32::from_ne_bytes(cell_data);
+
+            if cell == 0 {
+                return Err(libc::ENOENT);
+            }
+
+            let dbh = disk.bread(cell as u64)?;
+            let db_data = dbh.data();
+            let dblock_idx = idx % NINDIRECT as usize;
+
+            let result_blk_id: u32;
+            let mut dcell_data = [0; 4];
+            let dcell_segment = &db_data[dblock_idx * 4 .. (dblock_idx + 1) * 4];
+            dcell_data.copy_from_slice(dcell_segment);
+            let dcell = u32::from_ne_bytes(dcell_data);
+            if dcell == 0 {
+                return Err(libc::ENOENT);
             } else {
                 result_blk_id = dcell;
             }
@@ -800,7 +906,7 @@ impl Xv6FileSystem {
     // entry lookup
     pub fn dirlookup<'a>(
         &'a self,
-        internals: &mut InodeInternal,
+        internals: &InodeInternal,
         name: &OsStr,
         poff: &mut u64,
     ) -> Result<CachedInode<'a>, libc::c_int> {
@@ -820,6 +926,7 @@ impl Xv6FileSystem {
                 return Err(libc::ENOENT);
             },
         };
+        let search_name_bytes = search_name.as_bytes();
 
         let mut de = Xv6fsDirent::new();
         let mut de_vec: Vec<u8> = vec![0; de_len];
@@ -847,7 +954,7 @@ impl Xv6FileSystem {
         let target_hash = calculate_hash(&osstr_name);
 
         // read in entire root block
-        let root_block_no = self.bmap(internals, 0, None)?;
+        let root_block_no = self.bmap_noalloc(internals, 0)?;
         let mut root_bh = disk.bread(root_block_no as u64)?;
         let root_arr_slice = root_bh.data_mut();
 
@@ -900,7 +1007,7 @@ impl Xv6FileSystem {
 
         // get index block
         let target_lblock: u32 = index_vec[target_entry].block;
-        let hindex_block_no = self.bmap(internals, target_lblock as usize, None)?;
+        let hindex_block_no = self.bmap_noalloc(internals, target_lblock as usize)?;
         let mut hindex_bh = disk.bread(hindex_block_no as u64)?;
         let hindex_arr_slice = hindex_bh.data_mut();
 
@@ -937,7 +1044,7 @@ impl Xv6FileSystem {
 
         // read leafnode
         let leaf_idx = leaf_vec[target_leaf].block;
-        let leaf_block_no = self.bmap(internals, leaf_idx as usize, None)?;
+        let leaf_block_no = self.bmap_noalloc(internals, leaf_idx as usize)?;
         let mut leaf_bh = disk.bread(leaf_block_no as u64)?;
         let leaf_arr_slice = leaf_bh.data_mut();
 
@@ -946,16 +1053,12 @@ impl Xv6FileSystem {
             let mut de = Xv6fsDirent::new();
             let de_slice = &mut leaf_arr_slice[de_idx * de_len..(de_idx + 1) * de_len];
             de.extract_from(de_slice).map_err(|_| libc::EIO)?;
-
             if de.inum == 0 {
                 continue;
             }
-            let de_name = match str::from_utf8(&de.name) {
-                Ok(x) => x,
-                Err(_) => break,
-            };
-            let de_name_trimmed = de_name.trim_end_matches('\0');
-            if de_name_trimmed == search_name {
+            let bytes_len = search_name_bytes.len();
+            if de.name[0..bytes_len] == *search_name_bytes &&
+                (de.name.get(bytes_len).is_none() || de.name.get(bytes_len) == Some(&0)) {
                 *poff = (leaf_idx as usize * BSIZE + de_idx * de_len) as u64;
                 return self.iget(de.inum as u64);
             }
@@ -1433,26 +1536,11 @@ impl Xv6FileSystem {
         // create a new hentry in the index node
         let num_entries = index.entries as usize;
 
-        // sort old entries in index node
-        let mut ie_map: BTreeMap<u32, Htree_entry> = BTreeMap::new();
-        while let Some(ie) = leaf_vec.pop() {
-            ie_map.insert(ie.name_hash, ie);
-        }
-
         let mut new_ie = Htree_entry::new();
         new_ie.name_hash = leaf2_lower;
         new_ie.block = num_blocks as u32;
-        ie_map.insert(new_ie.name_hash, new_ie);
-
-        // store ie's in reverse order [10, 9, 8, ..]
-        {
-            let mut keys: Vec<_> = ie_map.keys().cloned().collect();
-            while let Some(key) = keys.pop() {
-                if let Some(val) = ie_map.remove(&key) {
-                    leaf_vec.push(val);
-                }
-            }
-        }
+        leaf_vec.push(new_ie);
+        leaf_vec.sort_unstable_by(|a, b| b.name_hash.partial_cmp(&a.name_hash).unwrap());
 
         // enough space in current index node
         if num_entries < ((BSIZE - hindex_len) / hentry_len) {

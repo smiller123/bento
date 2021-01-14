@@ -81,8 +81,8 @@ impl Journal {
                     return None;
                 }
                 rs_jbd2_journal_set_barrier(journal);
-                //rs_jbd2_journal_set_async_commit(journal);
-                rs_jbd2_journal_setup(journal);
+                rs_jbd2_journal_set_async_commit(journal);
+                //rs_jbd2_journal_setup(journal);
 
                 return Some(Journal { 
                     journal: UnsafeCell::new(RsJournal::from_raw(journal as *const c_void)),

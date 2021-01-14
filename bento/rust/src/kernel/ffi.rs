@@ -229,6 +229,8 @@ extern "C" {
     // kmem
     pub fn __kmalloc(size: raw::c_size_t, flags: u32) -> *mut raw::c_void;
     pub fn kfree(ptr: *const raw::c_void);
+    pub fn vmalloc(size: raw::c_size_t) -> *mut raw::c_void;
+    pub fn vfree(ptr: *const raw::c_void);
 
     // mem: TODO: implement these in rust
     pub fn memchr(s: *const raw::c_void, c: i32, n: raw::c_size_t) -> *const raw::c_void;
