@@ -17,6 +17,8 @@ use crate::println;
 use crate::std;
 #[cfg(not(feature = "user"))]
 use crate::time;
+#[cfg(not(feature = "user"))]
+use bento::kernel::kobj::BufferHead;
 
 use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::Arc;
@@ -35,6 +37,7 @@ use crate::xv6fs_file::*;
 use crate::xv6fs_htree::*;
 use crate::xv6fs_ll::*;
 use crate::xv6fs_utils::*;
+use crate::xv6fs_extents::*;
 
 #[cfg(not(feature = "user"))]
 use bento::kernel::journal::*;
@@ -50,6 +53,13 @@ use time::Timespec;
 static LAST_BLOCK: AtomicUsize = AtomicUsize::new(0);
 static LAST_INODE: AtomicUsize = AtomicUsize::new(0);
 
+// Total number of blocks file system wide
+static XV6FS_NBLOCKS: AtomicUsize = AtomicUsize::new(0);
+
+
+// TODO: method that might need change: bmap, iupdate, iget, ilock, iupdate, iput, itrunc, stati, readi, writei.
+// probably done: ialloc, 
+// TODO: bmap and itruncate
 impl Xv6FileSystem {
     // Read xv6 superblock from disk
     fn readsb(&mut self) -> Result<(), libc::c_int> {
@@ -95,6 +105,7 @@ impl Xv6FileSystem {
         return Ok(());
     }
 
+    // TODO: add preallocation feature to allow for more contiguous blocks for a file
     // Allocate a block on disk, using a slightly different alloc strategy from xv6.
     // xv6 scans from 0th block and allocates the first available block, we scan from the latest used block since last boot.
     fn balloc(&self, handle: &Handle) -> Result<u32, libc::c_int> {
@@ -214,6 +225,9 @@ impl Xv6FileSystem {
             let log = Journal::new_from_disk(disk_ref, disk_ref2, sb.logstart as u64, sb.nlog as i32, BSIZE as i32).unwrap();
             self.log = Some(log);
         }
+
+        XV6FS_NBLOCKS.store(sb.nblocks as usize, Ordering::SeqCst);
+
         println!(
             "sb: size {}, nblocks {}, ninodes {}, nlog {}, logstart {} inodestart {}, bmap start {}",
             sb.size,
@@ -259,8 +273,10 @@ impl Xv6FileSystem {
                     dinode.major = 0;
                     dinode.minor = 0;
                     dinode.size = 0;
-                    for addr_mut in dinode.addrs.iter_mut() {
-                        *addr_mut = 0;
+                    // clear extent header and extents stored in inode
+                    dinode.eh.clear();
+                    for extent_mut in dinode.ee_arr.iter_mut() {
+                        extent_mut.clear();
                     }
                     dinode.inode_type = i_type;
                     dinode.nlink = 1;
@@ -301,7 +317,8 @@ impl Xv6FileSystem {
         disk_inode.minor = internals.minor;
         disk_inode.nlink = internals.nlink;
         disk_inode.size = internals.size;
-        disk_inode.addrs.copy_from_slice(&internals.addrs);
+        disk_inode.eh = internals.eh;
+        disk_inode.ee_arr.copy_from_slice(&internals.ee_arr);
         disk_inode.dump_into(inode_slice).map_err(|_| libc::EIO)?;
 
         handle.journal_write(&mut bh);
@@ -394,7 +411,8 @@ impl Xv6FileSystem {
                 internals.minor = disk_inode.minor;
                 internals.nlink = disk_inode.nlink;
                 internals.size = disk_inode.size;
-                internals.addrs.copy_from_slice(&disk_inode.addrs);
+                internals.eh = disk_inode.eh;
+                internals.ee_arr.copy_from_slice(&disk_inode.ee_arr);
                 internals.valid = 1;
                 if internals.inode_type == 0 {
                     return Err(libc::EIO);
@@ -437,13 +455,452 @@ impl Xv6FileSystem {
         return Ok(());
     }
 
+    // When root reaches max # of extents, need to grow in depth.
+    fn grow_extent_root(
+        &self,
+        inode: &mut InodeInternal,
+        new_ext: &Xv6fsExtent,
+        handle: Option<&Handle>,
+        new_tx: Option<Handle>
+    ) -> Result<u32, libc::c_int> {
+        let mid = INEXTENTS;
+        if mid != inode.eh.eh_entries {
+            // something is corrupted in root node
+            println!("grow_extent_root eh_entries != INEXTENTS");
+            return Err(libc::EIO);
+        }
+
+        // need to get 2 blocks for 2 new leaf nodes
+        let new_blocks_idx = [0; 2];
+        {
+            let h = match handle {
+                Some(_) => handle.unwrap(),
+                None => new_tx.get_or_insert_with(|| self.log.as_ref().unwrap().begin_op(5)),
+            };
+            for i in 0..new_blocks_idx.len() {
+                self.balloc(h).map(|blk_id| {
+                    new_blocks_idx[i] = blk_id;
+                });
+            }
+        }
+
+        let re_map: BTreeMap<u32, Xv6fsExtent> = get_sorted_root_ext(inode, *new_ext)?;
+        let blocks_idx = self.insert_ext_to_leaf_nodes(&re_map, handle, new_tx, new_blocks_idx[0], new_blocks_idx[1], None)?;
+        for root_idx in 0..INEXTENTS {
+            inode.ee_arr[root_idx as usize].clear();
+        }
+        inode.ee_arr[0].xe_block = blocks_idx.0;
+        inode.ee_arr[0].xe_block_addr = new_blocks_idx[0];
+        inode.ee_arr[1].xe_block = blocks_idx.1;
+        inode.ee_arr[1].xe_block_addr = new_blocks_idx[1];
+ 
+        return Ok(new_ext.xe_block_addr);
+    }
+    
+    fn insert_ext_to_leaf_nodes (&self,
+        ext_map: &BTreeMap<u32, Xv6fsExtent>,
+        handle: Option<&Handle>,
+        new_tx: Option<Handle>,
+        first_block: u32,
+        second_block: u32,
+        first_bh: Option<BufferHead> 
+    ) -> Result<(u32, u32), libc::c_int> {
+        let keys: Vec<u32> = ext_map.keys().cloned().collect();
+        // split extents into leaf nodes
+        let first_key: u32;
+        let second_key: u32;
+        let mut ext_idx = 0;
+        // TODO: make into method
+        {       
+            let h = match handle {
+                Some(_) => handle.unwrap(),
+                None => new_tx.get_or_insert_with(|| self.log.as_ref().unwrap().begin_op(5)),
+            };
+
+            let mut bh = match first_bh {
+                Some(fbh) => fbh,
+                None => self.disk.as_ref().unwrap().bread(first_block as u64)?,
+            };
+            let b_data = bh.data_mut();
+            h.get_write_access(&bh);
+            let mut ext_off = EH_LEN;
+            while ext_idx < keys.len() / 2 {
+                let ext_slice = &mut b_data[ext_off..ext_off + EXT_LEN];
+                let ext = ext_map.get(&keys[ext_idx]).unwrap();
+                if ext_idx == 0 {
+                    first_key = ext.xe_block;
+                }
+                ext.dump_into(ext_slice).map_err(|_| libc::EIO)?;
+                ext_idx += 1;
+                ext_off += EXT_LEN;
+            }
+            let leaf_eh = Xv6fsExtentHeader::new();
+            leaf_eh.eh_entries = (ext_idx) as u16;
+            leaf_eh.eh_depth = 1;
+            // TODO: migth need to updaet eh_max
+            let eh_slice = &mut b_data[0..EH_LEN];
+            leaf_eh.dump_into(eh_slice).map_err(|_| libc::EIO)?;
+            h.journal_write(&mut bh);
+        }
+
+        {       
+            let h = match handle {
+                Some(_) => handle.unwrap(),
+                None => new_tx.get_or_insert_with(|| self.log.as_ref().unwrap().begin_op(5)),
+            };
+
+            let mut bh = self.disk.as_ref().unwrap().bread(second_block as u64)?;
+            let b_data = bh.data_mut();
+            h.get_write_access(&bh);
+            let mut ext_off = EH_LEN;
+            while ext_idx < keys.len() {
+                let ext_slice = &mut b_data[ext_off..ext_off + EXT_LEN];
+                let ext = ext_map.get(&keys[ext_idx]).unwrap();
+                if ext_idx == keys.len() / 2 {
+                    second_key = ext.xe_block;
+                }
+                ext.dump_into(ext_slice).map_err(|_| libc::EIO)?;
+                ext_idx += 1;
+                ext_off += EXT_LEN;
+            }
+            let leaf_eh = Xv6fsExtentHeader::new();
+            leaf_eh.eh_entries = (ext_idx - keys.len() / 2) as u16;
+            leaf_eh.eh_depth = 1;
+            // TODO: migth need to updaet eh_max
+            let eh_slice = &mut b_data[0..EH_LEN];
+            leaf_eh.dump_into(eh_slice).map_err(|_| libc::EIO)?;
+            h.journal_write(&mut bh);
+
+        }
+        return Ok((first_key, second_key));
+    }
+
     // handle should be Some(_) if this bmap is part of a transaction, None otherwise
     // bmap may have to write to disk during some read operation
+    // Returns an avaiable block number.
+    // If the blk_idx was outside of the total # of blocks of an inode, it will balloc a block and return that.
+    // Otherwise, it will just return a previously balloc'd block.
     fn bmap(&self, inode: &mut InodeInternal, blk_idx: usize, handle: Option<&Handle>) -> Result<u32, libc::c_int> {
         let mut idx = blk_idx;
 
         let mut new_tx: Option<Handle> = None;
 
+        let max_depth = inode.eh.eh_depth;
+        let valid_entries = inode.eh.eh_entries;
+        let eh_len = mem::size_of::<Xv6fsExtentHeader>();
+        let ei_len = mem::size_of::<Xv6fsExtentIdx>();
+        let ext_len = mem::size_of::<Xv6fsExtent>();
+        let ext_path_vec = Arc::new(Vec::<Xv6fsExtentPath>::with_capacity(3));
+        let mut curr_depth = 0;
+        let mut ppos = 0;
+
+        let disk = self.disk.as_ref().unwrap();
+        let epv_mut = Arc::get_mut(&mut ext_path_vec).unwrap();
+        epv_mut.push(Xv6fsExtentPath::new());
+        // TODO: consider making helper function for traversal
+        loop {
+            if curr_depth < max_depth {
+                let mut curr_path = epv_mut.get_mut(ppos).unwrap();
+                if curr_depth == 0 { // we're at the root
+                    curr_path.p_hdr = Some(Arc::new(inode.eh));
+                    curr_path.p_maxdepth = inode.eh.eh_depth;
+                    let mut ext_idx = match ext_binary_search(&inode.ee_arr[0..valid_entries as usize], valid_entries as u32, idx as u32) {
+                        Some(e_idx) => e_idx,
+                        None => { // curr inode has no data
+                            let ext = inode.ee_arr.get_mut(0).ok_or(libc::EIO)?;
+                            let h = match handle {
+                                Some(_) => handle.unwrap(),
+                                None => new_tx.get_or_insert_with(|| self.log.as_ref().unwrap().begin_op(2)),
+                            };
+                            return self.balloc(h).map(|blk_id| {
+                                ext.xe_block = 0;
+                                ext.xe_block_addr = blk_id;
+                                blk_id
+                            });
+                        },
+                    };
+                    curr_path.p_ext = Some(Arc::new(*inode.ee_arr.get(ext_idx as usize).unwrap()));
+            
+                } else { // curr_depth > 0, we're in an index node
+                    let bh_slice = match curr_path.p_bh {
+                        Some(bh) => Arc::get_mut(&mut bh).unwrap().data_mut(),
+                        None => {
+                            println!("Error in getting data_mut from bh");
+                            return Err(libc::EIO);
+                        },
+                    };
+                    let ei_entries = match curr_path.p_hdr {
+                        Some(hdr) => hdr.eh_entries,
+                        None =>  {
+                            println!("Error in header from curr_path");
+                            return Err(libc::EIO);
+                        },
+                    };
+                    let ei_vec: Vec<Xv6fsExtentIdx> = Vec::with_capacity(ei_entries as usize);
+                    for ei_off in (eh_len..eh_len + (ei_len * ei_entries as usize)).step_by(ei_len) {
+                        if ei_off >= BSIZE {
+                            break;
+                        }
+
+                        let mut ei = Xv6fsExtentIdx::new();
+                        let ei_slice = &mut bh_slice[ei_off..ei_off + ei_len];
+                        ei.extract_from(ei_slice).map_err(|_| libc::EIO)?;
+                        // check for invalid extent index
+                        // TODO: might want to do something else than just breaking out of the loop
+                        if ei.ei_block_addr == 0 {
+                            break;
+                        }
+                        ei_vec.push(ei);
+                    }
+
+                    // do binary search on extent indeces
+                    let ei_vec_slice = ei_vec.as_slice();
+                    curr_path.p_idx = match ext_binary_search_idx(ei_vec_slice, ei_vec.len() as u32, idx as u32) {
+                        Some(ei_idx) => Some(Arc::new(ei_vec[ei_idx as usize])),
+                        None => {
+                            println!("Error in index node binary search");
+                            return Err(libc::EIO);
+                        },
+                    };
+
+
+                }
+                curr_path.p_depth = curr_depth;
+
+                curr_depth += 1;
+
+                // if all data is stored in root extent, we can stop early and avoid unnecessary operations
+                if curr_depth >= max_depth {
+                    break;
+                }
+                // update ppos and read in the next block
+                ppos += 1;
+
+                
+                let mut next_path = Xv6fsExtentPath::new();
+                // set buffer head and extent header of new node block.
+                next_path.p_bh = Some(Arc::new(disk.bread(curr_path.p_ext.unwrap().xe_block_addr as u64)?));
+                next_path.p_hdr = Some(Arc::new(bh_to_ext_header(&next_path)?)); 
+                ext_path_vec.push(next_path);
+            } else { // curr_depth >= max_depth
+                break;
+            }
+        }
+              
+        // now curr_depth == max_depth
+        // do binary search on leaf node, and return block num if found, otherwise need to allocate new block
+        if curr_depth == 0 {
+            // all data is stored in the extents in the root node
+
+            // ppos == 0 and curr_depth == 0
+            let curr_path = epv_mut.get_mut(ppos).unwrap();
+            let curr_ext = curr_path.p_ext.unwrap();
+
+            // case 1: block is alrady allocated
+            if idx >= curr_ext.xe_block as usize && idx < (curr_ext.xe_block + curr_ext.xe_len as u32) as usize {
+                return Ok(curr_ext.xe_block_addr + (idx as u32 - curr_ext.xe_block as u32));
+            }
+
+            // case 2: block is not allocated
+            // allocate new block
+            
+            let h = match handle {
+                Some(_) => handle.unwrap(),
+                None => new_tx.get_or_insert_with(|| self.log.as_ref().unwrap().begin_op(2)),
+            };
+            let new_block_addr = self.balloc(h)?;
+            let new_block = get_next_block_idx(inode.size);
+
+            // case 2a: new block is contiguous
+            if new_block - 1 == curr_ext.xe_block_addr + curr_ext.xe_len as u32 && curr_ext.xe_len < u16::MAX {
+                // TODO: might also want to check for max file size?
+                // Can extend current extent
+                curr_ext.xe_len += 1;
+                return Ok(new_block_addr);
+           } else { // block is not contiguous or the previous extent reached its maximum length
+                // create new extent
+                let new_ext = Xv6fsExtent::new();
+                new_ext.xe_block = new_block;
+                new_ext.xe_block_addr = new_block_addr;
+                new_ext.xe_len = 1;
+
+                let root_entries = curr_path.p_hdr.unwrap().eh_entries;
+                let root_max_entries = ext_max_entries(inode, 0);
+                // check if there's enough space in the root extent array
+                if root_entries < root_max_entries {
+                    // need to insert in sorted order
+                    //inode.ee_arr[root_entries as usize] = new_ext;
+                    let re_map: BTreeMap<u32, Xv6fsExtent> = get_sorted_root_ext(inode, new_ext)?;
+                    insert_to_root_ext_sorted(inode, &re_map)?;
+                    
+                    return Ok(new_ext.xe_block_addr);
+                } else { // not enough space
+                    // need to grow in depth
+                    return self.grow_extent_root(inode, &new_ext, handle, new_tx);
+                }
+            }
+
+        } else { // depth != 0
+            // we are at a leaf node
+
+            // curr_depth != 0 && ppos point to leaf extent node
+            let curr_path = epv_mut.get_mut(ppos).unwrap();
+            let bh = match curr_path.p_bh {
+                Some(bh) => Arc::get_mut(&mut bh).unwrap(),
+                None => { 
+                    println!("Leaf extent node - cannot get p_bh");
+                    return Err(libc::EIO);
+                }
+            };
+            let bh_slice = bh.data_mut();
+
+            let ext_entries = match curr_path.p_hdr {
+                Some(hdr) => hdr.eh_entries,
+                None => {
+                    println!("Leaf extent node - cannot get eh_entries");
+                    return Err(libc::EIO);
+                }
+            };
+
+            let ext_vec: Vec<Xv6fsExtent> = Vec::with_capacity(ext_entries as usize);
+            for ext_off in (eh_len..eh_len + (ext_len * ext_entries as usize)).step_by(ext_len) {
+                if ext_off >= BSIZE {
+                    break;
+                }
+                
+                let mut ext = Xv6fsExtent::new();
+                let ext_slice = &mut bh_slice[ext_off..ext_off + ext_len];
+                ext.extract_from(ext_slice).map_err(|_| libc::EIO)?;
+
+                // check for invalid extent
+                // TODO: might want to do something else than just breaking out of the loop
+                if ext.xe_block_addr == 0 {
+                    break;
+                }
+                ext_vec.push(ext);
+            }
+            
+            // do binary search in leaf node
+            let ext_vec_slice = ext_vec.as_slice();
+            let curr_ext = match ext_binary_search(ext_vec_slice, ext_vec.len() as u32, idx as u32) {
+                Some(ext_idx) => ext_vec[ext_idx as usize],
+                None => {
+                    println!("Root extent node - ext_binary_search failed");
+                    return Err(libc::EIO);
+                }
+            };
+            // case 1: block is already allocated
+            if idx >= curr_ext.xe_block as usize && idx < (curr_ext.xe_block + curr_ext.xe_len as u32) as usize {
+                return Ok(curr_ext.xe_block_addr + (idx as u32 - curr_ext.xe_block as u32));
+            }
+
+            // case 2: block is not allocated
+            // TODO: move to helper function
+            let h = match handle {
+                Some(_) => handle.unwrap(),
+                None => new_tx.get_or_insert_with(|| self.log.as_ref().unwrap().begin_op(2)),
+            };
+            let new_block_addr = self.balloc(h)?;
+            let new_block = get_next_block_idx(inode.size);
+
+            if new_block - 1 == curr_ext.xe_block_addr + curr_ext.xe_len as u32 && curr_ext.xe_len < u16::MAX {
+                // TODO: might also want to check for max file size?
+                curr_ext.xe_len += 1;
+                return Ok(new_block_addr);
+            } else { // new block is not contiguous or curr_ext.len >= u16::MAX
+                let new_ext = Xv6fsExtent::new();
+                new_ext.xe_block = new_block;
+                new_ext.xe_block_addr = new_block_addr;
+                new_ext.xe_len = 1;
+                // sort extents and insert new extent
+                let le_map: BTreeMap<u32, Xv6fsExtent> = BTreeMap::new();
+                while let Some(leaf_ext) = ext_vec.pop() {
+                    le_map.insert(leaf_ext.xe_block, leaf_ext);
+                }
+                le_map.insert(new_ext.xe_block, new_ext);
+
+                // try inserting in current leaf node if there's space
+                let leaf_max_entries = ext_max_entries(inode, curr_depth);
+                if ext_vec.len() < leaf_max_entries as usize { // enough space in current leaf node
+                    h.get_write_access(&bh);
+
+
+                    let h = match handle {
+                        Some(_) => handle.unwrap(),
+                        None => new_tx.get_or_insert_with(|| self.log.as_ref().unwrap().begin_op(5)),         
+                    };
+                    // write extents into leaf node
+
+                    let le_map_keys: Vec<u32> = le_map.keys().cloned().collect();
+                    let ext_off = EH_LEN;
+                    let num_leaf_ext = le_map_keys.len();
+                    for key_idx in 0..num_leaf_ext {
+                        let ext_slice = &mut bh_slice[ext_off..ext_off + EXT_LEN];
+                        le_map.get(&le_map_keys[key_idx]).unwrap().dump_into(ext_slice).map_err(|_| libc::EIO)?;
+                        ext_off += EH_LEN;
+                    }
+                    // udpate lead extent header
+                    let leaf_hdr = curr_path.p_hdr.unwrap();
+                    leaf_hdr.eh_entries = num_leaf_ext as u16;
+                    let hdr_slice = &mut bh_slice[0..EH_LEN];
+                    leaf_hdr.dump_into(hdr_slice).map_err(|_| libc::EIO)?;
+                    h.journal_write(&mut bh);
+                    
+                    return Ok(new_ext.xe_block_addr);
+                } else { // not enough space in current leaf node
+                    // split leaf node
+
+                    // allocate new block for new leaf node.
+                    let h = match handle {
+                        Some(_) => handle.unwrap(),
+                        None => new_tx.get_or_insert_with(|| self.log.as_ref().unwrap().begin_op(5)),
+                    };
+                    // allocate new leaf block and split extents in old and new leaf blocks & update extents headers of leaf blocks
+                    let new_leaf_block_addr = self.balloc(h)?;
+                    let lower_bounds = self.insert_ext_to_leaf_nodes(&le_map, handle, new_tx, 0, new_leaf_block_addr, Some(*curr_path.p_bh.unwrap()))?;
+
+                    // insert new extent "index"
+                    if curr_depth == 1 {    // root has extents used as extent indeces
+                        let re_num = inode.eh.eh_entries;
+                        //le re_map 
+                        let mut new_root_ext = Xv6fsExtent::new();
+                        // update values of new root extent
+                        new_root_ext.xe_block = lower_bounds.1;
+                        new_root_ext.xe_block_addr = new_leaf_block_addr;
+                        // update value of original root extent
+                        ext_path_vec[0].p_ext.unwrap().xe_block = lower_bounds.0;
+                        let re_map: BTreeMap<u32, Xv6fsExtent> = get_sorted_root_ext(inode, new_root_ext)?;
+                        // sort root extents and insert new "index" (root contains only extents) extent into root
+                        if re_map.len() <= INEXTENTS as usize {
+                            insert_to_root_ext_sorted(inode, &re_map)?;
+                            return Ok(new_ext.xe_block_addr);
+                        } else {    // root has no more space, need to grow in depth and add two extent index nodes
+
+                        }
+                    } else { // general case where above node has extent indeces
+
+                    }
+                   // get extent indeces from parent node
+                    // insert new index node.
+                        // case 1. sufficient space in parent node
+                        // case 2. need to split parent node.
+                            // case 2a. parent is root node
+                            // case 2b. parent is any index node where depth != 0
+
+                }
+
+            }
+            // case 2a: new block is contiguous, need to increase xe_len 
+            // case 2a1: xe_len < max_xe_len
+            // case 2a2: xe_len > max_xe_len, need to split a single extent
+                // case: if # extent > max_ext_num, need to split extent node
+                    // new index node
+                    // case a: index node fits
+                    // case b: need to add a new pointer (ext or ext index depending on depth) in previous node.
+            // 2b: new block is not contiguous, new to store in new extent
+            // 2ba: need to find new correct location again and add it in extent node
+        }
+        /*
         if idx < NDIRECT as usize {
             let addr = inode.addrs.get_mut(idx).ok_or(libc::EIO)?;
             if *addr == 0 {
@@ -458,7 +915,8 @@ impl Xv6FileSystem {
             }
             return Ok(*addr);
         }
-
+        */
+/*
         idx -= NDIRECT as usize;
         if idx < NINDIRECT as usize {
             // indirect block
@@ -570,12 +1028,99 @@ impl Xv6FileSystem {
             }
             return Ok(result_blk_id);
         }
-
+*/
         return Err(libc::EIO);
     }
 
-
+    // TODO: check presence of extent tree for large files.
+    //      - if there is no tree, then iterate of extents in inode, and free corrresponding blocks.
+    //      - if there is a tree, then we need to traverse the entire tree, and start freeing from data blocks, 
+    //        and backtract to leaf nodes, index nodes, and finally root. 
     pub fn itrunc(&self, inode: &mut CachedInode, internals: &mut InodeInternal, handle: &Handle) -> Result<(), libc::c_int> {
+        // check for presence of extent tree
+        let ext_tree_depth = internals.eh.eh_depth; 
+        let num_extents = internals.eh.eh_entries;
+
+        if ext_tree_depth <= 0 {
+            // TODO replace with a free_leaf function
+            // iterate over extent entries and free blocks
+            for i in 0..num_extents {
+                let mut curr_ext = internals.ee_arr.get_mut(i).ok_or(libc::EIO)?;
+                let block_no = curr_ext.xe_block;
+                let num_blocks = curr_ext.xe_len;
+                for curr_block in block_no..(block_no + num_blocks * BSIZE).step_by(BSIZE) {
+                   self.bfree(*curr_block as usize, handle)?; 
+                }
+                curr_ext.clear();
+
+            }
+    
+        } /*else { // tree has depth > 0
+            // need to traverse the extent tree and free all index/leaf/data nodes
+            let disk = self.disk.as_ref().unwrap(); 
+            // stack that contains the addresses stored in each extent or extent index
+            let addr_stack: Vec<u32> = Vec::with_capacity(64);
+            // create stack iterate over the extents in the root node
+            for i in 0..num_extents {
+                // TODO can create macros to get sizes of extents types.
+                let eh_len = mem::size_of::<Xv6fsExtentHeader>();
+                let ei_len = mem::size_of::<Xv6fsExtentIdx>();
+                let ext_len = mem::size_of::<Xv6fsExtent>();
+
+                let mut curr_ext = internals.ee_arr.get_mut(i).ok_or(libc::EIO)?;
+
+                let curr_root_addr = curr_e;
+                addr_stack.push_back(curr_ext.xe_block);
+                // need to add outer while loop
+                let disk = self.disk.as_ref().unwrap();
+                let blk_idx = curr_ext.xe_block;
+                if (blk_idx != 0) {
+                    let bh = disk.bread(blk_idx as u64)?;
+                    let b_data = bh.data();
+
+                    // extract extent header from block
+                    let mut eh = Xv6fsExtentHeader::new();
+                    let eh_slice = &mut b_data[0..eh_len];
+                    eh.extract_from(eh_slice).map_err(|_| libc::EIO)?;
+
+                    if (eh.depth == 0) {
+                        // it is a leaf node, so free blocks pointed by extents
+                        for ext_off in (eh_len..eh_len + (ext_len * eh.eh_entries)).step_by(ext_len) {
+                            if ext_off >= BSIZE { // should never happen
+                                break;
+                            }
+                            let mut ext = Xv6fsExtent::new();
+                            let ext_slice = &mut b_data[ext_off..ext_off + ext_len];
+                            ext.extract_from(ext_slice).map_err(|_| libc::EIO)?;
+                            
+                            let ext_block = ext_block;
+                            if ext_block != 0 {
+                                for bfree_idx in (ext_block..ext_block + ext.xe_len) {
+                                    self.bfree(bfree_idx as usize, handle)?;
+                                }
+                            }
+                        }
+                    } else { // eh.depth > 0
+                        addr_stack.push_back()
+                    }
+                }
+                /* for each root extent, add block address to stack,
+                    for each block, check header:
+                        - if current block is leaf block, then iterate over extents and free all data blocks
+                        - if current block is index block, then push block address to stack, and continue to next loop iteration
+                    at the end, pop address from stack, and bfree the block
+                let mut curr_ext = internals.ee_arr.get_mut(i)_ok_or(libs::EIO)?;
+                */
+
+                // remove block address from stack, free block and clear root extent
+                let root_child_block = addr_stack.pop_back();
+                self.bfree(root_child_block as usize, handle)?;
+                curr_ext.clear();
+
+            }
+        }
+        */
+        /*
         for i in 0..NDIRECT as usize {
             let addr = internals.addrs.get_mut(i).ok_or(libc::EIO)?;
             if *addr != 0 {
@@ -583,7 +1128,11 @@ impl Xv6FileSystem {
                 *addr = 0;
             }
         }
+        */
+        
 
+        // old indirect blocks
+        /*
         let disk = self.disk.as_ref().unwrap();
         let ind_blk_id = internals.addrs.get_mut(NDIRECT as usize).ok_or(libc::EIO)?;
         if *ind_blk_id != 0 {
@@ -634,7 +1183,7 @@ impl Xv6FileSystem {
             self.bfree(*dind_blk_id as usize, handle)?;
             *dind_blk_id = 0;
         }
-
+*/
         internals.size = 0;
         return self.iupdate(&internals, inode.inum, handle);
     }

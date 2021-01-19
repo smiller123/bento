@@ -9,6 +9,7 @@
 
 use core::mem;
 use datablock::DataBlock;
+use crate::xv6fs_extents::*;
 
 pub const BSIZE: usize = 4096;
 
@@ -18,6 +19,7 @@ pub const T_FILE: u16 = 2;
 pub const T_DEV: u16 = 3;
 pub const T_LNK: u16 = 4;
 
+pub const INEXTENTS: u16 = 4; // number of extents stored in an inode
 pub const DIRSIZ: u16 = 124;
 pub const NDIRECT: u32 = 10;
 pub const NINDIRECT: u32 = (BSIZE / mem::size_of::<u32>()) as u32;
@@ -52,9 +54,13 @@ pub struct Xv6fsInode {
     pub minor: u16,
     pub nlink: u16,
     pub size: u64,
-    pub addrs: [u32; NDIRECT as usize + 2],
+//    pub addrs: [u32; NDIRECT as usize + 2],
+    pub eh: Xv6fsExtentHeader,
+    pub ee_arr: [Xv6fsExtent; INEXTENTS as usize],
 }
 
+// old on-disk inode size = 64
+// new on-disk inode size = 64, where we have 7 extents directly stored in the inode
 impl Xv6fsInode {
     pub const fn new() -> Self {
         Self {
@@ -63,7 +69,10 @@ impl Xv6fsInode {
             minor: 0,
             nlink: 0,
             size: 0,
-            addrs: [0; NDIRECT as usize + 2],
+//            addrs: [0; NDIRECT as usize + 2],
+            eh: Xv6fsExtentHeader::new(),
+            ee_arr: [Xv6fsExtent::new(); INEXTENTS as usize],
+ 
         }
     }
 }

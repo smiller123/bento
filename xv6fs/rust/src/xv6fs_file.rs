@@ -12,6 +12,7 @@ use crate::std;
 
 use crate::xv6fs_utils::*;
 use crate::xv6fs_ll::*;
+use crate::xv6fs_extents::*;
 
 use std::sync::RwLock;
 
@@ -53,7 +54,9 @@ pub struct InodeInternal {
     pub minor: u16,
     pub nlink: u16,
     pub size: u64,
-    pub addrs: [u32; NDIRECT as usize + 2],
+//    pub addrs: [u32; NDIRECT as usize + 2], // original 48 bytes for addresses
+    pub eh: Xv6fsExtentHeader,
+    pub ee_arr: [Xv6fsExtent; INEXTENTS as usize],
 }
 
 impl InodeInternal {
@@ -65,7 +68,9 @@ impl InodeInternal {
             minor: 0,
             nlink: 0,
             size: 0,
-            addrs: [0; NDIRECT as usize + 2],
+//            addrs: [0; NDIRECT as usize + 2],
+            eh: Xv6fsExtentHeader::new(),
+            ee_arr: [Xv6fsExtent::new(); INEXTENTS as usize],
         }
     }
 }

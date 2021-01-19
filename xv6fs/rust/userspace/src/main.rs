@@ -16,6 +16,7 @@ pub mod xv6fs_fs;
 pub mod xv6fs_htree;
 pub mod xv6fs_log;
 pub mod xv6fs_utils;
+pub mod xv6fs_extents;
 
 use alloc::sync::Arc;
 
