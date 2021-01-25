@@ -1,0 +1,25 @@
+[package]
+name = "user_xv6fs"
+version = "0.1.0"
+build = "build.rs"
+authors = ["Danyang Zhuo <danyangz@cs.washington.edu>",
+           "Kaiyuan Zhang <kaiyuanz@cs.washington.edu>",
+           "Samantha Miller <sm237@cs.washington.edu>"]
+
+[build-dependencies]
+pkg-config = "0.3"
+
+[features]
+user = []
+
+[dependencies]
+datablock = { path = "../../../datablock-rs/datablock" }
+bento_utils = { path = "../../../bento_utils" }
+libc = "0.2.5"
+env_logger = "0.7.1"
+fuse = "0.3.1"
+time = "0.1"
+
+[dependencies.serde]
+version = "*"
+features = ["derive"]
