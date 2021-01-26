@@ -25,12 +25,14 @@ extern void rust_exit(void);
 
 static int xv6fs_init(void)
 {
+    printk(KERN_INFO "xv6fs: init\n");
     rust_main();
     return 0;
 }
 
 static void xv6fs_exit(void)
 {
+    printk(KERN_INFO "xv6fs: exit\n");
     rust_exit();
 }
 
