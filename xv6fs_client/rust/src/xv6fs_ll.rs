@@ -1037,7 +1037,7 @@ impl BentoFilesystem<'_> for Xv6FileSystem {
     ) {
         let name_str = name.to_str().unwrap();
         let newname_str = newname.to_str().unwrap();
-        let msg = format!("fsyncdir {} {} {} {} {}", parent_ino, name_str, newparent_ino, newname_str, flags);
+        let msg = format!("rename {} {} {} {} {}", parent_ino, name_str, newparent_ino, newname_str, flags);
         let _ = self.socket.as_ref().unwrap().write(msg.as_bytes());
         let mut msg_resp = [0 as u8; 4096];
         let size = match self.socket.as_ref().unwrap().read(&mut msg_resp) {
