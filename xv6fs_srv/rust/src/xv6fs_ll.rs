@@ -49,17 +49,18 @@ use std::sync::RwLock;
 
 use time::*;
 
-use serde::{Serialize, Deserialize};
+//use serde::{Serialize, Deserialize};
 
 use crate::xv6fs_file::*;
 use crate::xv6fs_htree::*;
 use crate::xv6fs_utils::*;
-
+/*
 #[cfg_attr(not(feature = "user"), derive(Serialize, Deserialize))]
 pub struct Xv6State {
     diskname: String,
     log: Option<Journal>,
 }
+*/
 
 pub struct Xv6FileSystem {
     pub log: Option<Journal>,
@@ -1842,7 +1843,7 @@ impl Xv6FileSystem {
                 return Err(libc::EIO);
             }
         }
-        return Ok(();
+        return Ok(());
     
     }
     // old part

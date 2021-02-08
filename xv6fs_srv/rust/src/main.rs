@@ -4,13 +4,24 @@
 #![feature(get_mut_unchecked)]
 
 extern crate alloc;
+extern crate bento_utils;
+extern crate datablock;
 extern crate fuse;
 extern crate capnp;
 extern crate core;
 extern crate libc;
 extern crate time;
 
+#[macro_use]
 pub mod xv6fs_ll;
+pub mod xv6fs_file;
+pub mod xv6fs_fs;
+pub mod xv6fs_htree;
+pub mod xv6fs_log;
+pub mod xv6fs_utils;
+
+
+//pub mod xv6fs_ll;
 
 use std::env;
 
