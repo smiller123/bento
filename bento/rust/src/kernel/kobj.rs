@@ -12,6 +12,8 @@ use kernel::raw::*;
 use core::slice;
 
 use crate::libc;
+use core::ops::Deref;
+use core::ops::DerefMut;
 
 // /// A wrapper around the kernel `super_block` type.
 def_kernel_obj_type!(RsSuperBlock);
@@ -173,6 +175,31 @@ impl CStr {
     }
 }
 
+pub struct BHLockGuard<'a> {
+    bh: &'a mut BufferHead
+}
+
+impl Drop for BHLockGuard<'_> {
+    fn drop(&mut self) {
+        self.bh.unlock();
+    }
+}
+
+impl Deref for BHLockGuard<'_> {
+    type Target = BufferHead;
+
+    fn deref(&self) -> &BufferHead {
+        unsafe { &*self.bh }
+    }
+}
+
+impl DerefMut for BHLockGuard<'_> {
+    fn deref_mut(&mut self) -> &mut BufferHead {
+        unsafe { &mut *self.bh }
+    }
+}
+
+
 impl BufferHead {
     /// Return the associated data as a `u8` slice.
     pub fn data(&self) -> &[u8] {
@@ -196,9 +223,12 @@ impl BufferHead {
         return self.b_blocknr();
     }
 
-    pub fn lock(&mut self) {
+    pub fn lock(&mut self) -> BHLockGuard<'_> {
         unsafe {
             rs_lock_buffer(self.get_raw() as *const c_void);
+        }
+        return BHLockGuard {
+            bh: self
         }
     }
 

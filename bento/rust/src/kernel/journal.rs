@@ -146,7 +146,8 @@ impl Handle {
         }
     }
 
-    pub fn get_create_access(&self, bh: &BufferHead) -> i32 {
+    //pub fn get_create_access(&self, bh: &BufferHead) -> i32 {
+    pub fn get_create_access(&self, bh: &BHLockGuard) -> i32 {
         //let vec: &BTreeSet<u64> = &mut self.blocks.borrow();
         //if vec.contains(&bh.blocknr()) {
         //    return 0;
