@@ -21,18 +21,17 @@ use crate::time;
 use alloc::collections::btree_map::BTreeMap;
 
 use alloc::string::String;
-use alloc::string::ToString;
+//use alloc::string::ToString;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
 use core::mem;
 use core::str;
 
-use bento_utils::BentoFilesystem;
 
 use datablock::DataBlock;
 
-use bento_utils::consts::*;
+//use bento_utils::consts::*;
 use bento_utils::*;
 use fuse::consts::*;
 
@@ -74,6 +73,12 @@ pub struct Xv6FileSystem {
 }
 
 // Xv6fs_srv impl starts here
+use std::net::*;
+use std::fs::File;
+use std::io::{Read, Write};
+
+use crate::hello_capnp::foo;
+use capnp::serialize;
 
 pub static XV6FS: Xv6FileSystem = Xv6FileSystem {
     log: None,
@@ -122,12 +127,9 @@ pub fn xv6fs_srv_runner(devname: &str) {
         let buf_vec: Vec<&str> = buf_str.split(' ').collect();
         let buf_op = buf_vec.get(0).unwrap();
         match *buf_op {
-            "init" => {
-                xv6fs_init();
-            },
             "exit" => break,
             "statfs" => {
-                let statfs_res = statfs();
+                let statfs_res = XV6FS.statfs();
                 match statfs_res {
                     Ok((a, b, c, d, e, f, g, h)) => {
                         let msg = format!("Ok {} {} {} {} {} {} {} {}",
@@ -149,7 +151,7 @@ pub fn xv6fs_srv_runner(devname: &str) {
                 }
                 let open_fh: u64 = buf_vec.get(1).unwrap().parse().unwrap();
                 let open_flags: u32 = buf_vec.get(2).unwrap().parse().unwrap();
-                let open_res = open(open_fh, open_flags);
+                let open_res = XV6FS.open(open_fh, open_flags);
                 match open_res {
                     Ok((a, b)) => {
                         let msg = format!("Ok {} {}", a, b);
@@ -169,7 +171,7 @@ pub fn xv6fs_srv_runner(devname: &str) {
                     continue;
                 }
                 let open_fh: u64 = buf_vec.get(1).unwrap().parse().unwrap();
-                let open_res = opendir(open_fh);
+                let open_res = XV6FS.opendir(open_fh);
                 match open_res {
                     Ok((a, b)) => {
                         let msg = format!("Ok {} {}", a, b);
@@ -189,7 +191,7 @@ pub fn xv6fs_srv_runner(devname: &str) {
                     continue;
                 }
                 let getattr_fh: u64 = buf_vec.get(1).unwrap().parse().unwrap();
-                let getattr_res = getattr(getattr_fh);
+                let getattr_res = XV6FS.getattr(getattr_fh);
                 match getattr_res {
                     Ok((a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t)) => {
                         let msg = format!("Ok {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
@@ -203,14 +205,15 @@ pub fn xv6fs_srv_runner(devname: &str) {
                 }
             },
             "setattr" => { // TODO: change to match function
-                if buf_vec.len() < 2 {
+                if buf_vec.len() < 3 {
                     // Send error back
                     let msg = format!("Err {}", libc::EINVAL);
                     let _ = connection.write(msg.as_bytes());
                     continue;
                 }
-                let getattr_fh: u64 = buf_vec.get(1).unwrap().parse().unwrap();
-                let set_attr = setattr(getattr_fh);
+                let setattr_fh: u64 = buf_vec.get(1).unwrap().parse().unwrap();
+                let setattr_size: u64 = buf_vec.get(2).unwrap().parse().unwrap();
+                let setattr_res = XV6FS.setattr(setattr_fh, setattr_size);
                 match setattr_res {
                     Ok((a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t)) => {
                         let msg = format!("Ok {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
@@ -232,7 +235,7 @@ pub fn xv6fs_srv_runner(devname: &str) {
                 }
                 let create_parent: u64= buf_vec.get(1).unwrap().parse().unwrap();
                 let create_name: &str= buf_vec.get(2).unwrap();
-                let create_res = create(create_parent, create_name);
+                let create_res = XV6FS.create(create_parent, create_name);
                 match create_res {
                     Ok((a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w)) => {
                         let msg = format!("Ok {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
@@ -255,7 +258,7 @@ pub fn xv6fs_srv_runner(devname: &str) {
                 }
                 let mkdir_parent: u64 = buf_vec.get(1).unwrap().parse().unwrap();
                 let mkdir_name: &str = buf_vec.get(2).unwrap();
-                let mkdir_res = mkdir(mkdir_parent, mkdir_nam);
+                let mkdir_res = XV6FS.mkdir(mkdir_parent, mkdir_name);
                 match mkdir_res {
                     Ok((a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u)) => {
                         let msg = format!("Ok {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
@@ -277,7 +280,7 @@ pub fn xv6fs_srv_runner(devname: &str) {
                 }
                 let lookup_id: u64 = buf_vec.get(1).unwrap().parse().unwrap();
                 let lookup_name: &str = buf_vec.get(2).unwrap();
-                let lookup_res = lookup(lookup_id, lookup_name);
+                let lookup_res = XV6FS.lookup(lookup_id, lookup_name);
                 match lookup_res {
                     Ok((a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u)) => {
                         let msg = format!("Ok {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
@@ -291,7 +294,7 @@ pub fn xv6fs_srv_runner(devname: &str) {
                 }
             },
             "read" => {
-                if buf_vec.len() < 3 {
+                if buf_vec.len() < 4 {
                     // Send error back
                     let msg = format!("Err {}", libc::EINVAL);
                     let _ = connection.write(msg.as_bytes());
@@ -299,7 +302,8 @@ pub fn xv6fs_srv_runner(devname: &str) {
                 }
                 let read_id: u64 = buf_vec.get(1).unwrap().parse().unwrap();
                 let read_off: i64 = buf_vec.get(2).unwrap().parse().unwrap();
-                let read_res = read(&mut disk, read_id, read_off);
+                let read_size: u32 = buf_vec.get(3).unwrap().parse().unwrap();
+                let read_res = XV6FS.read(read_id, read_off, read_size);
                 match read_res {
                     Ok(s) => {
                         let msg = format!("Ok {}", str::from_utf8(s.as_slice()).unwrap());
@@ -328,7 +332,7 @@ pub fn xv6fs_srv_runner(devname: &str) {
                     buf_vec.get(2).unwrap().len() + 3;
                 let write_data = &buf[write_data_off..size];
 
-                let write_res = write(&mut disk, write_id, write_off, write_data);
+                let write_res = XV6FS.write(write_id, write_off, write_data);
                 match write_res {
                     Ok(a) => {
                         let msg = format!("Ok {}", a);
@@ -349,7 +353,8 @@ pub fn xv6fs_srv_runner(devname: &str) {
                 }
                 let readdir_id: u64 = buf_vec.get(1).unwrap().parse().unwrap();
                 let readdir_off: i64 = buf_vec.get(2).unwrap().parse().unwrap();
-                let readdir_res = readdir(readdir_id, readdir_off);
+
+                let readdir_res = XV6FS.readdir(readdir_id, readdir_off);
                 let mut msg_vec: Vec<String> = Vec::new();
                 match readdir_res {
                     Ok(s) => {
@@ -376,7 +381,7 @@ pub fn xv6fs_srv_runner(devname: &str) {
                 }
                 let rmdir_parent: u64 = buf_vec.get(1).unwrap().parse().unwrap();
                 let rmdir_name: &str = buf_vec.get(2).unwrap();
-                let rmdir_res = rmdir(rmdir_parent, rmdir_name);
+                let rmdir_res = XV6FS.rmdir(rmdir_parent, rmdir_name);
                 match rmdir_res {
                     Ok(()) => {
                         let msg = "Ok";
@@ -397,7 +402,7 @@ pub fn xv6fs_srv_runner(devname: &str) {
                 }
                 let unlink_parent: u64 = buf_vec.get(1).unwrap().parse().unwrap();
                 let unlink_name: &str = buf_vec.get(2).unwrap();
-                let unlink_res = unlink(unlink_parent, unlink_name);
+                let unlink_res = XV6FS.unlink(unlink_parent, unlink_name);
                 match unlink_res {
                     Ok(()) => {
                         let msg = "Ok";
@@ -416,7 +421,7 @@ pub fn xv6fs_srv_runner(devname: &str) {
                     let _ = connection.write(msg.as_bytes());
                     continue;
                 }
-                let fsync_res = fsync(&mut disk);
+                let fsync_res = XV6FS.fsync();
                 match fsync_res {
                     Ok(()) => {
                         let msg = "Ok";
@@ -435,7 +440,7 @@ pub fn xv6fs_srv_runner(devname: &str) {
                     let _ = connection.write(msg.as_bytes());
                     continue;
                 }
-                let fsyncdir_res = fsyncdir(&mut disk);
+                let fsyncdir_res = XV6FS.fsyncdir();
                 match fsyncdir_res {
                     Ok(()) => {
                         let msg = "Ok";
@@ -457,7 +462,7 @@ pub fn xv6fs_srv_runner(devname: &str) {
                 let symlink_nodeid: u64 = buf_vec.get(1).unwrap().parse().unwrap();
                 let symlink_name: &str = buf_vec.get(2).unwrap();
                 let symlink_linkname_str = buf_vec.get(3).unwrap();
-                let symlink_res = symlink(symlink_nodeid, symlink_name, symlink_linkname_str);
+                let symlink_res = XV6FS.symlink(symlink_nodeid, symlink_name, symlink_linkname_str);
                 match symlink_res {
                     Ok((a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u)) => {
                         let msg = format!("Ok {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
@@ -478,7 +483,7 @@ pub fn xv6fs_srv_runner(devname: &str) {
                     continue;
                 }
                 let readlink_nodeid: u64 = buf_vec.get(1).unwrap().parse().unwrap();
-                let readlink_res = readlink(readlink_nodeid);
+                let readlink_res = XV6FS.readlink(readlink_nodeid);
                 match readlink_res {
                     Ok(s) => {
                         let msg = format!("Ok {}", str::from_utf8(s.as_slice()).unwrap());
@@ -502,7 +507,7 @@ pub fn xv6fs_srv_runner(devname: &str) {
                 let rename_newparent_ino: u64 = buf_vec.get(3).unwrap().parse().unwrap();
                 let rename_newname: &str= buf_vec.get(4).unwrap();
                 let rename_flags: u32 = buf_vec.get(5).unwrap().parse().unwrap();
-                let rename_res = rename(rename_parent_ino, rename_name, rename_newparent_ino, rename_newname, rename_flags);
+                let rename_res = XV6FS.rename(rename_parent_ino, rename_name, rename_newparent_ino, rename_newname, rename_flags);
                 match rename_res {
                     Ok(()) => {
                         let msg = "Ok";
@@ -525,7 +530,8 @@ impl Xv6FileSystem {
     fn xv6fs_init(&mut self, devname: &str) -> Result<(), i32> {
         if self.disk.is_none() {
             let disk = Disk::new(devname, BSIZE as u64);
-            let mut disk_string = devname_str.to_string();
+            //let mut disk_string = devname_str.to_string();
+            let mut disk_string = devname;
             disk_string.push('\0');
             self.diskname = Some(disk_string);
             self.disk = Some(Arc::new(disk));
@@ -595,7 +601,7 @@ impl Xv6FileSystem {
     }
 
 
-    fn opendir(&self, nodeid: u64) -> Result<(u62, u32), i32> {
+    fn opendir(&self, nodeid: u64) -> Result<(u64, u32), i32> {
         let inode = match self.iget(nodeid) {
             Ok(x) => x,
             Err(x) => {
@@ -653,7 +659,7 @@ impl Xv6FileSystem {
         match self.stati(nodeid, &internals) {
             Ok(attr) => {
                 let kind = match attr.kind {
-                    Filetype::Directory => 1,
+                    FileType::Directory => 1,
                     FileType::RegularFile => 2,
                     _ => 3,
                 };
@@ -713,19 +719,27 @@ impl Xv6FileSystem {
                 return Err(libc::EIO);
             }
         };
-        if let Some(fsize) = size {
-            let log = self.log.as_ref().unwrap();
-            let handle = log.begin_op(2);
-            internals.size = fsize;
-            if let Err(x) = self.iupdate(&internals, inode.inum, &handle) {
-                return Err(x);
-            }
+        let fsize = size;
+        let log = self.log.as_ref().unwrap();
+        let handle = log.begin_op(2);
+        internals.size = fsize;
+        if let Err(x) = self.iupdate(&internals, inode.inum, &handle) {
+            return Err(x);
         }
+
+//        if let Some(fsize) = size {
+            //let log = self.log.as_ref().unwrap();
+            //let handle = log.begin_op(2);
+            //internals.size = fsize;
+            //if let Err(x) = self.iupdate(&internals, inode.inum, &handle) {
+                //return Err(x);
+            //}
+        //}
         let attr_valid = Timespec::new(1, 999999999);
         match self.stati(ino, &internals) {
             Ok(attr) => {
                 let kind = match attr.kind {
-                    Filetype::Directory => 1,
+                    FileType::Directory => 1,
                     FileType::RegularFile => 2,
                     _ => 3,
                 };
@@ -799,8 +813,8 @@ impl Xv6FileSystem {
                     _ => 3,
                 };
                 return Ok((
-                    entry_valid.sec,
-                    entry_valid.nsec,
+                    attr_valid.sec,
+                    attr_valid.nsec,
                     attr.ino,
                     attr.size,
                     attr.blocks,
@@ -830,7 +844,7 @@ impl Xv6FileSystem {
         }
     }    
     // TODO: mkdir
-    fn bento_mkdir(
+    fn mkdir(
         &self,
         parent: u64,
         name: &str,
@@ -872,8 +886,8 @@ impl Xv6FileSystem {
                     _ => 3,
                 };
                 return Ok((
-                    entry_valid.sec,
-                    entry_valid.nsec,
+                    attr_valid.sec,
+                    attr_valid.nsec,
                     attr.ino,
                     attr.size,
                     attr.blocks,
@@ -955,8 +969,8 @@ impl Xv6FileSystem {
                     _ => 3,
                 };
                 return Ok((
-                    entry_valid.sec,
-                    entry_valid.nsec,
+                    attr_valid.sec,
+                    attr_valid.nsec,
                     attr.ino,
                     attr.size,
                     attr.blocks,
@@ -1100,7 +1114,6 @@ impl Xv6FileSystem {
         &self,
         nodeid: u64,
         offset: i64,
-        mut reply: ReplyDirectory,
     ) -> Result<Vec<(u64, i64, u64, &'static str)>, i32> {
         // Get inode number nodeid
         let inode = match self.iget(nodeid) {
@@ -1293,7 +1306,7 @@ impl Xv6FileSystem {
                         Ok(x) => x,
                         Err(_) => "",
                     };
-                    if (de.inum != 0) {
+                    if de.inum != 0 {
                         readdir_vec.push((de.inum as u64, buf_off, i_type, name_str));
                         // TODO: might not want to return here
                         return Ok(readdir_vec);
@@ -1330,7 +1343,7 @@ impl Xv6FileSystem {
     }
 
     // TODO: symlink
-    fn bento_symlink(
+    fn symlink(
         &self,
         nodeid: u64,
         name: &str,
@@ -1398,8 +1411,8 @@ impl Xv6FileSystem {
                     _ => 3,
                 };
                 return Ok((
-                    entry_valid.sec,
-                    entry_valid.nsec,
+                    attr_valid.sec,
+                    attr_valid.nsec,
                     attr.ino,
                     attr.size,
                     attr.blocks,
@@ -1427,7 +1440,7 @@ impl Xv6FileSystem {
         }
     }
 
-    fn bento_readlink(&self, nodeid: u64) -> Result<Vec<u8>, i32>  {
+    fn readlink(&self, nodeid: u64) -> Result<Vec<u8>, i32>  {
         let inode = match self.iget(nodeid) {
             Ok(x) => x,
             Err(x) => {
@@ -1643,7 +1656,7 @@ impl Xv6FileSystem {
                         match self.isdirempty(&mut new_inode_internals) {
                             Ok(true) => {}
                             _ => {
-                                return Err(libc::ENOTEMPY);
+                                return Err(libc::ENOTEMPTY);
                             }
                         }
                     }
@@ -1803,7 +1816,7 @@ impl Xv6FileSystem {
                         match self.isdirempty(&mut new_inode_internals) {
                             Ok(true) => {}
                             _ => {
-                                return Err(libc::ENOTEMPY);
+                                return Err(libc::ENOTEMPTY);
                             }
                         }
                     }
