@@ -66,13 +66,14 @@ impl Xv6FileSystem {
     fn bzero(&self, bno: usize, handle: &Handle) -> Result<(), libc::c_int> {
         let disk = self.disk.as_ref().unwrap();
         let mut bh = disk.getblk(bno as u64)?;
-        bh.lock();
-        handle.get_create_access(&bh);
+        {
+        let mut locked_bh = bh.lock();
+        handle.get_create_access(&locked_bh);
 
-        let b_slice = bh.data_mut();
+        let b_slice = locked_bh.data_mut();
         b_slice.fill(0);
-        //bh.set_buffer_uptodate();
-        bh.unlock();
+        locked_bh.set_buffer_uptodate();
+        }
 
         handle.journal_write(&mut bh);
 
@@ -240,65 +241,103 @@ impl Xv6FileSystem {
             let _guard = self.ialloc_lock.as_ref().unwrap().write();
             let disk = self.disk.as_ref().unwrap();
             let iblock_new = iblock(block_inum, &sb) as u64;
+            /* TODO: not actually correct for reusing blocks */
             let is_first_loop = FIRST_I_LOOP.load(Ordering::SeqCst);
             let curr_most_recent = LAST_INODE.load(Ordering::SeqCst);
             let curr_last_segment = curr_most_recent - curr_most_recent % IPB;
             let new_blk = (iblock_new > iblock(curr_last_segment, &sb) as u64) && is_first_loop;
-            let mut bh = if new_blk {
-                let mut bh = disk.getblk(iblock_new)?;
-                bh.lock();
-                handle.get_create_access(&bh);
-                bh
-            } else {
-                let bh = disk.bread(iblock_new)?;
-                handle.get_write_access(&bh);
-                bh
-            };
-            let data_slice = bh.data_mut();
             if new_blk {
-                data_slice.fill(0);
-            }
-            for inum_idx in (block_inum % IPB)..IPB {
-                let inum = block_inum + inum_idx;
-                if inum == 0 {
-                    continue;
+                let mut bh = disk.getblk(iblock_new)?;
+                let mut locked_bh = bh.lock();
+                handle.get_create_access(&locked_bh);
+                let data_slice = locked_bh.data_mut();
+                if new_blk {
+                    data_slice.fill(0);
                 }
-                // Get the specific inode offset
-                let inode_offset = (inum as usize % IPB) * mem::size_of::<Xv6fsInode>();
+                for inum_idx in (block_inum % IPB)..IPB {
+                    let inum = block_inum + inum_idx;
+                    if inum == 0 {
+                        continue;
+                    }
+                    // Get the specific inode offset
+                    let inode_offset = (inum as usize % IPB) * mem::size_of::<Xv6fsInode>();
 
-                let inode_slice =
-                    &mut data_slice[inode_offset..inode_offset + mem::size_of::<Xv6fsInode>()];
+                    let inode_slice =
+                        &mut data_slice[inode_offset..inode_offset + mem::size_of::<Xv6fsInode>()];
 
-                let mut dinode = Xv6fsInode::new();
-                dinode.extract_from(inode_slice).map_err(|_| libc::EIO)?;
-                // Check if inode is free
-                if dinode.inode_type == 0 {
-                    dinode.major = 0;
-                    dinode.minor = 0;
-                    dinode.size = 0;
-                    for addr_mut in dinode.addrs.iter_mut() {
-                        *addr_mut = 0;
+                    let mut dinode = Xv6fsInode::new();
+                    dinode.extract_from(inode_slice).map_err(|_| libc::EIO)?;
+                    // Check if inode is free
+                    if dinode.inode_type == 0 {
+                        dinode.major = 0;
+                        dinode.minor = 0;
+                        dinode.size = 0;
+                        for addr_mut in dinode.addrs.iter_mut() {
+                            *addr_mut = 0;
+                        }
+                        dinode.inode_type = i_type;
+                        dinode.nlink = 1;
+                        dinode.dump_into(inode_slice).map_err(|_| libc::EIO)?;
+                        locked_bh.set_buffer_uptodate();
+                        core::mem::drop(locked_bh);
+                        handle.journal_write(&mut bh);
+                        if !first || inum > curr_most_recent {
+                            LAST_INODE.store(inum as usize, Ordering::SeqCst);
+                        }
+                        return self.iget(inum as u64);
                     }
-                    dinode.inode_type = i_type;
-                    dinode.nlink = 1;
-                    dinode.dump_into(inode_slice).map_err(|_| libc::EIO)?;
-                    if new_blk {
-                        bh.set_buffer_uptodate();
-                        bh.unlock();
-                    }
-                    handle.journal_write(&mut bh);
-                    if !first || inum > curr_most_recent {
-                        LAST_INODE.store(inum as usize, Ordering::SeqCst);
-                    }
-                    return self.iget(inum as u64);
                 }
-            }
-            block_inum += IPB;
-            if block_inum >= num_inodes as usize {
-                block_inum = 0;
-                first = false;
-                FIRST_I_LOOP.store(false, Ordering::SeqCst);
-            }
+                block_inum += IPB;
+                if block_inum >= num_inodes as usize {
+                    block_inum = 0;
+                    first = false;
+                    FIRST_I_LOOP.store(false, Ordering::SeqCst);
+                }
+            } else {
+                let mut bh = disk.bread(iblock_new)?;
+                handle.get_write_access(&bh);
+                let data_slice = bh.data_mut();
+                if new_blk {
+                    data_slice.fill(0);
+                }
+                for inum_idx in (block_inum % IPB)..IPB {
+                    let inum = block_inum + inum_idx;
+                    if inum == 0 {
+                        continue;
+                    }
+                    // Get the specific inode offset
+                    let inode_offset = (inum as usize % IPB) * mem::size_of::<Xv6fsInode>();
+
+                    let inode_slice =
+                        &mut data_slice[inode_offset..inode_offset + mem::size_of::<Xv6fsInode>()];
+
+                    let mut dinode = Xv6fsInode::new();
+                    dinode.extract_from(inode_slice).map_err(|_| libc::EIO)?;
+                    // Check if inode is free
+                    if dinode.inode_type == 0 {
+                        dinode.major = 0;
+                        dinode.minor = 0;
+                        dinode.size = 0;
+                        for addr_mut in dinode.addrs.iter_mut() {
+                            *addr_mut = 0;
+                        }
+                        dinode.inode_type = i_type;
+                        dinode.nlink = 1;
+                        dinode.dump_into(inode_slice).map_err(|_| libc::EIO)?;
+                        handle.journal_write(&mut bh);
+                        if !first || inum > curr_most_recent {
+                            LAST_INODE.store(inum as usize, Ordering::SeqCst);
+                        }
+                        return self.iget(inum as u64);
+                    }
+                }
+                block_inum += IPB;
+                if block_inum >= num_inodes as usize {
+                    block_inum = 0;
+                    first = false;
+                    FIRST_I_LOOP.store(false, Ordering::SeqCst);
+                }
+            };
         }
         return Err(libc::EIO);
     }
