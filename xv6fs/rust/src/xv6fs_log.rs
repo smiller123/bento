@@ -14,6 +14,7 @@ use core::sync::atomic::{AtomicBool, Ordering};
 
 use bento_utils::Disk;
 use bento_utils::BufferHead;
+use bento_utils::BHLockGuard;
 
 use std::sync::Mutex;
 use std::sync::Condvar;
@@ -373,7 +374,7 @@ impl Handle<'_> {
         return 0;
     }
 
-    pub fn get_create_access(&self, _bh: &BufferHead) -> i32 {
+    pub fn get_create_access(&self, _bh: &BHLockGuard) -> i32 {
         return 0;
     }
 

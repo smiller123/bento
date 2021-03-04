@@ -229,6 +229,8 @@ extern "C" {
     // kmem
     pub fn __kmalloc(size: raw::c_size_t, flags: u32) -> *mut raw::c_void;
     pub fn kfree(ptr: *const raw::c_void);
+    pub fn vmalloc(size: raw::c_size_t) -> *mut raw::c_void;
+    pub fn vfree(ptr: *const raw::c_void);
 
     // mem: TODO: implement these in rust
     pub fn memchr(s: *const raw::c_void, c: i32, n: raw::c_size_t) -> *const raw::c_void;
@@ -278,6 +280,7 @@ extern "C" {
     pub fn rs_jbd2_journal_force_commit(journal: *const raw::c_void) -> i32;
     pub fn rs_jbd2_journal_set_barrier(journal: *const raw::c_void);
     pub fn rs_jbd2_journal_set_async_commit(journal: *const raw::c_void);
+    pub fn rs_jbd2_journal_setup(journal: *const raw::c_void);
     pub fn rs_lock_buffer(bh: *const raw::c_void);
     pub fn unlock_buffer(bh: *const raw::c_void);
 

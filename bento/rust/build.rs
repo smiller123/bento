@@ -80,6 +80,8 @@ const INCLUDED_FUNCTIONS: &[&str] = &[
     "__kmalloc",
     "krealloc",
     "kfree",
+    "vmalloc",
+    "vfree",
     "mount_nodev",
     "kill_litter_super",
     "register_sysctl",
@@ -200,6 +202,7 @@ const INCLUDED_VARS: &[&str] = &[
     "SO_RCVTIMEO",
     "SO_SNDTIMEO",
     "MSG_PEEK",
+    "PAGE_SIZE",
 ];
 const OPAQUE_TYPES: &[&str] = &[
     // These need to be opaque because they're both packed and aligned, which rustc

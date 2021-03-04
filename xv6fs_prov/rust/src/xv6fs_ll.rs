@@ -127,6 +127,7 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
         fc_info.want |= FUSE_BIG_WRITES;
         fc_info.want |= FUSE_ATOMIC_O_TRUNC;
         fc_info.want |= FUSE_WRITEBACK_CACHE;
+        fc_info.want |= FUSE_PARALLEL_DIROPS;
 
         fc_info.max_readahead = max_readahead;
         fc_info.max_background = 0;
@@ -210,12 +211,36 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
         reply.opened(fh, open_flags);
     }
 
-    fn bento_flush(
+    //fn bento_flush(
+    //    &self,
+    //    req: &Request,
+    //    ino: u64,
+    //    _fh: u64,
+    //    _lock_owner: u64,
+    //    reply: ReplyEmpty,
+    //) {
+    //    let log = self.log.as_ref().unwrap();
+    //    let handle = log.begin_op(6 as u32);
+    //    let msg = format!(
+    //        "op: close, pid: {}, inode: {}\n",
+    //        req.pid(),
+    //        ino
+    //    );
+    //    if let Err(x) = self.write_prov_file(msg, &handle) {
+    //        reply.error(x);
+    //        return;
+    //    }
+    //    reply.ok();
+    //}
+
+    fn bento_release(
         &self,
         req: &Request,
         ino: u64,
         _fh: u64,
+        _flags: u32,
         _lock_owner: u64,
+        _flush: bool,
         reply: ReplyEmpty,
     ) {
         let log = self.log.as_ref().unwrap();
@@ -290,7 +315,7 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
                 return;
             }
         };
-        let attr_valid = Timespec::new(0, 0);
+        let attr_valid = Timespec::new(1, 999999999);
         match self.stati(nodeid, &internals) {
             Ok(attr) => {
                 reply.attr(&attr_valid, &attr);
@@ -351,7 +376,7 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
                 return;
             }
         }
-        let attr_valid = Timespec::new(0, 0);
+        let attr_valid = Timespec::new(1, 999999999);
         match self.stati(ino, &internals) {
             Ok(attr) => reply.attr(&attr_valid, &attr),
             Err(x) => reply.error(x),
@@ -375,7 +400,7 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
                 return;
             }
         };
-        let mut internals = match inode_guard.internals.write() {
+        let internals = match inode_guard.internals.read() {
             Ok(x) => x,
             Err(_) => {
                 reply.error(libc::EIO);
@@ -383,7 +408,7 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
             }
         };
         let mut poff = 0;
-        let child = match self.dirlookup(&mut internals, name, &mut poff) {
+        let child = match self.dirlookup(&internals, name, &mut poff) {
             Ok(x) => x,
             Err(x) => {
                 reply.error(x);
@@ -393,7 +418,7 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
 
         let outarg_nodeid = child.inum as u64;
         let outarg_generation = 0;
-        let attr_valid = Timespec::new(0, 0);
+        let attr_valid = Timespec::new(1, 999999999);
 
         let child_inode_guard = match self.ilock(child.idx, &icache, child.inum) {
             Ok(x) => x,
@@ -813,7 +838,7 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
         let open_flags = FOPEN_KEEP_CACHE;
         let nodeid = child.inum as u64;
         let generation = 0;
-        let attr_valid = Timespec::new(0, 0);
+        let attr_valid = Timespec::new(1, 999999999);
         match self.stati(nodeid, &internals) {
             Ok(attr) => {
                 let path_name = match name.to_str() {
@@ -881,7 +906,7 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
 
         let out_nodeid = child.inum as u64;
         let generation = 0;
-        let attr_valid = Timespec::new(0, 0);
+        let attr_valid = Timespec::new(1, 999999999);
         match self.stati(out_nodeid, &internals) {
             Ok(attr) => {
                 let path_name = match name.to_str() {
@@ -1009,7 +1034,7 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
         };
         let out_nodeid = child.inum as u64;
         let generation = 0;
-        let attr_valid = Timespec::new(0, 0);
+        let attr_valid = Timespec::new(1, 999999999);
         match self.stati(out_nodeid, &internals) {
             Ok(attr) => {
                 let path_name = match name.to_str() {

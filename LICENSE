@@ -1,0 +1,7 @@
+This project contains code under multiple licenses.
+
+The bento and bentofs subdirectories are released under GPL 2.0. The license
+file can be found under bento/rust/LICENSE or bentofs/LICENSE.
+
+The remainder of the code is dual-licensed under GPL 2.0 and MIT. The MIT
+license can be found in xv6fs/rust/LICENSE and in other directories.

@@ -14,6 +14,7 @@ use kernel::raw::*;
 use core::cell::RefCell;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use alloc::collections::btree_set::BTreeSet;
 
 use kernel::fs::*;
 
@@ -56,7 +57,7 @@ impl<'de> Deserialize<'de> for Journal {
 pub struct Handle {
     handle: UnsafeCell<RsHandle>,
     requested: u32,
-    blocks: RefCell<Vec<u64>>,
+    blocks: RefCell<BTreeSet<u64>>,
 }
 
 impl Journal {
@@ -81,6 +82,7 @@ impl Journal {
                 }
                 rs_jbd2_journal_set_barrier(journal);
                 rs_jbd2_journal_set_async_commit(journal);
+                //rs_jbd2_journal_setup(journal);
 
                 return Some(Journal { 
                     journal: UnsafeCell::new(RsJournal::from_raw(journal as *const c_void)),
@@ -100,7 +102,6 @@ impl Journal {
     // begin transaction of size blocks
     pub fn begin_op(&self, blocks: u32) -> Handle {
         let handle;
-        //println!("begin {}", blocks);
         unsafe {
             handle = rs_jbd2_journal_start((*self.journal.get()).get_raw() as *const c_void, blocks as i32)
         }
@@ -111,7 +112,7 @@ impl Journal {
                 return Handle {
                     handle: UnsafeCell::new(RsHandle::from_raw(handle as *const c_void)),
                     requested: blocks,
-                    blocks: RefCell::new(Vec::new()),
+                    blocks: RefCell::new(BTreeSet::new()),
                 };
             }
         }
@@ -136,20 +137,21 @@ impl Journal {
 impl Handle {
     // notify intent to modify BufferHead as a part of this transaction
     pub fn get_write_access(&self, bh: &BufferHead) -> i32 {
-        let vec: &mut Vec<u64> = &mut self.blocks.borrow_mut();
-        if vec.contains(&bh.blocknr()) {
-            return 0;
-        }
+        //let vec: &BTreeSet<u64> = &mut self.blocks.borrow();
+        //if vec.contains(&bh.blocknr()) {
+        //    return 0;
+        //}
         unsafe {
             return rs_jbd2_journal_get_write_access((*self.handle.get()).get_raw() as *const c_void, bh.get_raw());
         }
     }
 
-    pub fn get_create_access(&self, bh: &BufferHead) -> i32 {
-        let vec: &mut Vec<u64> = &mut self.blocks.borrow_mut();
-        if vec.contains(&bh.blocknr()) {
-            return 0;
-        }
+    //pub fn get_create_access(&self, bh: &BufferHead) -> i32 {
+    pub fn get_create_access(&self, bh: &BHLockGuard) -> i32 {
+        //let vec: &BTreeSet<u64> = &mut self.blocks.borrow();
+        //if vec.contains(&bh.blocknr()) {
+        //    return 0;
+        //}
         unsafe {
             return rs_jbd2_journal_get_create_access((*self.handle.get()).get_raw() as *const c_void, bh.get_raw());
         }
@@ -157,14 +159,14 @@ impl Handle {
 
     // register a block as part of the transaction associated with this handle
     pub fn journal_write(&self, bh: &mut BufferHead) -> i32 {
-        let blocknr = bh.blocknr();
-        let vec: &mut Vec<u64> = &mut self.blocks.borrow_mut();
-        if !vec.contains(&blocknr) {
-            vec.push(blocknr);
-        }
-        if vec.len() > self.requested as usize {
-            println!("too many unique blocks written: {} / {}", vec.len(), self.requested);
-        }
+        //let blocknr = bh.blocknr();
+        //let vec: &mut BTreeSet<u64> = &mut self.blocks.borrow_mut();
+        //if !vec.contains(&blocknr) {
+        //    vec.insert(blocknr);
+        //}
+        //if vec.len() > self.requested as usize {
+        //    println!("too many unique blocks written: {} / {}", vec.len(), self.requested);
+        //}
 
         unsafe {
             return rs_jbd2_journal_dirty_metadata((*self.handle.get()).get_raw() as *const c_void, bh.get_raw());

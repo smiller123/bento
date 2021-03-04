@@ -2,6 +2,8 @@ use std::alloc;
 use std::fs::File;
 use std::fs::OpenOptions;
 use std::io;
+use std::ops::Deref;
+use std::ops::DerefMut;
 use std::os::unix::fs::FileExt;
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::io::AsRawFd;
@@ -105,7 +107,11 @@ impl BufferHead {
         }
     }
 
-    pub fn lock(&mut self) {}
+    pub fn lock(&mut self) -> BHLockGuard<'_> {
+        return BHLockGuard {
+            bh: self
+        }
+    }
 
     pub fn unlock(&mut self) {}
 
@@ -120,6 +126,31 @@ impl BufferHead {
     }
 
 }
+
+pub struct BHLockGuard<'a> {
+    bh: &'a mut BufferHead
+}
+
+impl Drop for BHLockGuard<'_> {
+    fn drop(&mut self) {
+        self.bh.unlock();
+    }
+}
+
+impl Deref for BHLockGuard<'_> {
+    type Target = BufferHead;
+
+    fn deref(&self) -> &BufferHead {
+        unsafe { &*self.bh }
+    }
+}
+
+impl DerefMut for BHLockGuard<'_> {
+    fn deref_mut(&mut self) -> &mut BufferHead {
+        unsafe { &mut *self.bh }
+    }
+}
+
 
 struct BufferCache {
     file: Arc<File>,
