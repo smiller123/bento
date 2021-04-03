@@ -23,7 +23,7 @@ pub mod xv6fs_ll;
 use bento_utils::BentoFilesystem;
 use xv6fs_ll::Xv6FileSystem;
 
-pub static FS_NAME: &'static str = "xv6fs_ll\0";
+pub static FS_NAME: &'static str = "xv6fs_client\0";
 
 pub mod hello_capnp {
     include!(concat!(env!("OUT_DIR"), "/src/hello_capnp.rs"));

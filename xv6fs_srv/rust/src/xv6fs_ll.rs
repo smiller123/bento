@@ -43,23 +43,13 @@ use bento::kernel::journal::*;
 use crate::xv6fs_log::*;
 
 use std::ffi::OsStr;
-use std::path::Path;
 use std::sync::RwLock;
 
 use time::*;
 
-//use serde::{Serialize, Deserialize};
-
 use crate::xv6fs_file::*;
 use crate::xv6fs_htree::*;
 use crate::xv6fs_utils::*;
-/*
-#[cfg_attr(not(feature = "user"), derive(Serialize, Deserialize))]
-pub struct Xv6State {
-    diskname: String,
-    log: Option<Journal>,
-}
-*/
 
 pub struct Xv6FileSystem {
     pub log: Option<Journal>,
@@ -95,20 +85,29 @@ pub fn xv6fs_srv_runner(devname: &str) {
     };
     XV6FS.xv6fs_init(devname);
     //XV6FS.xv6fs_init(devname);
-
+    println!("xv6fs_srv init - ok");
+    println!("setting sockaddr");
     let srv_addr = SocketAddrV4::new(Ipv4Addr::LOCALHOST, 1234);
+
+    println!("binding");
     let listener = match TcpListener::bind(SocketAddr::V4(srv_addr)) {
         Ok(x) => x,
         Err(_) => {
             return;
         },
     };
+
+    println!("waiting for connection");
     let mut connection = match listener.accept() {
         Ok((stream, _)) => stream,
         Err(_) => {
+
+            println!("listener accept error");
             return;
         }
     };
+
+    println!("accepted connection");
     let message_reader = serialize::read_message(&mut connection, capnp::message::ReaderOptions::new()).unwrap();
     let foo_msg = message_reader.get_root::<foo::Reader>().unwrap();
     let text = foo_msg.get_msg().unwrap();
@@ -144,20 +143,24 @@ pub fn xv6fs_srv_runner(devname: &str) {
             },
             "open" => {
                 if buf_vec.len() < 3 {
+                    println!("server - open 1");
                     // Send error back
                     let msg = format!("Err {}", libc::EINVAL);
                     let _ = connection.write(msg.as_bytes());
                     continue;
                 }
+                println!("server - open");
                 let open_fh: u64 = buf_vec.get(1).unwrap().parse().unwrap();
                 let open_flags: u32 = buf_vec.get(2).unwrap().parse().unwrap();
                 let open_res = XV6FS.open(open_fh, open_flags);
                 match open_res {
                     Ok((a, b)) => {
+                        println!("server - open OK");
                         let msg = format!("Ok {} {}", a, b);
                         let _ = connection.write(msg.as_bytes());
                     },
                     Err(x) => {
+                        println!("server - open 2");
                         let msg = format!("Err {}", x);
                         let _ = connection.write(msg.as_bytes());
                     },
@@ -165,19 +168,23 @@ pub fn xv6fs_srv_runner(devname: &str) {
             },
             "opendir" => {
                 if buf_vec.len() < 2 {
+                    println!("server - opendir 1");
                     // Send error back
                     let msg = format!("Err {}", libc::EINVAL);
                     let _ = connection.write(msg.as_bytes());
                     continue;
                 }
+                println!("server - opendir");
                 let open_fh: u64 = buf_vec.get(1).unwrap().parse().unwrap();
                 let open_res = XV6FS.opendir(open_fh);
                 match open_res {
                     Ok((a, b)) => {
+                        println!("server - opendir OK");
                         let msg = format!("Ok {} {}", a, b);
                         let _ = connection.write(msg.as_bytes());
                     },
                     Err(x) => {
+                        println!("server - opendir 2");
                         let msg = format!("Err {}", x);
                         let _ = connection.write(msg.as_bytes());
                     },
@@ -186,19 +193,25 @@ pub fn xv6fs_srv_runner(devname: &str) {
             "getattr" => {
                 if buf_vec.len() < 2 {
                     // Send error back
+
+                    println!("server - getattr 1");
                     let msg = format!("Err {}", libc::EINVAL);
                     let _ = connection.write(msg.as_bytes());
                     continue;
                 }
+                println!("server - getattr");
                 let getattr_fh: u64 = buf_vec.get(1).unwrap().parse().unwrap();
                 let getattr_res = XV6FS.getattr(getattr_fh);
                 match getattr_res {
                     Ok((a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t)) => {
+
+                        println!("server - getattr OK");
                         let msg = format!("Ok {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
                                           a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t);
                         let _ = connection.write(msg.as_bytes());
                     },
                     Err(x) => {
+                        println!("server - getattr 2");
                         let msg = format!("Err {}", x);
                         let _ = connection.write(msg.as_bytes());
                     },
@@ -207,20 +220,27 @@ pub fn xv6fs_srv_runner(devname: &str) {
             "setattr" => { // TODO: change to match function
                 if buf_vec.len() < 3 {
                     // Send error back
+
+                    println!("server - settattr 1");
                     let msg = format!("Err {}", libc::EINVAL);
                     let _ = connection.write(msg.as_bytes());
                     continue;
                 }
+                println!("server - settattr ");
                 let setattr_fh: u64 = buf_vec.get(1).unwrap().parse().unwrap();
                 let setattr_size: u64 = buf_vec.get(2).unwrap().parse().unwrap();
                 let setattr_res = XV6FS.setattr(setattr_fh, setattr_size);
                 match setattr_res {
+
                     Ok((a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t)) => {
+                        println!("server - settattr OK");
                         let msg = format!("Ok {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
                                           a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t);
                         let _ = connection.write(msg.as_bytes());
                     },
                     Err(x) => {
+
+                        println!("server - settattr 2");
                         let msg = format!("Err {}", x);
                         let _ = connection.write(msg.as_bytes());
                     },
@@ -228,22 +248,30 @@ pub fn xv6fs_srv_runner(devname: &str) {
             },
             "create" => {
                 if buf_vec.len() < 3 {
+                    println!("server - create ERR");
                     // Send error back
                     let msg = format!("Err {}", libc::EINVAL);
                     let _ = connection.write(msg.as_bytes());
                     continue;
                 }
+
+                println!("server - create");
                 let create_parent: u64= buf_vec.get(1).unwrap().parse().unwrap();
                 let create_name: &str= buf_vec.get(2).unwrap();
                 let osstr_name = OsStr::new(create_name);
                 let create_res = XV6FS.create(create_parent, &osstr_name);
+
                 match create_res {
                     Ok((a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w)) => {
+
+                        println!("server - create OK");
                         let msg = format!("Ok {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
                                           a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w);
                         let _ = connection.write(msg.as_bytes());
                     },
                     Err(x) => {
+
+                        println!("server - create ERR");
                         let msg = format!("Err {}", x);
                         let _ = connection.write(msg.as_bytes());
                     },

@@ -1,6 +1,5 @@
 
 all:
-	cargo build --release
-
+	cargo build --release --features "user"
 clean:
 	cargo clean
