@@ -350,21 +350,36 @@ impl BentoFilesystem<'_> for Xv6FileSystem {
         _flags: Option<u32>,
         reply: ReplyAttr,
     ) {
-        let msg = format!("setattr {} {}", ino, size.unwrap());
+        println!("bento_setattr");
+        let msg = match size {
+            Some(fsize) => format!("setattr {} {}", ino, fsize),
+            None => format!("setattr {} None", ino),
+        };
+        //let msg = format!("setattr {} {}", ino, size.unwrap());
+        println!("bento_setattr 1");
         let _ = self.socket.as_ref().unwrap().write(msg.as_bytes());
+
+        println!("bento_setattr 2");
         let mut msg_resp = [0 as u8; 4096];
         let size = match self.socket.as_ref().unwrap().read(&mut msg_resp) {
             Ok(x) => x,
             Err(_) => {
+
+                println!("bento_setattr 3");
                 reply.error(libc::EIO);
                 return;
             }
         };
+        println!("bento_setattr 4");
         let attr_msg = str::from_utf8(&msg_resp[0..size]).unwrap();
         let attr_vec: Vec<&str> = attr_msg.split(' ').collect();
+
+        println!("bento_setattr 5");
         match *attr_vec.get(0).unwrap() {
             "Ok" => {
                 if attr_vec.len() < 21 {
+
+                    println!("bento_setattr 6");
                     reply.error(libc::EINVAL);
                 } else {
                     let ts_sec: i64 = attr_vec.get(1).unwrap().parse().unwrap();
@@ -414,10 +429,14 @@ impl BentoFilesystem<'_> for Xv6FileSystem {
                         rdev: rdev,
                         flags: flags,
                     };
+
+                    println!("bento_setattr OK");
                     reply.attr(&attr_valid, &attr);
                 }
             }
             "Err" => {
+
+                println!("bento_setattr 7");
                 let err_val: i32 = attr_vec.get(1).unwrap().parse().unwrap();
                 reply.error(err_val);
             },

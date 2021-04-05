@@ -228,7 +228,11 @@ pub fn xv6fs_srv_runner(devname: &str) {
                 }
                 println!("server - settattr ");
                 let setattr_fh: u64 = buf_vec.get(1).unwrap().parse().unwrap();
-                let setattr_size: u64 = buf_vec.get(2).unwrap().parse().unwrap();
+                
+                let setattr_size: Option<u64> = match buf_vec.get(2).unwrap().parse() {
+                    Ok(size) => Some(size),
+                    Err(_) => None,
+                };
                 let setattr_res = XV6FS.setattr(setattr_fh, setattr_size);
                 match setattr_res {
 
@@ -732,10 +736,10 @@ impl Xv6FileSystem {
     fn setattr(
         &self,
         ino: u64,
-        size: u64,
+        size: Option<u64>,
     ) -> Result<
         (i64, i32, u64, u64, u64, i64, i32, i64, i32, i64, i32, i64, i32, u32, u16, u32, u32, u32, u32, u32), i32> {
-        
+        println!("server - setattr");
         let inode = match self.iget(ino) {
             Ok(x) => x,
             Err(x) => {
@@ -743,6 +747,7 @@ impl Xv6FileSystem {
             }
         };
 
+        println!("server - setattr 1");
         let icache = self.ilock_cache.as_ref().unwrap();
         let inode_guard = match self.ilock(inode.idx, &icache, inode.inum) {
             Ok(x) => x,
@@ -750,28 +755,32 @@ impl Xv6FileSystem {
                 return Err(x);
             }
         };
+        println!("server - setattr 2");
         let mut internals = match inode_guard.internals.write() {
             Ok(x) => x,
             Err(_) => {
                 return Err(libc::EIO);
             }
         };
-        let fsize = size;
-        let log = self.log.as_ref().unwrap();
-        let handle = log.begin_op(2);
-        internals.size = fsize;
-        if let Err(x) = self.iupdate(&internals, inode.inum, &handle) {
-            return Err(x);
+        println!("server - setattr 3");
+        //let fsize = size;
+        //let log = self.log.as_ref().unwrap();
+        //let handle = log.begin_op(2);
+        //internals.size = fsize;
+        //if let Err(x) = self.iupdate(&internals, inode.inum, &handle) {
+            //return Err(x);
+        //}
+
+        if let Some(fsize) = size {
+            let log = self.log.as_ref().unwrap();
+            let handle = log.begin_op(2);
+            internals.size = fsize;
+            if let Err(x) = self.iupdate(&internals, inode.inum, &handle) {
+                return Err(x);
+            }
         }
 
-//        if let Some(fsize) = size {
-            //let log = self.log.as_ref().unwrap();
-            //let handle = log.begin_op(2);
-            //internals.size = fsize;
-            //if let Err(x) = self.iupdate(&internals, inode.inum, &handle) {
-                //return Err(x);
-            //}
-        //}
+        println!("server - setattr 4");
         let attr_valid = Timespec::new(1, 999999999);
         match self.stati(ino, &internals) {
             Ok(attr) => {
@@ -780,6 +789,8 @@ impl Xv6FileSystem {
                     FileType::RegularFile => 2,
                     _ => 3,
                 };
+
+                println!("server - setattr OK");
                 return  Ok((
                     attr_valid.sec,
                     attr_valid.nsec,
@@ -803,7 +814,11 @@ impl Xv6FileSystem {
                     attr.flags
                 ));
             },
-            Err(x) => return Err(x),
+            Err(x) =>  {
+
+                println!("server - setattr 5");
+                return Err(x);
+            },
         }
     }
 
