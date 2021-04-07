@@ -397,7 +397,7 @@ impl TcpStream {
             msg.msg_flags = flags as u32;
             let mut iov = c::kvec {
                 iov_base: buf.as_mut_ptr() as *mut u8 as *mut raw::c_void,
-                iov_len: buf.len() as u64,
+                iov_len: buf.len(),
             };
 
             let len = ffi::kernel_recvmsg(
@@ -421,7 +421,7 @@ impl TcpStream {
             msg.msg_flags = flags as u32;
             let iov = c::kvec {
                 iov_base: buf.as_ptr() as *const u8 as *const raw::c_void as *mut raw::c_void,
-                iov_len: buf.len() as u64,
+                iov_len: buf.len(),
             };
 
             let len = ffi::kernel_sendmsg(

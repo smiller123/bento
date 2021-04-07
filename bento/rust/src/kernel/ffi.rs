@@ -227,7 +227,7 @@ extern "C" {
     pub fn printk(fmt: *const raw::c_char, ...) -> raw::c_int;
 
     // kmem
-    pub fn __kmalloc(size: raw::c_size_t, flags: u32) -> *mut raw::c_void;
+    pub fn __kmalloc(size: usize, flags: u32) -> *mut raw::c_void;
     pub fn kfree(ptr: *const raw::c_void);
     pub fn vmalloc(size: raw::c_size_t) -> *mut raw::c_void;
     pub fn vfree(ptr: *const raw::c_void);
