@@ -273,7 +273,7 @@ impl TcpStream {
             let ret = ffi::kernel_getsockopt(
                 self.inner as *mut raw::c_void,
                 c::SOL_SOCKET as i32,
-                c::SO_RCVTIMEO as i32,
+                c::SO_RCVTIMEO_NEW as i32,
                 &mut read_timeout as *mut c::timeval as *mut raw::c_char,
                 &mut optlen,
             );
@@ -316,7 +316,7 @@ impl TcpStream {
             let ret = ffi::kernel_setsockopt(
                 self.inner as *mut raw::c_void,
                 c::SOL_SOCKET as i32,
-                c::SO_RCVTIMEO as i32,
+                c::SO_RCVTIMEO_NEW as i32,
                 &timeout as *const c::timeval as *const raw::c_char,
                 mem::size_of::<c::timeval>() as u32,
             );
@@ -337,7 +337,7 @@ impl TcpStream {
             let ret = ffi::kernel_getsockopt(
                 self.inner as *mut raw::c_void,
                 c::SOL_SOCKET as i32,
-                c::SO_SNDTIMEO as i32,
+                c::SO_SNDTIMEO_NEW as i32,
                 &mut write_timeout as *mut c::timeval as *mut raw::c_char,
                 &mut optlen,
             );
@@ -380,7 +380,7 @@ impl TcpStream {
             let ret = ffi::kernel_setsockopt(
                 self.inner as *mut raw::c_void,
                 c::SOL_SOCKET as i32,
-                c::SO_SNDTIMEO as i32,
+                c::SO_SNDTIMEO_NEW as i32,
                 &timeout as *const c::timeval as *const raw::c_char,
                 mem::size_of::<c::timeval>() as u32,
             );

@@ -19,7 +19,7 @@
 #include <linux/in.h>
 #include <linux/net.h>
 #include <linux/kthread.h>
-#include <linux/timekeeping32.h>
+#include <linux/timekeeping.h>
 
 void
 wait_a_bit(void) {
@@ -40,7 +40,7 @@ kthread_run_helper(int (*threadfn)(void *data), void *data, const char *namefmt)
 }
 
 struct net *
-current_net() {
+current_net(void) {
 	return current->nsproxy->net_ns;
 }
 
@@ -222,9 +222,11 @@ void rs_jbd2_journal_set_async_commit(journal_t *journal) {
 			0, JBD2_FEATURE_INCOMPAT_ASYNC_COMMIT);
 }
 
-struct timespec current_kernel_time_rs(void)
+struct timespec64 current_kernel_time_rs(void)
 {
-	return current_kernel_time();
+	struct timespec64 ts;
+	ktime_get_real_ts64(&ts);
+	return ts;
 }
 
 void rs_jbd2_journal_setup(journal_t *journal) {

@@ -294,7 +294,7 @@ extern "C" {
     pub fn rs_ndelay(usecs: u32);
 
     pub fn getnstimeofday64(ts: *const raw::c_void);
-    pub fn current_kernel_time_rs() -> bindings::timespec;
+    pub fn current_kernel_time_rs() -> bindings::timespec64;
 
     pub fn rs_get_wait_queue_head() -> *mut raw::c_void;
     pub fn rs_put_wait_queue_head(wq_head: *const raw::c_void);

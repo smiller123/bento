@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := kernel
 .PHONY: kernel userspace clean
 export KDIR ?= /lib/modules/$(shell uname -r)/build
-CLANG ?= clang
+CLANG ?= clang-11
 ifeq ($(origin CC),default)
 CC := ${CLANG}
 endif

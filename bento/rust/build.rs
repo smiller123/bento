@@ -192,8 +192,10 @@ const INCLUDED_VARS: &[&str] = &[
     "IP_TTL",
     "SO_ERROR",
     "TCP_NODELAY",
-    "SO_RCVTIMEO",
-    "SO_SNDTIMEO",
+    "SO_RCVTIMEO_OLD",
+    "SO_RCVTIMEO_NEW",
+    "SO_SNDTIMEO_OLD",
+    "SO_SNDTIMEO_NEW",
     "MSG_PEEK",
     "PAGE_SIZE",
 ];
