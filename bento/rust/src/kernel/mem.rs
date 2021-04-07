@@ -107,7 +107,7 @@ impl<T> MemContainer<T> {
     /// * `size: usize`: The size of the new `MemContainer` in bytes.
     pub fn alloc(size: usize) -> Option<Self> {
         unsafe {
-            let ptr = __kmalloc(size as c_size_t, 0x90) as *mut T;
+            let ptr = __kmalloc(size, 0x90) as *mut T;
             if ptr.is_null() {
                 None
             } else {

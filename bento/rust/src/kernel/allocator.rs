@@ -16,7 +16,7 @@ pub struct KernelAllocator;
 unsafe impl GlobalAlloc for KernelAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         if layout.size() <= 8*4096 {
-            __kmalloc(layout.size() as raw::c_size_t, 0x90) as *mut u8
+            __kmalloc(layout.size(), 0x90) as *mut u8
         } else {
             vmalloc(layout.size() as raw::c_size_t) as *mut u8
         }

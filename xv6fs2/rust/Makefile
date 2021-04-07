@@ -1,6 +1,10 @@
 .DEFAULT_GOAL := kernel
 .PHONY: kernel userspace clean
-KDIR ?= /lib/modules/$(shell uname -r)/build
+export KDIR ?= /lib/modules/$(shell uname -r)/build
+CLANG ?= clang
+ifeq ($(origin CC),default)
+CC := ${CLANG}
+endif
 
 all:
 	make kernel
@@ -8,7 +12,7 @@ all:
 
 kernel:
 	cp src/* kernel/src/
-	$(MAKE) -C $(KDIR) M=$(CURDIR)/kernel
+	$(MAKE) -C $(KDIR) M=$(CURDIR)/kernel CC=$(CC) CONFIG_CC_IS_CLANG=y
 
 userspace:
 	cp src/* userspace/src/

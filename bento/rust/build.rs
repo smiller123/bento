@@ -1,12 +1,5 @@
-// SPDX-License-Identifier: GPL-2.0
-// Build file from fishinabarrel/linux-kernel-module-rust on Github.
-extern crate bindgen;
-extern crate cc;
-extern crate shlex;
-
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
-use std::process::Command;
 use std::{env, fs};
 
 const INCLUDED_TYPES: &[&str] = &[
@@ -212,35 +205,40 @@ const OPAQUE_TYPES: &[&str] = &[
     "xregs_state",
 ];
 
-fn kernel_version_code(major: u8, minor: u8, patch: u8) -> u64 {
-    ((major as u64) << 16) | ((minor as u64) << 8) | (patch as u64)
-}
-
 fn handle_kernel_version_cfg(bindings_path: &PathBuf) {
     let f = BufReader::new(fs::File::open(bindings_path).unwrap());
     let mut version = None;
     for line in f.lines() {
         let line = line.unwrap();
         if let Some(type_and_value) = line.split("pub const LINUX_VERSION_CODE").nth(1) {
-            if let Some(value) = type_and_value.split("=").nth(1) {
-                let raw_version = value.split(";").next().unwrap();
+            if let Some(value) = type_and_value.split('=').nth(1) {
+                let raw_version = value.split(';').next().unwrap();
                 version = Some(raw_version.trim().parse::<u64>().unwrap());
                 break;
             }
         }
     }
     let version = version.expect("Couldn't find kernel version");
-    if version >= kernel_version_code(4, 15, 0) {
-        println!("cargo:rustc-cfg=kernel_4_15_0_or_greater")
+    let (major, minor) = match version.to_be_bytes() {
+        [0, 0, 0, 0, 0, major, minor, _patch] => (major, minor),
+        _ => panic!("unable to parse LINUX_VERSION_CODE {:x}", version),
+    };
+
+    if major >= 6 {
+        panic!("Please update build.rs with the last 5.x version");
+        // Change this block to major >= 7, copy the below block for
+        // major >= 6, fill in unimplemented!() for major >= 5
     }
-    if version >= kernel_version_code(4, 19, 0) {
-        println!("cargo:rustc-cfg=kernel_4_19_0_or_greater")
+    if major >= 5 {
+        for x in 0..=if major > 5 { unimplemented!() } else { minor } {
+            println!("cargo:rustc-cfg=kernel_5_{}_0_or_greater", x);
+        }
     }
-    if version >= kernel_version_code(4, 20, 0) {
-        println!("cargo:rustc-cfg=kernel_4_20_0_or_greater")
-    }
-    if version >= kernel_version_code(5, 1, 0) {
-        println!("cargo:rustc-cfg=kernel_5_1_0_or_greater")
+    if major >= 4 {
+        // We don't currently support anything older than 4.4
+        for x in 4..=if major > 4 { 20 } else { minor } {
+            println!("cargo:rustc-cfg=kernel_4_{}_0_or_greater", x);
+        }
     }
 }
 
@@ -257,39 +255,42 @@ fn handle_kernel_symbols_cfg(symvers_path: &PathBuf) {
     }
 }
 
-fn add_env_if_present(cmd: &mut Command, var: &str) {
-    if let Ok(val) = env::var(var) {
-        cmd.env(var, val);
+// Takes the CFLAGS from the kernel Makefile and changes all the include paths to be absolute
+// instead of relative.
+fn prepare_cflags(cflags: &str, kernel_dir: &str) -> Vec<String> {
+    let cflag_parts = shlex::split(&cflags).unwrap();
+    let mut cflag_iter = cflag_parts.iter();
+    let mut kernel_args = vec![];
+    while let Some(arg) = cflag_iter.next() {
+        if arg.starts_with("-I") && !arg.starts_with("-I/") {
+            kernel_args.push(format!("-I{}/{}", kernel_dir, &arg[2..]));
+        } else if arg == "-include" {
+            kernel_args.push(arg.to_string());
+            let include_path = cflag_iter.next().unwrap();
+            if include_path.starts_with('/') {
+                kernel_args.push(include_path.to_string());
+            } else {
+                kernel_args.push(format!("{}/{}", kernel_dir, include_path));
+            }
+        } else {
+            kernel_args.push(arg.to_string());
+        }
     }
+    kernel_args
 }
 
 fn main() {
-    println!("build.rs running");
+    println!("cargo:rerun-if-env-changed=CC");
     println!("cargo:rerun-if-env-changed=KDIR");
-    let kdir = env::var("KDIR").unwrap_or(format!(
-        "/lib/modules/{}/build",
-        std::str::from_utf8(&(Command::new("uname").arg("-r").output().unwrap().stdout))
-            .unwrap()
-            .trim()
-    ));
+    println!("cargo:rerun-if-env-changed=c_flags");
 
-    println!("cargo:rerun-if-env-changed=CLANG");
-    println!("cargo:rerun-if-changed=kernel-cflags-finder/Makefile");
-    let mut cmd = Command::new("make");
-    cmd.arg("-C")
-        .arg("kernel-cflags-finder")
-        .arg("-s")
-        .env_clear();
-    add_env_if_present(&mut cmd, "KDIR");
-    add_env_if_present(&mut cmd, "CLANG");
-    add_env_if_present(&mut cmd, "PATH");
-    let output = cmd.output().unwrap();
-    if !output.status.success() {
-        eprintln!("kernel-cflags-finder did not succeed");
-        eprintln!("stdout: {}", std::str::from_utf8(&output.stdout).unwrap());
-        eprintln!("stderr: {}", std::str::from_utf8(&output.stderr).unwrap());
-        std::process::exit(1);
-    }
+    let kernel_dir = env::var("KDIR").expect("Must be invoked from kernel makefile");
+    let kernel_cflags = env::var("c_flags").expect("Add 'export c_flags' to Kbuild");
+    let kbuild_cflags_module =
+        env::var("KBUILD_CFLAGS_MODULE").expect("Must be invoked from kernel makefile");
+
+    let cflags = format!("{} {}", kernel_cflags, kbuild_cflags_module);
+    let kernel_args = prepare_cflags(&cflags, &kernel_dir);
 
     let target = env::var("TARGET").unwrap();
 
@@ -297,11 +298,12 @@ fn main() {
         .use_core()
         .ctypes_prefix("raw")
         .derive_default(true)
+        .size_t_is_usize(true)
         .rustfmt_bindings(true);
 
     builder = builder.clang_arg(format!("--target={}", target));
-    for arg in shlex::split(std::str::from_utf8(&output.stdout).unwrap()).unwrap() {
-        builder = builder.clang_arg(arg.to_string());
+    for arg in kernel_args.iter() {
+        builder = builder.clang_arg(arg.clone());
     }
 
     println!("cargo:rerun-if-changed=src/bindings_helper.h");
@@ -326,17 +328,18 @@ fn main() {
         .write_to_file(out_path.join("bindings.rs"))
         .expect("Couldn't write bindings!");
 
-    println!("rust out_path {:?}", out_path);
     handle_kernel_version_cfg(&out_path.join("bindings.rs"));
-    handle_kernel_symbols_cfg(&PathBuf::from(&kdir).join("Module.symvers"));
+    handle_kernel_symbols_cfg(&PathBuf::from(&kernel_dir).join("Module.symvers"));
 
     let mut builder = cc::Build::new();
-    builder.compiler(env::var("CLANG").unwrap_or("clang".to_string()));
+    builder.compiler(env::var("CC").unwrap_or_else(|_| "clang".to_string()));
     builder.target(&target);
     builder.warnings(false);
+    println!("cargo:rerun-if-changed=src/helpers.c");
     builder.file("src/helpers.c");
-    for arg in shlex::split(std::str::from_utf8(&output.stdout).unwrap()).unwrap() {
+    for arg in kernel_args.iter() {
         builder.flag(&arg);
     }
     builder.compile("helpers");
 }
+
