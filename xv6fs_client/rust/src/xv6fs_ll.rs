@@ -172,23 +172,23 @@ impl BentoFilesystem<'_> for Xv6FileSystem {
         flags: u32,
         reply: ReplyOpen,
     ) {
-        println!("bento_open");
+        //println!("bento_open");
         let msg = format!("open {} {}", nodeid, flags);
 
-        println!("bento_open - writing to socket");
+        //println!("bento_open - writing to socket");
         let _ = self.socket.as_ref().unwrap().write(msg.as_bytes());
         let mut msg_resp = [0 as u8; 4096];
 
-        println!("bento_open - read from socket");
+        //println!("bento_open - read from socket");
         let size = match self.socket.as_ref().unwrap().read(&mut msg_resp) {
             Ok(x) => {
                 
-                println!("bento_open - read from socket OK");
+                //println!("bento_open - read from socket OK");
                 x
             },
             Err(_) => {
 
-                println!("bento_open - read from socket ERR");
+                //println!("bento_open - read from socket ERR");
                 reply.error(libc::EIO);
                 return;
             }
@@ -197,22 +197,22 @@ impl BentoFilesystem<'_> for Xv6FileSystem {
         let open_msg = str::from_utf8(&msg_resp[0..size]).unwrap();
         let open_vec: Vec<&str> = open_msg.split(' ').collect();
 
-        println!("bento_open - got message {}", open_msg);
+        //println!("bento_open - got message {}", open_msg);
         match *open_vec.get(0).unwrap() {
             "Ok" => {
                 if open_vec.len() < 3 {
-                    println!("bento_open - open_vec < 3");
+                    //println!("bento_open - open_vec < 3");
                     reply.error(libc::EINVAL);
                 } else {
 
-                    println!("bento_open - open_vec OK");
+                    //println!("bento_open - open_vec OK");
                     let fh: u64 = open_vec.get(1).unwrap().parse().unwrap();
                     let flags: u32 = open_vec.get(2).unwrap().parse().unwrap();
                     reply.opened(fh, flags);
                 }
             }
             "Err" => {
-                println!("bento_open - open_vec ERR");
+                //println!("bento_open - open_vec ERR");
                 let err_val: i32 = open_vec.get(1).unwrap().parse().unwrap();
                 reply.error(err_val);
             },
@@ -350,36 +350,36 @@ impl BentoFilesystem<'_> for Xv6FileSystem {
         _flags: Option<u32>,
         reply: ReplyAttr,
     ) {
-        println!("bento_setattr");
+        //println!("bento_setattr");
         let msg = match size {
             Some(fsize) => format!("setattr {} {}", ino, fsize),
             None => format!("setattr {} None", ino),
         };
         //let msg = format!("setattr {} {}", ino, size.unwrap());
-        println!("bento_setattr 1");
+        //println!("bento_setattr 1");
         let _ = self.socket.as_ref().unwrap().write(msg.as_bytes());
 
-        println!("bento_setattr 2");
+        //println!("bento_setattr 2");
         let mut msg_resp = [0 as u8; 4096];
         let size = match self.socket.as_ref().unwrap().read(&mut msg_resp) {
             Ok(x) => x,
             Err(_) => {
 
-                println!("bento_setattr 3");
+                //println!("bento_setattr 3");
                 reply.error(libc::EIO);
                 return;
             }
         };
-        println!("bento_setattr 4");
+        //println!("bento_setattr 4");
         let attr_msg = str::from_utf8(&msg_resp[0..size]).unwrap();
         let attr_vec: Vec<&str> = attr_msg.split(' ').collect();
 
-        println!("bento_setattr 5");
+        //println!("bento_setattr 5");
         match *attr_vec.get(0).unwrap() {
             "Ok" => {
                 if attr_vec.len() < 21 {
 
-                    println!("bento_setattr 6");
+                    //println!("bento_setattr 6");
                     reply.error(libc::EINVAL);
                 } else {
                     let ts_sec: i64 = attr_vec.get(1).unwrap().parse().unwrap();
@@ -430,13 +430,13 @@ impl BentoFilesystem<'_> for Xv6FileSystem {
                         flags: flags,
                     };
 
-                    println!("bento_setattr OK");
+                    //println!("bento_setattr OK");
                     reply.attr(&attr_valid, &attr);
                 }
             }
             "Err" => {
 
-                println!("bento_setattr 7");
+                //println!("bento_setattr 7");
                 let err_val: i32 = attr_vec.get(1).unwrap().parse().unwrap();
                 reply.error(err_val);
             },
@@ -453,7 +453,7 @@ impl BentoFilesystem<'_> for Xv6FileSystem {
         _flags: u32,
         reply: ReplyCreate,
     ) {
-        println!("bento_create");
+        //println!("bento_create");
         let name_str = name.to_str().unwrap();
         let msg = format!("create {} {}", parent, name_str);
         let _ = self.socket.as_ref().unwrap().write(msg.as_bytes());
@@ -462,7 +462,7 @@ impl BentoFilesystem<'_> for Xv6FileSystem {
             Ok(x) => x,
             Err(_) => {
 
-                println!("bento_create - 1");
+                //println!("bento_create - 1");
                 reply.error(libc::EIO);
                 return;
             }
@@ -473,7 +473,7 @@ impl BentoFilesystem<'_> for Xv6FileSystem {
             "Ok" => {
                 if attr_vec.len() < 24 {
 
-                    println!("bento_create - 2");
+                    //println!("bento_create - 2");
                     reply.error(libc::EINVAL);
                 } else {
                     let ts_sec: i64 = attr_vec.get(1).unwrap().parse().unwrap();
@@ -527,19 +527,19 @@ impl BentoFilesystem<'_> for Xv6FileSystem {
                     let fh = attr_vec.get(22).unwrap().parse().unwrap();
                     let open_flags = attr_vec.get(23).unwrap().parse().unwrap();
 
-                    println!("bento_create - OK");
+                    //println!("bento_create - OK");
                     reply.created(&attr_valid, &attr, generation, fh, open_flags);
                 }
             }
             "Err" => {
 
-                println!("bento_create - 3");
+                //println!("bento_create - 3");
                 let err_val: i32 = attr_vec.get(1).unwrap().parse().unwrap();
                 reply.error(err_val);
             },
             _ => {
 
-                println!("bento_create - 3");
+                //println!("bento_create - 3");
                 reply.error(libc::EINVAL);
             },
         }
@@ -724,41 +724,32 @@ impl BentoFilesystem<'_> for Xv6FileSystem {
         size: u32,
         reply: ReplyData,
     ) {
+
+        let mut bento_resp_vec = vec![0 as u8; size as usize + 3];
         let msg = format!("read {} {} {}", nodeid, offset, size);
         let _ = self.socket.as_ref().unwrap().write(msg.as_bytes());
-        let mut read_bytes = 0;
-        let mut read_off = 0;
-        //let mut bento_resp = [0 as u8; size];
-        let mut bento_resp_vec = vec![0 as u8; size as usize];
-        //let bento_resp = bento_resp_vec.as_mut_slice();
-        // TODO: might not need this loop
-        while read_bytes < size {
-            let mut msg_resp = [0 as u8; 4096];
-            let read_size = match self.socket.as_ref().unwrap().read(&mut msg_resp) {
-                Ok(x) => x,
-                Err(_) => {
-                    reply.error(libc::EIO);
-                    return;
-                }
-            };
-            let read_msg = str::from_utf8(&msg_resp[0..read_size]).unwrap();
-            let read_vec: Vec<&str> = read_msg.split(' ').collect();
-            match *read_vec.get(0).unwrap() {
-                "Ok" => {
-                    bento_resp_vec[read_off..read_size].clone_from_slice(&msg_resp[3..read_size]);
-                    //bento_resp[read_off..read_size] = &msg_resp[3..read_size];
-                    read_bytes += read_size as u32;
-                    read_off += read_size;
-                }
-                "Err" => {
-                    let err_val: i32 = read_vec.get(1).unwrap().parse().unwrap();
-                    reply.error(err_val);
-                },
-                _ => reply.error(libc::EINVAL),
+        let mut msg_resp  = bento_resp_vec.as_mut_slice();
+        let read_size = match self.socket.as_ref().unwrap().read(&mut msg_resp) {
+            Ok(x) => x,
+            Err(_) => {
+                reply.error(libc::EIO);
+                return;
             }
+        };
+        let read_msg = str::from_utf8(&msg_resp[0..read_size]).unwrap();
+        let read_vec: Vec<&str> = read_msg.split(' ').collect();
+        match *read_vec.get(0).unwrap() {
+            "Ok" => {
+
+                reply.data(&bento_resp_vec.as_slice()[3..]);
+            }
+            "Err" => {
+                let err_val: i32 = read_vec.get(1).unwrap().parse().unwrap();
+                reply.error(err_val);
+            },
+            _ => reply.error(libc::EINVAL),
         }
-        reply.data(bento_resp_vec.as_slice());
-        
+    
     }
 
     // TOOD: might need to add loop to write until data is written to server
@@ -772,33 +763,50 @@ impl BentoFilesystem<'_> for Xv6FileSystem {
         _flags: u32,
         reply: ReplyWrite,
     ) {
-        let msg = format!("write {} {} {}", nodeid, offset, str::from_utf8(data).unwrap());
-        let _ = self.socket.as_ref().unwrap().write(msg.as_bytes());
-        let mut msg_resp = [0 as u8; 4096];
-        let size = match self.socket.as_ref().unwrap().read(&mut msg_resp) {
-            Ok(x) => x,
-            Err(_) => {
-                reply.error(libc::EIO);
-                return;
+        let data_size = data.len();
+        //let mut bytes_written = 0;
+        let mut w_off = 0;
+        let mut w_size = 4000;
+        while w_off < data_size {
+            if data_size - w_off < 4000 { // last write
+                w_size = data_size - w_off;
             }
-        };
-        let write_msg = str::from_utf8(&msg_resp[0..size]).unwrap();
-        let write_vec: Vec<&str> = write_msg.split(' ').collect();
-        match *write_vec.get(0).unwrap() {
-            "Ok" => {
-                if write_vec.len() < 2 {
-                    reply.error(libc::EINVAL);
-                } else {
-                    let size: u32 = write_vec.get(1).unwrap().parse().unwrap();
-                    reply.written(size);
+            let data_slice = &data[w_off..w_off + w_size];
+            let msg = format!("write {} {} {}", nodeid, offset, str::from_utf8(&*data_slice).unwrap());
+            let _ = self.socket.as_ref().unwrap().write(msg.as_bytes());
+            let mut msg_resp = [0 as u8; 4096];
+            let size = match self.socket.as_ref().unwrap().read(&mut msg_resp) {
+                Ok(x) => x,
+                Err(_) => {
+                    reply.error(libc::EIO);
+                    return;
                 }
+            };
+            let write_msg = str::from_utf8(&msg_resp[0..size]).unwrap();
+            let write_vec: Vec<&str> = write_msg.split(' ').collect();
+            match *write_vec.get(0).unwrap() {
+                "Ok" => {
+                    if write_vec.len() < 2 {
+                        reply.error(libc::EINVAL);
+                    } else {
+                        //let size: u32 = write_vec.get(1).unwrap().parse().unwrap();
+                        //reply.written(size);
+                        w_off += w_size;
+                        //bytes_written += w_size;
+                    }
+                }
+                "Err" => {
+                    let err_val: i32 = write_vec.get(1).unwrap().parse().unwrap();
+                    reply.error(err_val);
+                    return;
+                },
+                _ => {
+                    reply.error(libc::EINVAL);
+                },
             }
-            "Err" => {
-                let err_val: i32 = write_vec.get(1).unwrap().parse().unwrap();
-                reply.error(err_val);
-            },
-            _ => reply.error(libc::EINVAL),
         }
+        reply.written(data_size as u32);
+        
     }
 
     #[allow(unused_mut)]

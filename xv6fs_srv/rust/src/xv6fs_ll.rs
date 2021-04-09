@@ -116,13 +116,17 @@ pub fn xv6fs_srv_runner(devname: &str) {
         let mut buf = [0; 4096];
         let size = match connection.read(&mut buf) {
             Ok(x) if x == 0 => break,
-            Ok(x) => x,
+            Ok(x) => {
+                //println!("connect.read {} bytes", x);
+                x
+            },
             Err(_) => {
                 let _ = connection.shutdown(Shutdown::Both);
                 return;
             },
         };
         let buf_str = str::from_utf8(&buf[0..size]).unwrap();
+        //println!("buf: {}", buf_str);
         let buf_vec: Vec<&str> = buf_str.split(' ').collect();
         let buf_op = buf_vec.get(0).unwrap();
         match *buf_op {
@@ -143,24 +147,24 @@ pub fn xv6fs_srv_runner(devname: &str) {
             },
             "open" => {
                 if buf_vec.len() < 3 {
-                    println!("server - open 1");
+                    //println!("server - open 1");
                     // Send error back
                     let msg = format!("Err {}", libc::EINVAL);
                     let _ = connection.write(msg.as_bytes());
                     continue;
                 }
-                println!("server - open");
+                //println!("server - open");
                 let open_fh: u64 = buf_vec.get(1).unwrap().parse().unwrap();
                 let open_flags: u32 = buf_vec.get(2).unwrap().parse().unwrap();
                 let open_res = XV6FS.open(open_fh, open_flags);
                 match open_res {
                     Ok((a, b)) => {
-                        println!("server - open OK");
+                        //println!("server - open OK");
                         let msg = format!("Ok {} {}", a, b);
                         let _ = connection.write(msg.as_bytes());
                     },
                     Err(x) => {
-                        println!("server - open 2");
+                        //println!("server - open 2");
                         let msg = format!("Err {}", x);
                         let _ = connection.write(msg.as_bytes());
                     },
@@ -168,23 +172,23 @@ pub fn xv6fs_srv_runner(devname: &str) {
             },
             "opendir" => {
                 if buf_vec.len() < 2 {
-                    println!("server - opendir 1");
+                    //println!("server - opendir 1");
                     // Send error back
                     let msg = format!("Err {}", libc::EINVAL);
                     let _ = connection.write(msg.as_bytes());
                     continue;
                 }
-                println!("server - opendir");
+                //println!("server - opendir");
                 let open_fh: u64 = buf_vec.get(1).unwrap().parse().unwrap();
                 let open_res = XV6FS.opendir(open_fh);
                 match open_res {
                     Ok((a, b)) => {
-                        println!("server - opendir OK");
+                        //println!("server - opendir OK");
                         let msg = format!("Ok {} {}", a, b);
                         let _ = connection.write(msg.as_bytes());
                     },
                     Err(x) => {
-                        println!("server - opendir 2");
+                        //println!("server - opendir 2");
                         let msg = format!("Err {}", x);
                         let _ = connection.write(msg.as_bytes());
                     },
@@ -194,24 +198,24 @@ pub fn xv6fs_srv_runner(devname: &str) {
                 if buf_vec.len() < 2 {
                     // Send error back
 
-                    println!("server - getattr 1");
+                    //println!("server - getattr 1");
                     let msg = format!("Err {}", libc::EINVAL);
                     let _ = connection.write(msg.as_bytes());
                     continue;
                 }
-                println!("server - getattr");
+                //println!("server - getattr");
                 let getattr_fh: u64 = buf_vec.get(1).unwrap().parse().unwrap();
                 let getattr_res = XV6FS.getattr(getattr_fh);
                 match getattr_res {
                     Ok((a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t)) => {
 
-                        println!("server - getattr OK");
+                        //println!("server - getattr OK");
                         let msg = format!("Ok {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
                                           a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t);
                         let _ = connection.write(msg.as_bytes());
                     },
                     Err(x) => {
-                        println!("server - getattr 2");
+                        //println!("server - getattr 2");
                         let msg = format!("Err {}", x);
                         let _ = connection.write(msg.as_bytes());
                     },
@@ -221,12 +225,12 @@ pub fn xv6fs_srv_runner(devname: &str) {
                 if buf_vec.len() < 3 {
                     // Send error back
 
-                    println!("server - settattr 1");
+                    //println!("server - settattr 1");
                     let msg = format!("Err {}", libc::EINVAL);
                     let _ = connection.write(msg.as_bytes());
                     continue;
                 }
-                println!("server - settattr ");
+                //println!("server - settattr ");
                 let setattr_fh: u64 = buf_vec.get(1).unwrap().parse().unwrap();
                 
                 let setattr_size: Option<u64> = match buf_vec.get(2).unwrap().parse() {
@@ -237,14 +241,14 @@ pub fn xv6fs_srv_runner(devname: &str) {
                 match setattr_res {
 
                     Ok((a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t)) => {
-                        println!("server - settattr OK");
+                        //println!("server - settattr OK");
                         let msg = format!("Ok {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
                                           a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t);
                         let _ = connection.write(msg.as_bytes());
                     },
                     Err(x) => {
 
-                        println!("server - settattr 2");
+                        //println!("server - settattr 2");
                         let msg = format!("Err {}", x);
                         let _ = connection.write(msg.as_bytes());
                     },
@@ -252,14 +256,14 @@ pub fn xv6fs_srv_runner(devname: &str) {
             },
             "create" => {
                 if buf_vec.len() < 3 {
-                    println!("server - create ERR");
+                    //println!("server - create ERR");
                     // Send error back
                     let msg = format!("Err {}", libc::EINVAL);
                     let _ = connection.write(msg.as_bytes());
                     continue;
                 }
 
-                println!("server - create");
+                //println!("server - create");
                 let create_parent: u64= buf_vec.get(1).unwrap().parse().unwrap();
                 let create_name: &str= buf_vec.get(2).unwrap();
                 let osstr_name = OsStr::new(create_name);
@@ -268,14 +272,14 @@ pub fn xv6fs_srv_runner(devname: &str) {
                 match create_res {
                     Ok((a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w)) => {
 
-                        println!("server - create OK");
+                        //println!("server - create OK");
                         let msg = format!("Ok {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
                                           a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w);
                         let _ = connection.write(msg.as_bytes());
                     },
                     Err(x) => {
 
-                        println!("server - create ERR");
+                        //println!("server - create ERR");
                         let msg = format!("Err {}", x);
                         let _ = connection.write(msg.as_bytes());
                     },
@@ -739,7 +743,7 @@ impl Xv6FileSystem {
         size: Option<u64>,
     ) -> Result<
         (i64, i32, u64, u64, u64, i64, i32, i64, i32, i64, i32, i64, i32, u32, u16, u32, u32, u32, u32, u32), i32> {
-        println!("server - setattr");
+        //println!("server - setattr");
         let inode = match self.iget(ino) {
             Ok(x) => x,
             Err(x) => {
@@ -747,7 +751,7 @@ impl Xv6FileSystem {
             }
         };
 
-        println!("server - setattr 1");
+        //println!("server - setattr 1");
         let icache = self.ilock_cache.as_ref().unwrap();
         let inode_guard = match self.ilock(inode.idx, &icache, inode.inum) {
             Ok(x) => x,
@@ -755,14 +759,14 @@ impl Xv6FileSystem {
                 return Err(x);
             }
         };
-        println!("server - setattr 2");
+        //println!("server - setattr 2");
         let mut internals = match inode_guard.internals.write() {
             Ok(x) => x,
             Err(_) => {
                 return Err(libc::EIO);
             }
         };
-        println!("server - setattr 3");
+        //println!("server - setattr 3");
         //let fsize = size;
         //let log = self.log.as_ref().unwrap();
         //let handle = log.begin_op(2);
@@ -780,7 +784,7 @@ impl Xv6FileSystem {
             }
         }
 
-        println!("server - setattr 4");
+        //println!("server - setattr 4");
         let attr_valid = Timespec::new(1, 999999999);
         match self.stati(ino, &internals) {
             Ok(attr) => {
@@ -790,7 +794,7 @@ impl Xv6FileSystem {
                     _ => 3,
                 };
 
-                println!("server - setattr OK");
+                //println!("server - setattr OK");
                 return  Ok((
                     attr_valid.sec,
                     attr_valid.nsec,
@@ -816,7 +820,7 @@ impl Xv6FileSystem {
             },
             Err(x) =>  {
 
-                println!("server - setattr 5");
+                //println!("server - setattr 5");
                 return Err(x);
             },
         }
