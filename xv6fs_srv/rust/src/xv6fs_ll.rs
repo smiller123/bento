@@ -304,6 +304,7 @@ pub fn xv6fs_srv_runner(devname: &str) {
                         let _ = connection.write(msg.as_bytes());
                     },
                     Err(x) => {
+                        //println!("mkdir failed err: {} - parent_inode: {}, dir_name: {} ", x, mkdir_parent, mkdir_name);
                         let msg = format!("Err {}", x);
                         let _ = connection.write(msg.as_bytes());
                     },
@@ -327,6 +328,7 @@ pub fn xv6fs_srv_runner(devname: &str) {
                         let _ = connection.write(msg.as_bytes());
                     },
                     Err(x) => {
+                        //println!("lookup err - err(x): {}", x);
                         let msg = format!("Err {}", x);
                         let _ = connection.write(msg.as_bytes());
                     },
@@ -358,6 +360,8 @@ pub fn xv6fs_srv_runner(devname: &str) {
                 if buf_vec.len() < 3 {
                     // Send error back
                     let msg = format!("Err {}", libc::EINVAL);
+
+                    //println!("write - buf_vec.len() < 3");
                     let _ = connection.write(msg.as_bytes());
                     continue;
                 }
@@ -378,6 +382,7 @@ pub fn xv6fs_srv_runner(devname: &str) {
                         let _ = connection.write(msg.as_bytes());
                     },
                     Err(x) => {
+                        //println!("write err(x): {}", x);
                         let msg = format!("Err {}", x);
                         let _ = connection.write(msg.as_bytes());
                     },
@@ -899,7 +904,7 @@ impl Xv6FileSystem {
             }
         }
     }    
-    // TODO: mkdir
+
     fn mkdir(
         &self,
         parent: u64,
@@ -912,6 +917,7 @@ impl Xv6FileSystem {
         let child = match self.create_internal(parent, T_DIR, &name, &handle) {
             Ok(x) => x,
             Err(x) => {
+                //println!("fn mkdir - 1");
                 return Err(x);
             }
         };
@@ -920,6 +926,7 @@ impl Xv6FileSystem {
         let inode_guard = match self.ilock(child.idx, &icache, child.inum) {
             Ok(x) => x,
             Err(x) => {
+                //println!("fn mkdir - 2");
                 return Err(x);
             }
         };
@@ -927,6 +934,7 @@ impl Xv6FileSystem {
         let internals = match inode_guard.internals.read() {
             Ok(x) => x,
             Err(_) => {
+                //println!("fn mkdir - 3");
                 return Err(libc::EIO);
             }
         };
@@ -966,6 +974,7 @@ impl Xv6FileSystem {
                 ));
             }
             Err(x) => {
+                //println!("fn mkdir - 4");
                 return Err(x);
             }
         }
@@ -977,6 +986,7 @@ impl Xv6FileSystem {
         let inode = match self.iget(nodeid) {
             Ok(x) => x,
             Err(x) => {
+                //println!("lookup 1");
                 return Err(x);
             }
         };
@@ -984,12 +994,14 @@ impl Xv6FileSystem {
         let inode_guard = match self.ilock(inode.idx, &icache, inode.inum) {
             Ok(x) => x,
             Err(x) => {
+                //println!("lookup 2");
                 return Err(x);
             }
         };
         let mut internals = match inode_guard.internals.write() {
             Ok(x) => x,
             Err(_) => {
+                //println!("lookup 3");
                 return Err(libc::EIO);
             }
         };
@@ -997,6 +1009,7 @@ impl Xv6FileSystem {
         let child = match self.dirlookup(&mut internals, name, &mut poff) {
             Ok(x) => x,
             Err(x) => {
+                //println!("lookup 4");
                 return Err(x);
             }
         };
@@ -1008,12 +1021,14 @@ impl Xv6FileSystem {
         let child_inode_guard = match self.ilock(child.idx, &icache, child.inum) {
             Ok(x) => x,
             Err(x) => {
+                //println!("lookup 5");
                 return Err(x);
             }
         };
         let child_internals = match child_inode_guard.internals.read() {
             Ok(x) => x,
             Err(_) => {
+                //println!("lookup 6");
                 return Err(libc::EIO);
             }
         };
@@ -1049,12 +1064,13 @@ impl Xv6FileSystem {
                 ));
             }
             Err(x) => {
+                //println!("lookup 7");
                 return Err(x);
             }
         };
     }
 
-    // TODO: modify to read and send data until all size bytes have been processed
+
     fn read(
         &self,
         nodeid: u64,
@@ -1104,7 +1120,6 @@ impl Xv6FileSystem {
     }
 
 
-    // TODO: modify to write and send data until all size bytes have been processed
     fn write(
         &self,
         nodeid: u64,
@@ -1123,6 +1138,7 @@ impl Xv6FileSystem {
             let inode = match self.iget(nodeid) {
                 Ok(x) => x,
                 Err(x) => {
+                    //println!("write 1");
                     return Err(x);
                 }
             };
@@ -1131,18 +1147,21 @@ impl Xv6FileSystem {
             let inode_guard = match self.ilock(inode.idx, &icache, inode.inum) {
                 Ok(x) => x,
                 Err(x) => {
+                    //println!("write 2");
                     return Err(x);
                 }
             };
             let mut internals = match inode_guard.internals.write() {
                 Ok(x) => x,
                 Err(_) => {
+                    //println!("write 3");
                     return Err(libc::EIO);
                 }
             };
 
             // Check if inode is a file
             if internals.inode_type != T_FILE {
+                //println!("write 4");
                 return Err(libc::EISDIR);
             }
 
@@ -1154,6 +1173,7 @@ impl Xv6FileSystem {
             let r = match self.writei(data_region, off, n1, &mut internals, inode.inum, &handle) {
                 Ok(x) => x,
                 Err(x) => {
+                    //println!("write 5");
                     return Err(x);
                 }
             };

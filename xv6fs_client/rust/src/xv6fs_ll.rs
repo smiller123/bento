@@ -34,6 +34,7 @@ use time::*;
 
 use std::net::*;
 use std::io::{Read,Write};
+use std::sync::Mutex;
 
 use crate::hello_capnp::foo;
 use capnp::serialize;
@@ -41,7 +42,8 @@ use capnp::serialize;
 use bento::println;
 
 pub struct Xv6FileSystem {
-    pub socket: Option<TcpStream>,
+    pub socket: Option<Mutex<TcpStream>>,
+    //pub lock: Option<Mutex>,
 }
 
 impl Xv6FileSystem {
@@ -100,7 +102,9 @@ impl BentoFilesystem<'_> for Xv6FileSystem {
         serialize::write_message(&mut stream, &message);
 
         println!("setting socket field");
-        self.socket = Some(stream);
+        self.socket = Some(Mutex::new(stream));
+
+        //self.lock = Some(Mutex::new(0));
 
 
         println!("all successful");
@@ -110,20 +114,23 @@ impl BentoFilesystem<'_> for Xv6FileSystem {
 
     fn bento_destroy(&mut self, _req: &Request) {
         let msg = format!("exit");
-        let _size = match self.socket.as_ref().unwrap().write(msg.as_bytes()) {
+        let mut socket_guard = self.socket.as_ref().unwrap().lock().unwrap();
+        let _size = match socket_guard.write(msg.as_bytes()) {
             Ok(x) => x,
             Err(_) => return,
         };
-        let _ = self.socket.as_ref().unwrap().shutdown(Shutdown::Both);
-        self.socket = None;
+        let _ = socket_guard.shutdown(Shutdown::Both);
+        //self.socket = None;
     }
 
     fn bento_statfs(&self, _req: &Request, _ino: u64, reply: ReplyStatfs) {
         let msg = format!("statfs");
-        let _ = self.socket.as_ref().unwrap().write(msg.as_bytes());
+
+        let mut socket_guard = self.socket.as_ref().unwrap().lock().unwrap();
+        let _ = socket_guard.write(msg.as_bytes());
 
         let mut msg_resp = [0 as u8; 4096];
-            let size = match self.socket.as_ref().unwrap().read(&mut msg_resp) {
+            let size = match socket_guard.read(&mut msg_resp) {
             Ok(x) => x,
             Err(_) => {
                 reply.error(libc::EIO);
@@ -176,11 +183,13 @@ impl BentoFilesystem<'_> for Xv6FileSystem {
         let msg = format!("open {} {}", nodeid, flags);
 
         //println!("bento_open - writing to socket");
-        let _ = self.socket.as_ref().unwrap().write(msg.as_bytes());
+
+        let mut socket_guard = self.socket.as_ref().unwrap().lock().unwrap();
+        let _ = socket_guard.write(msg.as_bytes());
         let mut msg_resp = [0 as u8; 4096];
 
         //println!("bento_open - read from socket");
-        let size = match self.socket.as_ref().unwrap().read(&mut msg_resp) {
+        let size = match socket_guard.read(&mut msg_resp) {
             Ok(x) => {
                 
                 //println!("bento_open - read from socket OK");
@@ -228,9 +237,10 @@ impl BentoFilesystem<'_> for Xv6FileSystem {
         reply: ReplyOpen,
     ) {
         let msg = format!("opendir {}", nodeid);
-        let _ = self.socket.as_ref().unwrap().write(msg.as_bytes());
+        let mut socket_guard = self.socket.as_ref().unwrap().lock().unwrap();
+        let _ = socket_guard.write(msg.as_bytes());
         let mut msg_resp = [0 as u8; 4096];
-        let size = match self.socket.as_ref().unwrap().read(&mut msg_resp) {
+        let size = match socket_guard.read(&mut msg_resp) {
             Ok(x) => x,
             Err(_) => {
                 reply.error(libc::EIO);
@@ -259,9 +269,10 @@ impl BentoFilesystem<'_> for Xv6FileSystem {
 
     fn bento_getattr(&self, _req: &Request, nodeid: u64, reply: ReplyAttr) {
         let msg = format!("getattr {}", nodeid);
-        let _ = self.socket.as_ref().unwrap().write(msg.as_bytes());
+        let mut socket_guard = self.socket.as_ref().unwrap().lock().unwrap();
+        let _ = socket_guard.write(msg.as_bytes());
         let mut msg_resp = [0 as u8; 4096];
-        let size = match self.socket.as_ref().unwrap().read(&mut msg_resp) {
+        let size = match socket_guard.read(&mut msg_resp) {
             Ok(x) => x,
             Err(_) => {
                 reply.error(libc::EIO);
@@ -357,11 +368,12 @@ impl BentoFilesystem<'_> for Xv6FileSystem {
         };
         //let msg = format!("setattr {} {}", ino, size.unwrap());
         //println!("bento_setattr 1");
-        let _ = self.socket.as_ref().unwrap().write(msg.as_bytes());
+        let mut socket_guard = self.socket.as_ref().unwrap().lock().unwrap();
+        let _ = socket_guard.write(msg.as_bytes());
 
         //println!("bento_setattr 2");
         let mut msg_resp = [0 as u8; 4096];
-        let size = match self.socket.as_ref().unwrap().read(&mut msg_resp) {
+        let size = match socket_guard.read(&mut msg_resp) {
             Ok(x) => x,
             Err(_) => {
 
@@ -456,9 +468,10 @@ impl BentoFilesystem<'_> for Xv6FileSystem {
         //println!("bento_create");
         let name_str = name.to_str().unwrap();
         let msg = format!("create {} {}", parent, name_str);
-        let _ = self.socket.as_ref().unwrap().write(msg.as_bytes());
+        let mut socket_guard = self.socket.as_ref().unwrap().lock().unwrap();
+        let _ = socket_guard.write(msg.as_bytes());
         let mut msg_resp = [0 as u8; 4096];
-        let size = match self.socket.as_ref().unwrap().read(&mut msg_resp) {
+        let size = match socket_guard.read(&mut msg_resp) {
             Ok(x) => x,
             Err(_) => {
 
@@ -555,9 +568,10 @@ impl BentoFilesystem<'_> for Xv6FileSystem {
     ) {
         let name_str = name.to_str().unwrap();
         let msg = format!("mkdir {} {}", parent, name_str);
-        let _ = self.socket.as_ref().unwrap().write(msg.as_bytes());
+        let mut socket_guard = self.socket.as_ref().unwrap().lock().unwrap();
+        let _ = socket_guard.write(msg.as_bytes());
         let mut msg_resp = [0 as u8; 4096];
-        let size = match self.socket.as_ref().unwrap().read(&mut msg_resp) {
+        let size = match socket_guard.read(&mut msg_resp) {
             Ok(x) => x,
             Err(_) => {
                 reply.error(libc::EIO);
@@ -640,9 +654,10 @@ impl BentoFilesystem<'_> for Xv6FileSystem {
     ) {
         let name_str = name.to_str().unwrap();
         let msg = format!("lookup {} {}", nodeid, name_str);
-        let _ = self.socket.as_ref().unwrap().write(msg.as_bytes());
+        let mut socket_guard = self.socket.as_ref().unwrap().lock().unwrap();
+        let _ = socket_guard.write(msg.as_bytes());
         let mut msg_resp = [0 as u8; 4096];
-        let size = match self.socket.as_ref().unwrap().read(&mut msg_resp) {
+        let size = match socket_guard.read(&mut msg_resp) {
             Ok(x) => x,
             Err(_) => {
                 reply.error(libc::EIO);
@@ -655,6 +670,7 @@ impl BentoFilesystem<'_> for Xv6FileSystem {
             "Ok" => {
                 if attr_vec.len() < 22 {
                     reply.error(libc::EINVAL);
+                    //println!("bento_lookup vec len < 22 - attr_msg: {}", attr_msg);
                 } else {
                     let ts_sec: i64 = attr_vec.get(1).unwrap().parse().unwrap();
                     let ts_nsec: i32 = attr_vec.get(2).unwrap().parse().unwrap();
@@ -709,9 +725,13 @@ impl BentoFilesystem<'_> for Xv6FileSystem {
             }
             "Err" => {
                 let err_val: i32 = attr_vec.get(1).unwrap().parse().unwrap();
+                //println!("bento_lookup err - err_val: {}, attr_msg: {}", err_val, attr_msg);
                 reply.error(err_val);
             },
-            _ => reply.error(libc::EINVAL),
+            _ => {
+                //println!("bento_lookup - EINVAL - msg: {}", attr_msg);
+                reply.error(libc::EINVAL);
+            },
         }
     }
 
@@ -727,9 +747,10 @@ impl BentoFilesystem<'_> for Xv6FileSystem {
 
         let mut bento_resp_vec = vec![0 as u8; size as usize + 3];
         let msg = format!("read {} {} {}", nodeid, offset, size);
-        let _ = self.socket.as_ref().unwrap().write(msg.as_bytes());
+        let mut socket_guard = self.socket.as_ref().unwrap().lock().unwrap();
+        let _ = socket_guard.write(msg.as_bytes());
         let mut msg_resp  = bento_resp_vec.as_mut_slice();
-        let read_size = match self.socket.as_ref().unwrap().read(&mut msg_resp) {
+        let read_size = match socket_guard.read(&mut msg_resp) {
             Ok(x) => x,
             Err(_) => {
                 reply.error(libc::EIO);
@@ -752,7 +773,6 @@ impl BentoFilesystem<'_> for Xv6FileSystem {
     
     }
 
-    // TOOD: might need to add loop to write until data is written to server
     fn bento_write(
         &self,
         _req: &Request,
@@ -767,15 +787,18 @@ impl BentoFilesystem<'_> for Xv6FileSystem {
         //let mut bytes_written = 0;
         let mut w_off = 0;
         let mut w_size = 4000;
+        let mut socket_guard = self.socket.as_ref().unwrap().lock().unwrap();
         while w_off < data_size {
             if data_size - w_off < 4000 { // last write
                 w_size = data_size - w_off;
+            } else {
+                w_size = 4000;
             }
             let data_slice = &data[w_off..w_off + w_size];
             let msg = format!("write {} {} {}", nodeid, offset, str::from_utf8(&*data_slice).unwrap());
-            let _ = self.socket.as_ref().unwrap().write(msg.as_bytes());
+            let _ = socket_guard.write(msg.as_bytes());
             let mut msg_resp = [0 as u8; 4096];
-            let size = match self.socket.as_ref().unwrap().read(&mut msg_resp) {
+            let size = match socket_guard.read(&mut msg_resp) {
                 Ok(x) => x,
                 Err(_) => {
                     reply.error(libc::EIO);
@@ -787,21 +810,28 @@ impl BentoFilesystem<'_> for Xv6FileSystem {
             match *write_vec.get(0).unwrap() {
                 "Ok" => {
                     if write_vec.len() < 2 {
+                    //println!("write fail 0 - nodeid: {}, offset: {}, data.len(): {}, w_off: {}, w_size: {},  socket_read_size: {}, response_msg: {:?}", nodeid, offset, data_size, w_off, w_size, size, write_msg);
                         reply.error(libc::EINVAL);
                     } else {
-                        //let size: u32 = write_vec.get(1).unwrap().parse().unwrap();
+                        let size: u32 = write_vec.get(1).unwrap().parse().unwrap();
                         //reply.written(size);
-                        w_off += w_size;
+                        w_off += size as usize;
                         //bytes_written += w_size;
                     }
                 }
                 "Err" => {
                     let err_val: i32 = write_vec.get(1).unwrap().parse().unwrap();
+                    //println!("write fail 1 - nodeid: {}, offset: {}, data.len(): {}, w_off: {}, w_size: {}, socket_read_size: {}, err_val: {}", nodeid, offset, data_size, w_off, w_size, size, err_val);
                     reply.error(err_val);
                     return;
                 },
                 _ => {
+                    if size != 0 {
+                        //println!("\n write_msg: {:?}", write_msg);
+                    }
+                    //println!("write fail 2 - nodeid: {}, offset: {}, data.len(): {}, w_off: {}, w_size: {}, socket_read_size: {} ", nodeid, offset, data_size, w_off, w_size, size);
                     reply.error(libc::EINVAL);
+                    return;
                 },
             }
         }
@@ -819,9 +849,10 @@ impl BentoFilesystem<'_> for Xv6FileSystem {
         mut reply: ReplyDirectory,
     ) {
         let msg = format!("readdir {} {}", nodeid, offset);
-        let _ = self.socket.as_ref().unwrap().write(msg.as_bytes());
+        let mut socket_guard = self.socket.as_ref().unwrap().lock().unwrap();
+        let _ = socket_guard.write(msg.as_bytes());
         let mut msg_resp = [0 as u8; 4096];
-        let size = match self.socket.as_ref().unwrap().read(&mut msg_resp) {
+        let size = match socket_guard.read(&mut msg_resp) {
             Ok(x) => x,
             Err(_) => {
                 reply.error(libc::EIO);
@@ -868,9 +899,10 @@ impl BentoFilesystem<'_> for Xv6FileSystem {
     fn bento_rmdir(&self, _req: &Request, parent: u64, name: &OsStr, reply: ReplyEmpty) {
         let name_str = name.to_str().unwrap();
         let msg = format!("rmdir {} {}", parent, name_str);
-        let _ = self.socket.as_ref().unwrap().write(msg.as_bytes());
+        let mut socket_guard = self.socket.as_ref().unwrap().lock().unwrap();
+        let _ = socket_guard.write(msg.as_bytes());
         let mut msg_resp = [0 as u8; 4096];
-        let size = match self.socket.as_ref().unwrap().read(&mut msg_resp) {
+        let size = match socket_guard.read(&mut msg_resp) {
             Ok(x) => x,
             Err(_) => {
                 reply.error(libc::EIO);
@@ -894,9 +926,10 @@ impl BentoFilesystem<'_> for Xv6FileSystem {
     fn bento_unlink(&self, _req: &Request, parent: u64, name: &OsStr, reply: ReplyEmpty) {
         let name_str = name.to_str().unwrap();
         let msg = format!("unlink {} {}", parent, name_str);
-        let _ = self.socket.as_ref().unwrap().write(msg.as_bytes());
+        let mut socket_guard = self.socket.as_ref().unwrap().lock().unwrap();
+        let _ = socket_guard.write(msg.as_bytes());
         let mut msg_resp = [0 as u8; 4096];
-        let size = match self.socket.as_ref().unwrap().read(&mut msg_resp) {
+        let size = match socket_guard.read(&mut msg_resp) {
             Ok(x) => x,
             Err(_) => {
                 reply.error(libc::EIO);
@@ -926,9 +959,10 @@ impl BentoFilesystem<'_> for Xv6FileSystem {
         reply: ReplyEmpty,
     ) {
         let msg = format!("fsync");
-        let _ = self.socket.as_ref().unwrap().write(msg.as_bytes());
+        let mut socket_guard = self.socket.as_ref().unwrap().lock().unwrap();
+        let _ = socket_guard.write(msg.as_bytes());
         let mut msg_resp = [0 as u8; 4096];
-        let size = match self.socket.as_ref().unwrap().read(&mut msg_resp) {
+        let size = match socket_guard.read(&mut msg_resp) {
             Ok(x) => x,
             Err(_) => {
                 reply.error(libc::EIO);
@@ -958,9 +992,10 @@ impl BentoFilesystem<'_> for Xv6FileSystem {
         reply: ReplyEmpty
     ) {
         let msg = format!("fsyncdir");
-        let _ = self.socket.as_ref().unwrap().write(msg.as_bytes());
+        let mut socket_guard = self.socket.as_ref().unwrap().lock().unwrap();
+        let _ = socket_guard.write(msg.as_bytes());
         let mut msg_resp = [0 as u8; 4096];
-        let size = match self.socket.as_ref().unwrap().read(&mut msg_resp) {
+        let size = match socket_guard.read(&mut msg_resp) {
             Ok(x) => x,
             Err(_) => {
                 reply.error(libc::EIO);
@@ -992,9 +1027,10 @@ impl BentoFilesystem<'_> for Xv6FileSystem {
         let name_str = name.to_str().unwrap();
         let linkname_str = linkname.to_str().unwrap();
         let msg = format!("symlink {} {} {}", nodeid, name_str, linkname_str);
-        let _ = self.socket.as_ref().unwrap().write(msg.as_bytes());
+        let mut socket_guard = self.socket.as_ref().unwrap().lock().unwrap();
+        let _ = socket_guard.write(msg.as_bytes());
         let mut msg_resp = [0 as u8; 4096];
-        let size = match self.socket.as_ref().unwrap().read(&mut msg_resp) {
+        let size = match socket_guard.read(&mut msg_resp) {
             Ok(x) => x,
             Err(_) => {
                 reply.error(libc::EIO);
@@ -1071,9 +1107,10 @@ impl BentoFilesystem<'_> for Xv6FileSystem {
     // TOOD: double check on size of reply
     fn bento_readlink(&self, _req: &Request, nodeid: u64, reply: ReplyData) {
         let msg = format!("readlink {}", nodeid);
-        let _ = self.socket.as_ref().unwrap().write(msg.as_bytes());
+        let mut socket_guard = self.socket.as_ref().unwrap().lock().unwrap();
+        let _ = socket_guard.write(msg.as_bytes());
         let mut msg_resp = [0 as u8; 4096];
-        let size = match self.socket.as_ref().unwrap().read(&mut msg_resp) {
+        let size = match socket_guard.read(&mut msg_resp) {
             Ok(x) => x,
             Err(_) => {
                 reply.error(libc::EIO);
@@ -1108,9 +1145,10 @@ impl BentoFilesystem<'_> for Xv6FileSystem {
         let name_str = name.to_str().unwrap();
         let newname_str = newname.to_str().unwrap();
         let msg = format!("rename {} {} {} {} {}", parent_ino, name_str, newparent_ino, newname_str, flags);
-        let _ = self.socket.as_ref().unwrap().write(msg.as_bytes());
+        let mut socket_guard = self.socket.as_ref().unwrap().lock().unwrap();
+        let _ = socket_guard.write(msg.as_bytes());
         let mut msg_resp = [0 as u8; 4096];
-        let size = match self.socket.as_ref().unwrap().read(&mut msg_resp) {
+        let size = match socket_guard.read(&mut msg_resp) {
             Ok(x) => x,
             Err(_) => {
                 reply.error(libc::EIO);
