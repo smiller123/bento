@@ -61,6 +61,7 @@ const INCLUDED_TYPES: &[&str] = &[
     "sock_type",
     "sock_shutdown_cmd",
     "timeval",
+    "__kernel_sock_timeval",
     "msghdr",
     "kvec",
 ];

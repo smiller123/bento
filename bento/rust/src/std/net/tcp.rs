@@ -264,7 +264,7 @@ impl TcpStream {
     }
 
     pub fn read_timeout(&self) -> io::Result<Option<Duration>> {
-        let mut read_timeout = c::timeval {
+        let mut read_timeout = c::__kernel_sock_timeval {
             tv_sec: 0,
             tv_usec: 0,
         };
@@ -274,7 +274,7 @@ impl TcpStream {
                 self.inner as *mut raw::c_void,
                 c::SOL_SOCKET as i32,
                 c::SO_RCVTIMEO_NEW as i32,
-                &mut read_timeout as *mut c::timeval as *mut raw::c_char,
+                &mut read_timeout as *mut c::__kernel_sock_timeval as *mut raw::c_char,
                 &mut optlen,
             );
             if ret != 0 {
@@ -300,25 +300,25 @@ impl TcpStream {
                             "cannot set a 0 duration timeout",
                         ));
                     }
-                    let secs = dur.as_secs() as c::__kernel_time_t;
-                    let mut timeout = c::timeval {
+                    let secs = dur.as_secs() as i64;
+                    let mut timeout = c::__kernel_sock_timeval {
                         tv_sec: secs,
-                        tv_usec: dur.subsec_micros() as c::__kernel_suseconds_t,
+                        tv_usec: dur.subsec_micros() as i64,
                     };
                     if timeout.tv_sec == 0 && timeout.tv_usec == 0 {
                         timeout.tv_usec = 1;
                     }
                     timeout
                 },
-                None => c::timeval { tv_sec: 0, tv_usec: 0 },
+                None => c::__kernel_sock_timeval { tv_sec: 0, tv_usec: 0 },
             };
 
             let ret = ffi::kernel_setsockopt(
                 self.inner as *mut raw::c_void,
                 c::SOL_SOCKET as i32,
                 c::SO_RCVTIMEO_NEW as i32,
-                &timeout as *const c::timeval as *const raw::c_char,
-                mem::size_of::<c::timeval>() as u32,
+                &timeout as *const c::__kernel_sock_timeval as *const raw::c_char,
+                mem::size_of::<c::__kernel_sock_timeval>() as u32,
             );
             if ret != 0 {
                 return Err(io::Error::from_raw_os_error(ret));
@@ -328,7 +328,7 @@ impl TcpStream {
     }
 
     pub fn write_timeout(&self) -> io::Result<Option<Duration>> {
-        let mut write_timeout = c::timeval {
+        let mut write_timeout = c::__kernel_sock_timeval {
             tv_sec: 0,
             tv_usec: 0,
         };
@@ -338,7 +338,7 @@ impl TcpStream {
                 self.inner as *mut raw::c_void,
                 c::SOL_SOCKET as i32,
                 c::SO_SNDTIMEO_NEW as i32,
-                &mut write_timeout as *mut c::timeval as *mut raw::c_char,
+                &mut write_timeout as *mut c::__kernel_sock_timeval as *mut raw::c_char,
                 &mut optlen,
             );
             if ret != 0 {
@@ -364,25 +364,25 @@ impl TcpStream {
                             "cannot set a 0 duration timeout",
                         ));
                     }
-                    let secs = dur.as_secs() as c::__kernel_time_t;
-                    let mut timeout = c::timeval {
+                    let secs = dur.as_secs() as i64;
+                    let mut timeout = c::__kernel_sock_timeval {
                         tv_sec: secs,
-                        tv_usec: dur.subsec_micros() as c::__kernel_suseconds_t,
+                        tv_usec: dur.subsec_micros() as i64,
                     };
                     if timeout.tv_sec == 0 && timeout.tv_usec == 0 {
                         timeout.tv_usec = 1;
                     }
                     timeout
                 },
-                None => c::timeval { tv_sec: 0, tv_usec: 0 },
+                None => c::__kernel_sock_timeval { tv_sec: 0, tv_usec: 0 },
             };
 
             let ret = ffi::kernel_setsockopt(
                 self.inner as *mut raw::c_void,
                 c::SOL_SOCKET as i32,
                 c::SO_SNDTIMEO_NEW as i32,
-                &timeout as *const c::timeval as *const raw::c_char,
-                mem::size_of::<c::timeval>() as u32,
+                &timeout as *const c::__kernel_sock_timeval as *const raw::c_char,
+                mem::size_of::<c::__kernel_sock_timeval>() as u32,
             );
             if ret != 0 {
                 return Err(io::Error::from_raw_os_error(ret));
