@@ -70,8 +70,47 @@ use std::io::{Read, Write};
 use crate::hello_capnp::foo;
 use capnp::serialize;
 
-pub fn xv6fs_srv_runner(devname: &str) {
-    //let mut disk = OpenOptions::new().read(true).write(true).open(devname).unwrap();
+const PRIMARY_PORT: u16 = 1234;
+const BACKUP_PORT: u16 = 8888; 
+
+fn send_rcv_from_backup(backup_stream: &Option<TcpStream>, client_stream: &mut TcpStream,msg_bytes: &[u8], resp_vec_len: u32) -> Result<(), ()> {
+    // send op to backup
+    let mut backup_stream_ref = backup_stream.as_ref().unwrap();
+    backup_stream_ref.write(msg_bytes);
+
+    // get result from backup
+    let mut backup_resp = [0 as u8; 4096];
+    let backup_resp_size = match backup_stream_ref.read(&mut backup_resp) {
+        Ok(x) => x,
+        Err(_) => {
+            println!("statfs backup_stream read err");
+            return Err(());
+        }
+    };
+    let op_msg = str::from_utf8(&backup_resp[0..backup_resp_size]).unwrap();
+    let op_vec: Vec<&str> = op_msg.split(' ').collect();
+    match *op_vec.get(0).unwrap() {
+        "Ok" => {
+            return Ok(());
+        },
+        "Add" => {
+            return Ok(());
+        },
+        "Err" => {
+            println!("backup op - Err 1");
+            let _ = client_stream.write(&backup_resp[0..backup_resp_size]);
+            return Err(());
+        },
+        _ => {
+            println!("backup op_msg: {}", op_msg);
+            let _ = client_stream.write(&backup_resp[0..backup_resp_size]);
+            return Err(());
+        },
+
+    };
+}
+
+pub fn xv6fs_srv_runner(devname: &str, is_primary: bool) {
     // initialize xv6fs
     let mut XV6FS = Xv6FileSystem {
         log: None,
@@ -84,10 +123,13 @@ pub fn xv6fs_srv_runner(devname: &str) {
         diskname: None,
     };
     XV6FS.xv6fs_init(devname);
-    //XV6FS.xv6fs_init(devname);
+
     println!("xv6fs_srv init - ok");
     println!("setting sockaddr");
-    let srv_addr = SocketAddrV4::new(Ipv4Addr::LOCALHOST, 1234);
+    let srv_addr = match is_primary {
+        true => SocketAddrV4::new(Ipv4Addr::LOCALHOST, PRIMARY_PORT),
+        false => SocketAddrV4::new(Ipv4Addr::LOCALHOST, BACKUP_PORT),
+    };
 
     println!("binding");
     let listener = match TcpListener::bind(SocketAddr::V4(srv_addr)) {
@@ -112,6 +154,26 @@ pub fn xv6fs_srv_runner(devname: &str) {
     let foo_msg = message_reader.get_root::<foo::Reader>().unwrap();
     let text = foo_msg.get_msg().unwrap();
     println!("got text {}", text);
+
+    let mut backup_stream: Option<TcpStream> = None;
+    if is_primary {
+        // connect to backup
+        let backup_srv_addr = SocketAddrV4::new(Ipv4Addr::LOCALHOST, BACKUP_PORT);
+        backup_stream = match TcpStream::connect(SocketAddr::V4(backup_srv_addr)) {
+            Ok(x) => Some(x),
+            Err(_) => {
+                println!("failed to connect do backup");
+                return;
+            }
+        };
+
+        let mut backup_msg = capnp::message::Builder::new_default();
+        let mut backup_foo_msg = backup_msg.init_root::<foo::Builder>();
+        backup_foo_msg.set_msg("hello from xv6fs_primary");
+        serialize::write_message(&mut backup_stream.as_ref().unwrap(), &backup_msg);
+        println!("primary connected to backup");
+    }
+
     loop {
         let mut buf = [0; 4096];
         let size = match connection.read(&mut buf) {
@@ -132,6 +194,18 @@ pub fn xv6fs_srv_runner(devname: &str) {
         match *buf_op {
             "exit" => break,
             "statfs" => {
+                // if primary server, send op to backup and get ack
+                if is_primary {
+                    match send_rcv_from_backup(&backup_stream, &mut connection, &buf[0..size], 9) {
+                        Ok(_)=> (),
+                        Err(_) => {
+                            println!("statfs - send_rcv_from_backup Err");
+
+                            continue;
+                        },
+                    };
+                }
+
                 let statfs_res = XV6FS.statfs();
                 match statfs_res {
                     Ok((a, b, c, d, e, f, g, h)) => {
@@ -147,24 +221,31 @@ pub fn xv6fs_srv_runner(devname: &str) {
             },
             "open" => {
                 if buf_vec.len() < 3 {
-                    //println!("server - open 1");
                     // Send error back
                     let msg = format!("Err {}", libc::EINVAL);
                     let _ = connection.write(msg.as_bytes());
                     continue;
                 }
-                //println!("server - open");
+                // if primary server, send op to backup and get ack
+                if is_primary {
+                    match send_rcv_from_backup(&backup_stream, &mut connection, &buf[0..size], 3) {
+                        Ok(_)=> (),
+                        Err(_) => {
+                            println!("open - send_rcv_from_backup Err");
+                            continue;
+                        },
+                    };
+                }
+
                 let open_fh: u64 = buf_vec.get(1).unwrap().parse().unwrap();
                 let open_flags: u32 = buf_vec.get(2).unwrap().parse().unwrap();
                 let open_res = XV6FS.open(open_fh, open_flags);
                 match open_res {
                     Ok((a, b)) => {
-                        //println!("server - open OK");
                         let msg = format!("Ok {} {}", a, b);
                         let _ = connection.write(msg.as_bytes());
                     },
                     Err(x) => {
-                        //println!("server - open 2");
                         let msg = format!("Err {}", x);
                         let _ = connection.write(msg.as_bytes());
                     },
@@ -178,6 +259,17 @@ pub fn xv6fs_srv_runner(devname: &str) {
                     let _ = connection.write(msg.as_bytes());
                     continue;
                 }
+                // if primary server, send op to backup and get ack
+                if is_primary {
+                    match send_rcv_from_backup(&backup_stream, &mut connection, &buf[0..size], 3) {
+                        Ok(_)=> (),
+                        Err(_) => {
+                            println!("opendir - send_rcv_from_backup Err");
+                            continue;
+                        },
+                    };
+                }
+
                 //println!("server - opendir");
                 let open_fh: u64 = buf_vec.get(1).unwrap().parse().unwrap();
                 let open_res = XV6FS.opendir(open_fh);
@@ -203,6 +295,17 @@ pub fn xv6fs_srv_runner(devname: &str) {
                     let _ = connection.write(msg.as_bytes());
                     continue;
                 }
+                // if primary server, send op to backup and get ack
+                if is_primary {
+                    match send_rcv_from_backup(&backup_stream, &mut connection, &buf[0..size], 21) {
+                        Ok(_)=> (),
+                        Err(_) => {
+                            println!("getattr - send_rcv_from_backup Err");
+                            continue;
+                        },
+                    };
+                }
+
                 //println!("server - getattr");
                 let getattr_fh: u64 = buf_vec.get(1).unwrap().parse().unwrap();
                 let getattr_res = XV6FS.getattr(getattr_fh);
@@ -230,6 +333,17 @@ pub fn xv6fs_srv_runner(devname: &str) {
                     let _ = connection.write(msg.as_bytes());
                     continue;
                 }
+                // if primary server, send op to backup and get ack
+                if is_primary {
+                    match send_rcv_from_backup(&backup_stream, &mut connection, &buf[0..size], 21) {
+                        Ok(_)=> (),
+                        Err(_) => {
+                            println!("setattr - send_rcv_from_backup Err");
+                            continue;
+                        },
+                    };
+                }
+
                 //println!("server - settattr ");
                 let setattr_fh: u64 = buf_vec.get(1).unwrap().parse().unwrap();
                 
@@ -262,6 +376,16 @@ pub fn xv6fs_srv_runner(devname: &str) {
                     let _ = connection.write(msg.as_bytes());
                     continue;
                 }
+                // if primary server, send op to backup and get ack
+                if is_primary {
+                    match send_rcv_from_backup(&backup_stream, &mut connection,&buf[0..size], 24) {
+                        Ok(_)=> (),
+                        Err(_) => {
+                            println!("create - send_rcv_from_backup Err");
+                            continue;
+                        },
+                    };
+                }
 
                 //println!("server - create");
                 let create_parent: u64= buf_vec.get(1).unwrap().parse().unwrap();
@@ -293,6 +417,17 @@ pub fn xv6fs_srv_runner(devname: &str) {
                     let _ = connection.write(msg.as_bytes());
                     continue;
                 }
+                // if primary server, send op to backup and get ack
+                if is_primary {
+                    match send_rcv_from_backup(&backup_stream, &mut connection, &buf[0..size], 22) {
+                        Ok(_)=> (),
+                        Err(_) => {
+                            println!("mkdir - send_rcv_from_backup Err");
+                            continue;
+                        },
+                    };
+                }
+
                 let mkdir_parent: u64 = buf_vec.get(1).unwrap().parse().unwrap();
                 let mkdir_name: &str = buf_vec.get(2).unwrap();
                 let osstr_name = OsStr::new(mkdir_name);
@@ -317,6 +452,17 @@ pub fn xv6fs_srv_runner(devname: &str) {
                     let _ = connection.write(msg.as_bytes());
                     continue;
                 }
+                // if primary server, send op to backup and get ack
+                if is_primary {
+                    match send_rcv_from_backup(&backup_stream, &mut connection, &buf[0..size], 22) {
+                        Ok(_)=> (),
+                        Err(_) => {
+                            println!("lookup - send_rcv_from_backup Err");
+                            continue;
+                        },
+                    };
+                }
+
                 let lookup_id: u64 = buf_vec.get(1).unwrap().parse().unwrap();
                 let lookup_name: &str = buf_vec.get(2).unwrap();
                 let osstr_name = OsStr::new(lookup_name);
@@ -341,6 +487,17 @@ pub fn xv6fs_srv_runner(devname: &str) {
                     let _ = connection.write(msg.as_bytes());
                     continue;
                 }
+//                // if primary server, send op to backup and get ack
+                //if is_primary {
+                    //match send_rcv_from_backup(&backup_stream, &buf[0..size], 9) {
+                        //Ok(_)=> (),
+                        //Err(_) => {
+                            //println!("read - send_rcv_from_backup Err");
+                            //return;
+                        //},
+                    //};
+                //}
+
                 let read_id: u64 = buf_vec.get(1).unwrap().parse().unwrap();
                 let read_off: i64 = buf_vec.get(2).unwrap().parse().unwrap();
                 let read_size: u32 = buf_vec.get(3).unwrap().parse().unwrap();
@@ -365,6 +522,17 @@ pub fn xv6fs_srv_runner(devname: &str) {
                     let _ = connection.write(msg.as_bytes());
                     continue;
                 }
+                // if primary server, send op to backup and get ack
+                if is_primary {
+                    match send_rcv_from_backup(&backup_stream, &mut connection, &buf[0..size], 2) {
+                        Ok(_)=> (),
+                        Err(_) => {
+                            println!("write - send_rcv_from_backup Err");
+                            continue;
+                        },
+                    };
+                }
+
                 let write_id: u64 = buf_vec.get(1).unwrap().parse().unwrap();
                 let write_off: i64 = buf_vec.get(2).unwrap().parse().unwrap();
                 if buf_vec.len() == 3 {
@@ -395,6 +563,17 @@ pub fn xv6fs_srv_runner(devname: &str) {
                     let _ = connection.write(msg.as_bytes());
                     continue;
                 }
+                // if primary server, send op to backup and get ack
+                if is_primary {
+                    match send_rcv_from_backup(&backup_stream, &mut connection, &buf[0..size], 5) {
+                        Ok(_)=> (),
+                        Err(_) => {
+                            println!("readdir - send_rcv_from_backup Err");
+                            continue;
+                        },
+                    };
+                }
+
                 let readdir_id: u64 = buf_vec.get(1).unwrap().parse().unwrap();
                 let readdir_off: i64 = buf_vec.get(2).unwrap().parse().unwrap();
 
@@ -423,6 +602,17 @@ pub fn xv6fs_srv_runner(devname: &str) {
                     let _ = connection.write(msg.as_bytes());
                     continue;
                 }
+                // if primary server, send op to backup and get ack
+                if is_primary {
+                    match send_rcv_from_backup(&backup_stream, &mut connection, &buf[0..size], 1) {
+                        Ok(_)=> (),
+                        Err(_) => {
+                            println!("rmdir - send_rcv_from_backup Err");
+                            continue;
+                        },
+                    };
+                }
+
                 let rmdir_parent: u64 = buf_vec.get(1).unwrap().parse().unwrap();
                 let rmdir_name: &str = buf_vec.get(2).unwrap();
                 let osstr_name = OsStr::new(rmdir_name);
@@ -445,6 +635,17 @@ pub fn xv6fs_srv_runner(devname: &str) {
                     let _ = connection.write(msg.as_bytes());
                     continue;
                 }
+                // if primary server, send op to backup and get ack
+                if is_primary {
+                    match send_rcv_from_backup(&backup_stream, &mut connection, &buf[0..size], 1) {
+                        Ok(_)=> (),
+                        Err(_) => {
+                            println!("unlink - send_rcv_from_backup Err");
+                            continue;
+                        },
+                    };
+                }
+
                 let unlink_parent: u64 = buf_vec.get(1).unwrap().parse().unwrap();
                 let unlink_name: &str = buf_vec.get(2).unwrap();
                 let osstr_name = OsStr::new(unlink_name);
@@ -467,6 +668,17 @@ pub fn xv6fs_srv_runner(devname: &str) {
                     let _ = connection.write(msg.as_bytes());
                     continue;
                 }
+                // if primary server, send op to backup and get ack
+                if is_primary {
+                    match send_rcv_from_backup(&backup_stream, &mut connection, &buf[0..size], 1) {
+                        Ok(_)=> (),
+                        Err(_) => {
+                            println!("fsync - send_rcv_from_backup Err");
+                            continue;
+                        },
+                    };
+                }
+
                 let fsync_res = XV6FS.fsync();
                 match fsync_res {
                     Ok(()) => {
@@ -486,6 +698,17 @@ pub fn xv6fs_srv_runner(devname: &str) {
                     let _ = connection.write(msg.as_bytes());
                     continue;
                 }
+                // if primary server, send op to backup and get ack
+                if is_primary {
+                    match send_rcv_from_backup(&backup_stream, &mut connection, &buf[0..size], 1) {
+                        Ok(_)=> (),
+                        Err(_) => {
+                            println!("fsyncdir - send_rcv_from_backup Err");
+                            continue;
+                        },
+                    };
+                }
+
                 let fsyncdir_res = XV6FS.fsyncdir();
                 match fsyncdir_res {
                     Ok(()) => {
@@ -505,6 +728,17 @@ pub fn xv6fs_srv_runner(devname: &str) {
                     let _ = connection.write(msg.as_bytes());
                     continue;
                 }
+                // if primary server, send op to backup and get ack
+                if is_primary {
+                    match send_rcv_from_backup(&backup_stream, &mut connection, &buf[0..size], 22) {
+                        Ok(_)=> (),
+                        Err(_) => {
+                            println!("symlink - send_rcv_from_backup Err");
+                            continue;
+                        },
+                    };
+                }
+
                 let symlink_nodeid: u64 = buf_vec.get(1).unwrap().parse().unwrap();
                 let symlink_name: &str = buf_vec.get(2).unwrap();
                 let symlink_linkname_str = buf_vec.get(3).unwrap();
@@ -529,6 +763,17 @@ pub fn xv6fs_srv_runner(devname: &str) {
                     let _ = connection.write(msg.as_bytes());
                     continue;
                 }
+//                // if primary server, send op to backup and get ack
+                //if is_primary {
+                    //match send_rcv_from_backup(&backup_stream, &buf[0..size], 1) {
+                        //Ok(_)=> (),
+                        //Err(_) => {
+                            //println!("readlink - send_rcv_from_backup Err");
+                            //return;
+                        //},
+                    //};
+                //}
+
                 let readlink_nodeid: u64 = buf_vec.get(1).unwrap().parse().unwrap();
                 let readlink_res = XV6FS.readlink(readlink_nodeid);
                 match readlink_res {
@@ -549,6 +794,17 @@ pub fn xv6fs_srv_runner(devname: &str) {
                     let _ = connection.write(msg.as_bytes());
                     continue;
                 }
+                // if primary server, send op to backup and get ack
+                if is_primary {
+                    match send_rcv_from_backup(&backup_stream, &mut connection, &buf[0..size], 1) {
+                        Ok(_)=> (),
+                        Err(_) => {
+                            println!("rename - send_rcv_from_backup Err");
+                            continue;
+                        },
+                    };
+                }
+
                 let rename_parent_ino: u64 = buf_vec.get(1).unwrap().parse().unwrap();
                 let rename_name: &str = buf_vec.get(2).unwrap();
                 let rename_newparent_ino: u64 = buf_vec.get(3).unwrap().parse().unwrap();
@@ -772,13 +1028,7 @@ impl Xv6FileSystem {
             }
         };
         //println!("server - setattr 3");
-        //let fsize = size;
-        //let log = self.log.as_ref().unwrap();
-        //let handle = log.begin_op(2);
-        //internals.size = fsize;
-        //if let Err(x) = self.iupdate(&internals, inode.inum, &handle) {
-            //return Err(x);
-        //}
+
 
         if let Some(fsize) = size {
             let log = self.log.as_ref().unwrap();

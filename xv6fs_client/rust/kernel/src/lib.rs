@@ -30,7 +30,8 @@ pub mod hello_capnp {
 }
 
 pub static mut XV6FS: Xv6FileSystem = Xv6FileSystem {
-    socket: None,
+  //  socket: None,
+    //srv_addr: None,
 };
 
 #[no_mangle]
