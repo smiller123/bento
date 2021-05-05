@@ -64,6 +64,8 @@ const INCLUDED_TYPES: &[&str] = &[
     "__kernel_sock_timeval",
     "msghdr",
     "kvec",
+    "proto",
+    "inet_connection_sock",
 ];
 const INCLUDED_FUNCTIONS: &[&str] = &[
     "cdev_add",
@@ -89,6 +91,8 @@ const INCLUDED_FUNCTIONS: &[&str] = &[
     "get_random_bytes",
     "rng_is_initialized",
     "IS_ERR",
+    "proto_register",
+    "proto_unregister",
 ];
 const INCLUDED_VARS: &[&str] = &[
     "FMODE_READ",
@@ -197,8 +201,11 @@ const INCLUDED_VARS: &[&str] = &[
     "SO_RCVTIMEO_NEW",
     "SO_SNDTIMEO_OLD",
     "SO_SNDTIMEO_NEW",
+    "SLAB_TYPESAFE_BY_RCU",
     "MSG_PEEK",
     "PAGE_SIZE",
+    "__this_module",
+    "MAX_TCP_HEADER",
 ];
 const OPAQUE_TYPES: &[&str] = &[
     // These need to be opaque because they're both packed and aligned, which rustc

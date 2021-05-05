@@ -22,6 +22,9 @@
 #include <linux/uio.h>
 #include <linux/socket.h>
 #include <linux/kthread.h>
+#include <net/sock.h>
+#include <net/tcp.h>
+#include <net/inet_connection_sock.h>
 
 // Bindgen gets confused at certain things
 //

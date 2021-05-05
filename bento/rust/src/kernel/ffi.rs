@@ -371,6 +371,10 @@ extern "C" {
     pub fn kthread_should_stop() -> bool;
     pub fn wait_a_bit();
     pub fn wait_for_interrupt();
+
+    // TCP Stuff
+    pub fn proto_register(prot: *mut bindings::proto, alloc_slab: i32) -> i32;
+    pub fn proto_unregister(prot: *mut bindings::proto);
 }
 
 pub unsafe fn sb_bread(sb: *const raw::c_void, blockno: u64) -> *const raw::c_void {
