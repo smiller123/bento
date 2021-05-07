@@ -78,6 +78,7 @@ const BACKUP_PORT: u16 = 8888;
 
 const VIEW_PORT: u16 = 1234;
 const DEBUG: bool = false;
+const HB_PORT: u16 = 8888;
 //static mut hb_backup_stream: Option<TcpStream> = None;
 
 fn send_rcv_from_backup(backup_stream: &Option<TcpStream>, client_stream: &mut TcpStream,msg_bytes: &[u8], resp_vec_len: u32) -> Result<(), ()> {
@@ -173,7 +174,27 @@ pub fn xv6fs_srv_runner(devname: &str) {
         stream.write(msg.as_bytes());
     }
 
+    println!("connecting to hb port..");
+    let hb_srv_addr = SocketAddrV4::new(Ipv4Addr::LOCALHOST, HB_PORT);
+    thread::spawn(move || {
+        let hb_backup_stream = match TcpStream::connect(SocketAddr::V4(hb_srv_addr)) {
+            Ok(x) => Some(x),
+            Err(_) => {
+                println!("..FAILED");
+                return;
+            }
+        };
+        
+        let hb_msg = "tick";
+        loop {
+            hb_backup_stream.as_ref().unwrap().write(hb_msg.as_bytes());
+            thread::sleep(Duration::from_micros(500));
+        }
+    }); 
+    println!("..OK");
+
     println!("ready for ops..");
+    loop {}
     loop {
     let mut buf = [0; 4096];
        //connection = match 

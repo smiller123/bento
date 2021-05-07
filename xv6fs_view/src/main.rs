@@ -1,6 +1,10 @@
 use std::net::*;
 use std::io::{Read, Write};
 use std::str;
+use std::thread;
+use std::time::Duration;
+use std::sync::Arc;
+use std::sync::Mutex;
 
 const PRIMARY_PORT: u16 = 1234;
 const HB_PORT: u16 = 8888;
@@ -19,6 +23,19 @@ fn main() {
         },
     };
 
+
+    let primary_missed_hb = Arc::new(Mutex::new(0));
+    let backup_missed_hb = Arc::new(Mutex::new(0));
+
+    let hb_addr = SocketAddrV4::new(Ipv4Addr::LOCALHOST, HB_PORT);
+    let hb_listener = match TcpListener::bind(SocketAddr::V4(hb_addr)) {
+        Ok(x) => x,
+        Err(_) => {
+            return;
+        },
+    };
+
+
     println!("accepting primary server..");
     // accept primary server connection
     let mut primary_srv_connection = match view_listener.accept() {
@@ -30,6 +47,52 @@ fn main() {
         }
     }; 
     println!("..OK");
+
+    println!("setting primary hb connection..");
+    accept_hb_connection(&hb_listener, &primary_missed_hb);
+    println!("..OK");
+
+    /*{
+        println!("accepting hb connection..");
+        let hb_connection = match hb_listener.accept() {
+            Ok((stream, _)) => Some(stream),
+            Err(_) => {
+                println!("..FAILED");
+                return;
+            }
+        };
+        let missed_hb_clone = primary_missed_hb.clone();
+        thread::spawn(move || {
+            let hb_connection = Some(hb_connection.unwrap());
+            let hb_missed_count = missed_hb_clone;
+            println!("backup hb thread running..");
+            loop {
+                let mut hb_buf = [0; 4096];
+                let hb_read_size = match hb_connection.as_ref().unwrap().read(&mut hb_buf) {
+                    Ok(x) if x == 0 => 0,
+                    Ok(x) => {
+                        //println!("connect.read {} bytes", x);
+                    x
+                    },
+                    Err(_) => {
+                        let _ = hb_connection.unwrap().shutdown(Shutdown::Both);
+                        println!("read from primary hb failed");
+                        return;
+                    },
+                };
+                if hb_read_size == 0 {
+                    // increase missed heart beat
+                    *hb_missed_count.lock().unwrap() += 1;
+
+                } else {
+
+                    *hb_missed_count.lock().unwrap() = 0;
+                }
+                thread::sleep(Duration::from_micros(1000));
+            }
+
+        });
+    }*/
     let mut is_primary_alive: bool = true;
     
     println!("accepting backup server..");
@@ -43,7 +106,42 @@ fn main() {
         }
     };  
     println!("..OK");
+    println!("setting backup hb connection..");
+    accept_hb_connection(&hb_listener, &backup_missed_hb);
+    println!("..OK");
+    let mut is_backup_alive: bool = true;
 
+    let mut count = 0;
+    if DEBUG {
+        loop {
+            if is_primary_alive {
+                let primary_count_missed = *primary_missed_hb.lock().unwrap();
+                if primary_count_missed > 5 {
+                    println!("primary died");
+                    is_primary_alive = false;
+                    primary_srv_connection.shutdown(Shutdown::Both);
+                }
+            } else {
+                if count < 10 {
+                    let msg = "test";
+                    print!("count: {} - ", count);
+                    match primary_srv_connection.write(msg.as_bytes()) {
+                        Ok(x) => println!("write after primary died: {} ", x),
+                        Err(_) => println!("err writing after primary died"),
+                    };
+                    count += 1;
+                }
+            }
+            if is_backup_alive {
+                let backup_count_missed = *backup_missed_hb.lock().unwrap();
+                if backup_count_missed > 5 {
+                    println!("backup died");
+                    is_backup_alive = false;
+                }
+            }
+
+        }
+    }
     if DEBUG {
         let mut primary_buf = [0; 4096];
         let mut backup_buf = [0; 4096];
@@ -99,23 +197,39 @@ fn main() {
     println!("ready for operations..");
     // loop and listen to client commands
     loop {
-
+        if is_primary_alive {
+            let primary_count_missed = *primary_missed_hb.lock().unwrap();
+            if primary_count_missed > 5 {
+                println!("primary died");
+                is_primary_alive = false;
+                let _ = primary_srv_connection.shutdown(Shutdown::Both);
+            }
+        }  
+        if is_backup_alive {
+            let backup_count_missed = *backup_missed_hb.lock().unwrap();
+            if backup_count_missed > 5 {
+                println!("backup died");
+                is_backup_alive = false;
+                let _ = backup_srv_connection.shutdown(Shutdown::Both);
+            }
+        }
         // read from client
         let mut buf = [0; 4096];
         //connection = match 
         let size = match client_connection.read(&mut buf) {
             Ok(x) if x == 0 => {
+                is_primary_alive = false;
                 break;
             },
             Ok(x) => {
                 x
             },
             Err(_) => {
-                let _ = client_connection.shutdown(Shutdown::Both);
+                is_primary_alive = false;
                 break;
             },
         };
-        let buf_str = str::from_utf8(&buf[0..size]).unwrap();
+        //let buf_str = str::from_utf8(&buf[0..size]).unwrap();
         
         // send to primary
         if is_primary_alive {
@@ -152,9 +266,54 @@ fn main() {
     println!("shutting down..");
 }
 
+fn accept_hb_connection (hb_listener: &TcpListener, missed_hb: &Arc<Mutex<u32>>) {
+    println!("accepting hb connection..");
+    let hb_connection = match hb_listener.accept() {
+        Ok((stream, _)) => Some(stream),
+        Err(_) => {
+            println!("..FAILED");
+            return;
+        }
+    };
+    let missed_hb_clone = missed_hb.clone();
+    thread::spawn(move || {
+        let hb_connection = Some(hb_connection.unwrap());
+        let hb_missed_count = missed_hb_clone;
+        println!("hb thread running..");
+        loop {
+            let mut hb_buf = [0; 4096];
+            let hb_read_size = match hb_connection.as_ref().unwrap().read(&mut hb_buf) {
+                Ok(x) if x == 0 => 0,
+                Ok(x) => {
+                    //println!("connect.read {} bytes", x);
+                x
+                },
+                Err(_) => {
+                    let _ = hb_connection.unwrap().shutdown(Shutdown::Both);
+                    println!("read from primary hb failed");
+                    return;
+                },
+            };
+            if hb_read_size == 0 {
+                // increase missed heart beat
+                *hb_missed_count.lock().unwrap() += 1;
+
+            } else {
+
+                *hb_missed_count.lock().unwrap() = 0;
+            }
+            thread::sleep(Duration::from_micros(1000));
+        }
+
+    });
+}
+
 fn send_rcv_from_srv(srv_stream: &mut TcpStream, client_stream: &mut TcpStream, msg_bytes: &[u8], reply_to_client: bool) -> Result<(), ()> {
     // send op to srv
-    srv_stream.write(msg_bytes);
+    match srv_stream.write(msg_bytes) {
+        Ok(_) => (),
+        Err(_) => return Err(()),
+    };
 
     // get result from backup
     let mut srv_resp = [0 as u8; 4096];
