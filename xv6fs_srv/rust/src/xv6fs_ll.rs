@@ -194,7 +194,6 @@ pub fn xv6fs_srv_runner(devname: &str) {
     println!("..OK");
 
     println!("ready for ops..");
-    loop {}
     loop {
     let mut buf = [0; 4096];
        //connection = match 
