@@ -11,6 +11,8 @@ extern crate capnp;
 extern crate core;
 extern crate libc;
 extern crate time;
+extern crate timer;
+extern crate chrono;
 
 #[macro_use]
 pub mod xv6fs_ll;
@@ -34,14 +36,14 @@ pub mod hello_capnp {
 fn main() {
     env_logger::init();
     let disk_name = env::args_os().nth(1).unwrap();
-    let srv_role = env::args_os().nth(2).unwrap();
-    let is_primary : bool = match srv_role.to_str().unwrap().to_lowercase().as_ref() {
-        "primary" => true,
-        "backup" => false,
-        _ => {
-            println!("server role must be : 'primary' or 'backup'");
-            return;
-        }
-    };
-    xv6fs_srv_runner(disk_name.to_str().unwrap(), is_primary);
+//    let srv_role = env::args_os().nth(2).unwrap();
+    //let is_primary : bool = match srv_role.to_str().unwrap().to_lowercase().as_ref() {
+        //"primary" => true,
+        //"backup" => false,
+        //_ => {
+            //println!("server role must be : 'primary' or 'backup'");
+            //return;
+        //}
+    //};
+    xv6fs_srv_runner(disk_name.to_str().unwrap());
 }
