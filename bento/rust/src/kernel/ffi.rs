@@ -375,6 +375,8 @@ extern "C" {
     // TCP Stuff
     pub fn proto_register(prot: *mut bindings::proto, alloc_slab: i32) -> i32;
     pub fn proto_unregister(prot: *mut bindings::proto);
+    pub fn sock_register(prot: *const bindings::net_proto_family) -> i32;
+    pub fn sock_unregister(family: i32);
 }
 
 pub unsafe fn sb_bread(sb: *const raw::c_void, blockno: u64) -> *const raw::c_void {

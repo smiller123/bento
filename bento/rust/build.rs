@@ -66,6 +66,7 @@ const INCLUDED_TYPES: &[&str] = &[
     "kvec",
     "proto",
     "inet_connection_sock",
+    "net_proto_family",
 ];
 const INCLUDED_FUNCTIONS: &[&str] = &[
     "cdev_add",
@@ -93,6 +94,8 @@ const INCLUDED_FUNCTIONS: &[&str] = &[
     "IS_ERR",
     "proto_register",
     "proto_unregister",
+    "sock_register",
+    "sock_unregister",
 ];
 const INCLUDED_VARS: &[&str] = &[
     "FMODE_READ",
@@ -206,6 +209,7 @@ const INCLUDED_VARS: &[&str] = &[
     "PAGE_SIZE",
     "__this_module",
     "MAX_TCP_HEADER",
+    "PF_BENTO",
 ];
 const OPAQUE_TYPES: &[&str] = &[
     // These need to be opaque because they're both packed and aligned, which rustc
