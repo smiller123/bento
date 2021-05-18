@@ -67,6 +67,8 @@ const INCLUDED_TYPES: &[&str] = &[
     "proto",
     "inet_connection_sock",
     "net_proto_family",
+    "net_protocol",
+    "socket_state",
 ];
 const INCLUDED_FUNCTIONS: &[&str] = &[
     "cdev_add",
@@ -96,6 +98,7 @@ const INCLUDED_FUNCTIONS: &[&str] = &[
     "proto_unregister",
     "sock_register",
     "sock_unregister",
+    "sk_alloc",
 ];
 const INCLUDED_VARS: &[&str] = &[
     "FMODE_READ",
@@ -210,6 +213,7 @@ const INCLUDED_VARS: &[&str] = &[
     "__this_module",
     "MAX_TCP_HEADER",
     "PF_BENTO",
+    "SS_UNCONNECTED",
 ];
 const OPAQUE_TYPES: &[&str] = &[
     // These need to be opaque because they're both packed and aligned, which rustc

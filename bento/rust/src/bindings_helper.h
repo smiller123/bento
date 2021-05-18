@@ -19,12 +19,14 @@
 #include <linux/in6.h>
 #include <linux/net.h>
 #include <uapi/linux/tcp.h>
+#include <uapi/linux/net.h>
 #include <linux/uio.h>
 #include <linux/socket.h>
 #include <linux/kthread.h>
 #include <net/sock.h>
 #include <net/tcp.h>
 #include <net/inet_connection_sock.h>
+#include <net/protocol.h>
 
 // Bindgen gets confused at certain things
 //
