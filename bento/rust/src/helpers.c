@@ -20,6 +20,7 @@
 #include <linux/net.h>
 #include <linux/kthread.h>
 #include <linux/timekeeping.h>
+#include <net/sock.h>
 
 void
 wait_a_bit(void) {
@@ -239,4 +240,20 @@ void rs_jbd2_journal_setup(journal_t *journal) {
                         JBD2_FEATURE_INCOMPAT_CSUM_V3);
         jbd2_journal_clear_features(journal, 0, 0,
                         JBD2_FEATURE_INCOMPAT_ASYNC_COMMIT);
+}
+
+void rs_sk_mem_reclaim(struct sock *sk) {
+	sk_mem_reclaim(sk);
+}
+
+void rs_release_dst_cache(struct sock *sk) {
+	dst_release(rcu_dereference_protected(sk->sk_dst_cache, 1));
+}
+
+void rs_sk_refcnt_debug_inc(struct sock *sk) {
+	sk_refcnt_debug_inc(sk);
+}
+
+void rs_sk_refcnt_debug_dec(struct sock *sk) {
+	sk_refcnt_debug_dec(sk);
 }

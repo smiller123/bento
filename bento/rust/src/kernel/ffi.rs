@@ -377,6 +377,10 @@ extern "C" {
     pub fn proto_unregister(prot: *mut bindings::proto);
     pub fn sock_register(prot: *const bindings::net_proto_family) -> i32;
     pub fn sock_unregister(family: i32);
+    pub fn rs_sk_mem_reclaim(sk: *mut bindings::sock);
+    pub fn rs_release_dst_cache(sk: *mut bindings::sock);
+    pub fn rs_sk_refcnt_debug_inc(sk: *mut bindings::sock);
+    pub fn rs_sk_refcnt_debug_dec(sk: *mut bindings::sock);
 }
 
 pub unsafe fn sb_bread(sb: *const raw::c_void, blockno: u64) -> *const raw::c_void {
