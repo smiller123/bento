@@ -21,7 +21,6 @@ use crate::time;
 use alloc::collections::btree_map::BTreeMap;
 
 use alloc::string::String;
-//use alloc::string::ToString;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
@@ -31,7 +30,6 @@ use core::str;
 
 use datablock::DataBlock;
 
-//use bento_utils::consts::*;
 use bento_utils::*;
 use fuse::consts::*;
 
@@ -79,44 +77,6 @@ const BACKUP_PORT: u16 = 8888;
 const VIEW_PORT: u16 = 1234;
 const DEBUG: bool = false;
 const HB_PORT: u16 = 8888;
-//static mut hb_backup_stream: Option<TcpStream> = None;
-
-fn send_rcv_from_backup(backup_stream: &Option<TcpStream>, client_stream: &mut TcpStream,msg_bytes: &[u8], resp_vec_len: u32) -> Result<(), ()> {
-    // send op to backup
-    let mut backup_stream_ref = backup_stream.as_ref().unwrap();
-    backup_stream_ref.write(msg_bytes);
-
-    // get result from backup
-    let mut backup_resp = [0 as u8; 4096];
-    let backup_resp_size = match backup_stream_ref.read(&mut backup_resp) {
-        Ok(x) => x,
-        Err(_) => {
-            println!("statfs backup_stream read err");
-            return Err(());
-        }
-    };
-    let op_msg = str::from_utf8(&backup_resp[0..backup_resp_size]).unwrap();
-    let op_vec: Vec<&str> = op_msg.split(' ').collect();
-    match *op_vec.get(0).unwrap() {
-        "Ok" => {
-            return Ok(());
-        },
-        "Add" => {
-            return Ok(());
-        },
-        "Err" => {
-            println!("backup op - Err 1");
-            let _ = client_stream.write(&backup_resp[0..backup_resp_size]);
-            return Err(());
-        },
-        _ => {
-            println!("backup op_msg: {}", op_msg);
-            let _ = client_stream.write(&backup_resp[0..backup_resp_size]);
-            return Err(());
-        },
-
-    };
-}
 
 fn connect_to_client(port: u16) -> Result<TcpStream, ()> {
 
@@ -196,7 +156,6 @@ pub fn xv6fs_srv_runner(devname: &str) {
     println!("ready for ops..");
     loop {
     let mut buf = [0; 4096];
-       //connection = match 
         let size = match stream.read(&mut buf) {
             Ok(x) if x == 0 => {
                 break;
@@ -252,7 +211,6 @@ pub fn xv6fs_srv_runner(devname: &str) {
             },
             "opendir" => {
                 if buf_vec.len() < 2 {
-                    //println!("server - opendir 1");
                     // Send error back
                     let msg = format!("Err {}", libc::EINVAL);
                     let _ = stream.write(msg.as_bytes());
@@ -266,7 +224,6 @@ pub fn xv6fs_srv_runner(devname: &str) {
                         let _ = stream.write(msg.as_bytes());
                     },
                     Err(x) => {
-                        //println!("server - opendir 2");
                         let msg = format!("Err {}", x);
                         let _ = stream.write(msg.as_bytes());
                     },
@@ -286,19 +243,17 @@ pub fn xv6fs_srv_runner(devname: &str) {
                 match getattr_res {
                     Ok((a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t)) => {
 
-                        //println!("server - getattr OK");
                         let msg = format!("Ok {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
                                           a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t);
                         let _ = stream.write(msg.as_bytes());
                     },
                     Err(x) => {
-                        //println!("server - getattr 2");
                         let msg = format!("Err {}", x);
                         let _ = stream.write(msg.as_bytes());
                     },
                 }
             },
-            "setattr" => { // TODO: change to match function
+            "setattr" => { 
                 if buf_vec.len() < 3 {
                     // Send error back
 
@@ -346,7 +301,6 @@ pub fn xv6fs_srv_runner(devname: &str) {
                     },
                     Err(x) => {
 
-                        //println!("server - create ERR");
                         let msg = format!("Err {}", x);
                         let _ = stream.write(msg.as_bytes());
                     },
@@ -395,7 +349,6 @@ pub fn xv6fs_srv_runner(devname: &str) {
                         let _ = stream.write(msg.as_bytes());
                     },
                     Err(x) => {
-                        //println!("lookup err - err(x): {}", x);
                         let msg = format!("Err {}", x);
                         let _ = stream.write(msg.as_bytes());
                     },
@@ -429,7 +382,6 @@ pub fn xv6fs_srv_runner(devname: &str) {
                     // Send error back
                     let msg = format!("Err {}", libc::EINVAL);
 
-                    //println!("write - buf_vec.len() < 3");
                     let _ = stream.write(msg.as_bytes());
                     continue;
                 }
@@ -451,7 +403,6 @@ pub fn xv6fs_srv_runner(devname: &str) {
                         let _ = stream.write(msg.as_bytes());
                     },
                     Err(x) => {
-                        //println!("write err(x): {}", x);
                         let msg = format!("Err {}", x);
                         let _ = stream.write(msg.as_bytes());
                     },
@@ -653,863 +604,12 @@ pub fn xv6fs_srv_runner(devname: &str) {
     let _ = stream.shutdown(Shutdown::Both);
 }
 
-/*pub fn xv6fs_srv_runner(devname: &str, is_primary: bool) {
-    // initialize xv6fs
-    let mut XV6FS = Xv6FileSystem {
-        log: None,
-        sb: None,
-        disk: None,
-        ilock_cache: None,
-        icache_map: None,
-        ialloc_lock: None,
-        balloc_lock: None,
-        diskname: None,
-    };
-    XV6FS.xv6fs_init(devname);
-
-    println!("xv6fs_srv init - ok");
-    println!("setting sockaddr");
-    let srv_addr = match is_primary {
-        true => SocketAddrV4::new(Ipv4Addr::LOCALHOST, PRIMARY_PORT),
-        false => SocketAddrV4::new(Ipv4Addr::LOCALHOST, BACKUP_PORT),
-    };
-    let mut primary_alive: bool = true;
-    let missed_hb = Arc::new(Mutex::new(0));
-
-    // if is primary, connect to back up first
-    let mut backup_stream: Option<TcpStream> = None;
-    if is_primary {
-        // connect to backup
-        let backup_srv_addr = SocketAddrV4::new(Ipv4Addr::LOCALHOST, BACKUP_PORT);
-        backup_stream = match TcpStream::connect(SocketAddr::V4(backup_srv_addr)) {
-            Ok(x) => Some(x),
-            Err(_) => {
-                println!("failed to connect do backup");
-                return;
-            }
-        };
-
-        let mut backup_msg = capnp::message::Builder::new_default();
-        let mut backup_foo_msg = backup_msg.init_root::<foo::Builder>();
-        backup_foo_msg.set_msg("hello from xv6fs_primary");
-        serialize::write_message(&mut backup_stream.as_ref().unwrap(), &backup_msg);
-        println!("primary connected to backup");
-
-        // spawn a thread, connect to backup and send heart beats
-        // TODO: add a listener to client for heart beats
-        thread::spawn(move || {
-            let hb_backup_stream = match TcpStream::connect(SocketAddr::V4(backup_srv_addr)) {
-                Ok(x) => Some(x),
-                Err(_) => {
-                    println!("PRIMARY - Failed to setup hb tcpstream");
-                    return;
-                }
-            };
-           
-            let hb_msg = "tick";
-            loop {
-                hb_backup_stream.as_ref().unwrap().write(hb_msg.as_bytes());
-                thread::sleep(Duration::from_micros(500));
-            }
-        });
-        // connect to backup stream for heartbeats
-    }
-    // TODO: REMOVE IF CONDITION
-    println!("binding");
-    let listener = match TcpListener::bind(SocketAddr::V4(srv_addr)) {
-        Ok(x) => x,
-        Err(_) => {
-            return;
-        },
-    };
-
-    println!("waiting for connection");
-    let mut main_connection = match listener.accept() {
-        Ok((stream, _)) => stream,
-        Err(_) => {
-
-            println!("listener accept error");
-            return;
-        }
-    };
-
-
-    println!("accepted connection");
-    let message_reader = serialize::read_message(&mut main_connection, capnp::message::ReaderOptions::new()).unwrap();
-    let foo_msg = message_reader.get_root::<foo::Reader>().unwrap();
-    let text = foo_msg.get_msg().unwrap();
-    println!("got text {}", text);
-
-    // backup accept hb connection from primary
-    let mut hb_primary_connection: Option<TcpStream> = None;
-    if !is_primary {
-        hb_primary_connection = match listener.accept() {
-            Ok((stream, _)) => Some(stream),
-            Err(_) => {
-                println!("backup to primary accept error");
-                return;
-            }
-        };
-        let missed_hb_clone = missed_hb.clone();
-        thread::spawn(move || {
-            let backup_hb_connection = Some(hb_primary_connection.unwrap());
-            let hb_missed_count = missed_hb_clone;
-            println!("backup hb thread running..");
-            loop {
-                let mut hb_buf = [0; 4096];
-                let hb_read_size = match backup_hb_connection.as_ref().unwrap().read(&mut hb_buf) {
-                    Ok(x) if x == 0 => 0,
-                    Ok(x) => {
-                        //println!("connect.read {} bytes", x);
-                    x
-                    },
-                    Err(_) => {
-                        let _ = backup_hb_connection.unwrap().shutdown(Shutdown::Both);
-                        println!("read from primary hb failed");
-                        return;
-                    },
-                };
-                if hb_read_size == 0 {
-                    // increase missed heart beat
-                    *hb_missed_count.lock().unwrap() += 1;
-
-                } else {
-
-                    *hb_missed_count.lock().unwrap() = 0;
-                }
-                thread::sleep(Duration::from_micros(1000));
-            }
-
-        });
-
-    }
-
-    let mut btc_stream: Option<TcpStream>;
-    if !is_primary {
-        btc_stream = match connect_to_client(5555) {
-            Ok(stream) => Some(stream),
-            Err(_) => {
-                println!("failed to connect to client");
-                return;
-            }
-        };
-    }
-    
-
-    if is_primary {
-        println!("primary main thread");
-    } else {
-        println!("backup main thread");
-    }
-
-    let mut connection = &main_connection;
-    loop {
-        if !is_primary & primary_alive {
-            let count_missed = *missed_hb.lock().unwrap();
-            if count_missed > 5 {
-                    println!("primary died");
-                primary_alive = false;
-                connection = &btc_stream.as_ref().unwrap();
-            }
-        }
-        if primary_alive {
-            thread::sleep(Duration::from_millis(5));
-        }
-
-        let mut buf = [0; 4096];
-       //connection = match 
-        let size = match connection.read(&mut buf) {
-            Ok(x) if x == 0 => {
-                if !is_primary {
-                    println!("backup read 0 from primary");
-                    println!("primary crashed..");
-
-                    // terminate tcp stream with primary
-
-                    let _ = connection.shutdown(Shutdown::Both);
-                    if primary_alive {
-                        connection =  &btc_stream.as_ref().unwrap();
-                        primary_alive = false;
-                        continue;
-                    }
-                }
-                break;
-            },
-            Ok(x) => {
-                //println!("connect.read {} bytes", x);
-                x
-            },
-            Err(_) => {
-                let _ = connection.shutdown(Shutdown::Both);
-                if is_primary {
-                    return;
-                } else { // this is backup
-                    println!("primary crashed..");
-                    
-                    let _ = connection.shutdown(Shutdown::Both);
-                    // terminate tcp stream with primary
-                    if primary_alive {
-                        connection = &btc_stream.as_ref().unwrap();
-                        primary_alive = false;
-                        continue;
-                    }
-
-                    break;
-                }
-            },
-        };
-        let buf_str = str::from_utf8(&buf[0..size]).unwrap();
-        //println!("buf: {}", buf_str);
-        let buf_vec: Vec<&str> = buf_str.split(' ').collect();
-        let buf_op = buf_vec.get(0).unwrap();
-        match *buf_op {
-            "exit" => break,
-            "statfs" => {
-                // if primary server, send op to backup and get ack
-                if is_primary {
-                    match send_rcv_from_backup(&backup_stream, &mut connection, &buf[0..size], 9) {
-                        Ok(_)=> (),
-                        Err(_) => {
-                            println!("statfs - send_rcv_from_backup Err");
-
-                            continue;
-                        },
-                    };
-                }
-
-                let statfs_res = XV6FS.statfs();
-                match statfs_res {
-                    Ok((a, b, c, d, e, f, g, h)) => {
-                        let msg = format!("Ok {} {} {} {} {} {} {} {}",
-                                          a, b, c, d, e, f, g, h);
-                        let _ = connection.write(msg.as_bytes());
-                    },
-                    Err(x) => {
-                        let msg = format!("Err {}", x);
-                        let _ = connection.write(msg.as_bytes());
-                    },
-                }
-            },
-            "open" => {
-                if buf_vec.len() < 3 {
-                    // Send error back
-                    let msg = format!("Err {}", libc::EINVAL);
-                    let _ = connection.write(msg.as_bytes());
-                    continue;
-                }
-                // if primary server, send op to backup and get ack
-                if is_primary {
-                    match send_rcv_from_backup(&backup_stream, &mut connection, &buf[0..size], 3) {
-                        Ok(_)=> (),
-                        Err(_) => {
-                            println!("open - send_rcv_from_backup Err");
-                            continue;
-                        },
-                    };
-                }
-
-                let open_fh: u64 = buf_vec.get(1).unwrap().parse().unwrap();
-                let open_flags: u32 = buf_vec.get(2).unwrap().parse().unwrap();
-                let open_res = XV6FS.open(open_fh, open_flags);
-                match open_res {
-                    Ok((a, b)) => {
-                        let msg = format!("Ok {} {}", a, b);
-                        let _ = connection.write(msg.as_bytes());
-                    },
-                    Err(x) => {
-                        let msg = format!("Err {}", x);
-                        let _ = connection.write(msg.as_bytes());
-                    },
-                }
-            },
-            "opendir" => {
-                if buf_vec.len() < 2 {
-                    //println!("server - opendir 1");
-                    // Send error back
-                    let msg = format!("Err {}", libc::EINVAL);
-                    let _ = connection.write(msg.as_bytes());
-                    continue;
-                }
-                // if primary server, send op to backup and get ack
-                if is_primary {
-                    match send_rcv_from_backup(&backup_stream, &mut connection, &buf[0..size], 3) {
-                        Ok(_)=> (),
-                        Err(_) => {
-                            println!("opendir - send_rcv_from_backup Err");
-                            continue;
-                        },
-                    };
-                }
-
-                //println!("server - opendir");
-                let open_fh: u64 = buf_vec.get(1).unwrap().parse().unwrap();
-                let open_res = XV6FS.opendir(open_fh);
-                match open_res {
-                    Ok((a, b)) => {
-                        //println!("server - opendir OK");
-                        let msg = format!("Ok {} {}", a, b);
-                        let _ = connection.write(msg.as_bytes());
-                    },
-                    Err(x) => {
-                        //println!("server - opendir 2");
-                        let msg = format!("Err {}", x);
-                        let _ = connection.write(msg.as_bytes());
-                    },
-                }
-            },
-            "getattr" => {
-                if buf_vec.len() < 2 {
-                    // Send error back
-
-                    //println!("server - getattr 1");
-                    let msg = format!("Err {}", libc::EINVAL);
-                    let _ = connection.write(msg.as_bytes());
-                    continue;
-                }
-                // if primary server, send op to backup and get ack
-                if is_primary {
-                    match send_rcv_from_backup(&backup_stream, &mut connection, &buf[0..size], 21) {
-                        Ok(_)=> (),
-                        Err(_) => {
-                            println!("getattr - send_rcv_from_backup Err");
-                            continue;
-                        },
-                    };
-                }
-
-                //println!("server - getattr");
-                let getattr_fh: u64 = buf_vec.get(1).unwrap().parse().unwrap();
-                let getattr_res = XV6FS.getattr(getattr_fh);
-                match getattr_res {
-                    Ok((a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t)) => {
-
-                        //println!("server - getattr OK");
-                        let msg = format!("Ok {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
-                                          a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t);
-                        let _ = connection.write(msg.as_bytes());
-                    },
-                    Err(x) => {
-                        //println!("server - getattr 2");
-                        let msg = format!("Err {}", x);
-                        let _ = connection.write(msg.as_bytes());
-                    },
-                }
-            },
-            "setattr" => { // TODO: change to match function
-                if buf_vec.len() < 3 {
-                    // Send error back
-
-                    //println!("server - settattr 1");
-                    let msg = format!("Err {}", libc::EINVAL);
-                    let _ = connection.write(msg.as_bytes());
-                    continue;
-                }
-                // if primary server, send op to backup and get ack
-                if is_primary {
-                    match send_rcv_from_backup(&backup_stream, &mut connection, &buf[0..size], 21) {
-                        Ok(_)=> (),
-                        Err(_) => {
-                            println!("setattr - send_rcv_from_backup Err");
-                            continue;
-                        },
-                    };
-                }
-
-                //println!("server - settattr ");
-                let setattr_fh: u64 = buf_vec.get(1).unwrap().parse().unwrap();
-                
-                let setattr_size: Option<u64> = match buf_vec.get(2).unwrap().parse() {
-                    Ok(size) => Some(size),
-                    Err(_) => None,
-                };
-                let setattr_res = XV6FS.setattr(setattr_fh, setattr_size);
-                match setattr_res {
-
-                    Ok((a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t)) => {
-                        //println!("server - settattr OK");
-                        let msg = format!("Ok {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
-                                          a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t);
-                        let _ = connection.write(msg.as_bytes());
-                    },
-                    Err(x) => {
-
-                        //println!("server - settattr 2");
-                        let msg = format!("Err {}", x);
-                        let _ = connection.write(msg.as_bytes());
-                    },
-                }
-            },
-            "create" => {
-                if buf_vec.len() < 3 {
-                    //println!("server - create ERR");
-                    // Send error back
-                    let msg = format!("Err {}", libc::EINVAL);
-                    let _ = connection.write(msg.as_bytes());
-                    continue;
-                }
-                // if primary server, send op to backup and get ack
-                if is_primary {
-                    match send_rcv_from_backup(&backup_stream, &mut connection,&buf[0..size], 24) {
-                        Ok(_)=> (),
-                        Err(_) => {
-                            println!("create - send_rcv_from_backup Err");
-                            continue;
-                        },
-                    };
-                }
-
-                //println!("server - create");
-                let create_parent: u64= buf_vec.get(1).unwrap().parse().unwrap();
-                let create_name: &str= buf_vec.get(2).unwrap();
-                let osstr_name = OsStr::new(create_name);
-                let create_res = XV6FS.create(create_parent, &osstr_name);
-
-                match create_res {
-                    Ok((a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w)) => {
-
-                        //println!("server - create OK");
-                        let msg = format!("Ok {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
-                                          a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w);
-                        let _ = connection.write(msg.as_bytes());
-                    },
-                    Err(x) => {
-
-                        //println!("server - create ERR");
-                        let msg = format!("Err {}", x);
-                        let _ = connection.write(msg.as_bytes());
-                    },
-                }
-
-            },
-            "mkdir" => {
-                if buf_vec.len() < 3 {
-                    // Send error back
-                    let msg = format!("Err {}", libc::EINVAL);
-                    let _ = connection.write(msg.as_bytes());
-                    continue;
-                }
-                // if primary server, send op to backup and get ack
-                if is_primary {
-                    match send_rcv_from_backup(&backup_stream, &mut connection, &buf[0..size], 22) {
-                        Ok(_)=> (),
-                        Err(_) => {
-                            println!("mkdir - send_rcv_from_backup Err");
-                            continue;
-                        },
-                    };
-                }
-
-                let mkdir_parent: u64 = buf_vec.get(1).unwrap().parse().unwrap();
-                let mkdir_name: &str = buf_vec.get(2).unwrap();
-                let osstr_name = OsStr::new(mkdir_name);
-                let mkdir_res = XV6FS.mkdir(mkdir_parent, osstr_name);
-                match mkdir_res {
-                    Ok((a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u)) => {
-                        let msg = format!("Ok {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
-                                          a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u);
-                        let _ = connection.write(msg.as_bytes());
-                    },
-                    Err(x) => {
-                        //println!("mkdir failed err: {} - parent_inode: {}, dir_name: {} ", x, mkdir_parent, mkdir_name);
-                        let msg = format!("Err {}", x);
-                        let _ = connection.write(msg.as_bytes());
-                    },
-                }
-            },
-            "lookup" => {
-                if buf_vec.len() < 3 {
-                    // Send error back
-                    let msg = format!("Err {}", libc::EINVAL);
-                    let _ = connection.write(msg.as_bytes());
-                    continue;
-                }
-                // if primary server, send op to backup and get ack
-                if is_primary {
-                    match send_rcv_from_backup(&backup_stream, &mut connection, &buf[0..size], 22) {
-                        Ok(_)=> (),
-                        Err(_) => {
-                            println!("lookup - send_rcv_from_backup Err");
-                            continue;
-                        },
-                    };
-                }
-
-                let lookup_id: u64 = buf_vec.get(1).unwrap().parse().unwrap();
-                let lookup_name: &str = buf_vec.get(2).unwrap();
-                let osstr_name = OsStr::new(lookup_name);
-                let lookup_res = XV6FS.lookup(lookup_id, &osstr_name);
-                match lookup_res {
-                    Ok((a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u)) => {
-                        let msg = format!("Ok {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
-                                          a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u);
-                        let _ = connection.write(msg.as_bytes());
-                    },
-                    Err(x) => {
-                        //println!("lookup err - err(x): {}", x);
-                        let msg = format!("Err {}", x);
-                        let _ = connection.write(msg.as_bytes());
-                    },
-                }
-            },
-            "read" => {
-                if buf_vec.len() < 4 {
-                    // Send error back
-                    let msg = format!("Err {}", libc::EINVAL);
-                    let _ = connection.write(msg.as_bytes());
-                    continue;
-                }
-//                // if primary server, send op to backup and get ack
-                //if is_primary {
-                    //match send_rcv_from_backup(&backup_stream, &buf[0..size], 9) {
-                        //Ok(_)=> (),
-                        //Err(_) => {
-                            //println!("read - send_rcv_from_backup Err");
-                            //return;
-                        //},
-                    //};
-                //}
-
-                let read_id: u64 = buf_vec.get(1).unwrap().parse().unwrap();
-                let read_off: i64 = buf_vec.get(2).unwrap().parse().unwrap();
-                let read_size: u32 = buf_vec.get(3).unwrap().parse().unwrap();
-                let read_res = XV6FS.read(read_id, read_off, read_size);
-                match read_res {
-                    Ok(s) => {
-                        let msg = format!("Ok {}", str::from_utf8(s.as_slice()).unwrap());
-                        let _ = connection.write(msg.as_bytes());
-                    },
-                    Err(x) => {
-                        let msg = format!("Err {}", x);
-                        let _ = connection.write(msg.as_bytes());
-                    },
-                }
-            },
-            "write" => {
-                if buf_vec.len() < 3 {
-                    // Send error back
-                    let msg = format!("Err {}", libc::EINVAL);
-
-                    //println!("write - buf_vec.len() < 3");
-                    let _ = connection.write(msg.as_bytes());
-                    continue;
-                }
-                // if primary server, send op to backup and get ack
-                if is_primary {
-                    match send_rcv_from_backup(&backup_stream, &mut connection, &buf[0..size], 2) {
-                        Ok(_)=> (),
-                        Err(_) => {
-                            println!("write - send_rcv_from_backup Err");
-                            continue;
-                        },
-                    };
-                }
-
-                let write_id: u64 = buf_vec.get(1).unwrap().parse().unwrap();
-                let write_off: i64 = buf_vec.get(2).unwrap().parse().unwrap();
-                if buf_vec.len() == 3 {
-                    let msg = "Ok 0";
-                    let _ = connection.write(msg.as_bytes());
-                }
-                let write_data_off = buf_vec.get(0).unwrap().len() + buf_vec.get(1).unwrap().len() +
-                    buf_vec.get(2).unwrap().len() + 3;
-                let write_data = &buf[write_data_off..size];
-
-                let write_res = XV6FS.write(write_id, write_off, write_data);
-                match write_res {
-                    Ok(a) => {
-                        let msg = format!("Ok {}", a);
-                        let _ = connection.write(msg.as_bytes());
-                    },
-                    Err(x) => {
-                        //println!("write err(x): {}", x);
-                        let msg = format!("Err {}", x);
-                        let _ = connection.write(msg.as_bytes());
-                    },
-                }
-            },
-            "readdir" => {
-                if buf_vec.len() < 3 {
-                    // Send error back
-                    let msg = format!("Err {}", libc::EINVAL);
-                    let _ = connection.write(msg.as_bytes());
-                    continue;
-                }
-                // if primary server, send op to backup and get ack
-                if is_primary {
-                    match send_rcv_from_backup(&backup_stream, &mut connection, &buf[0..size], 5) {
-                        Ok(_)=> (),
-                        Err(_) => {
-                            println!("readdir - send_rcv_from_backup Err");
-                            continue;
-                        },
-                    };
-                }
-
-                let readdir_id: u64 = buf_vec.get(1).unwrap().parse().unwrap();
-                let readdir_off: i64 = buf_vec.get(2).unwrap().parse().unwrap();
-
-                let readdir_res = XV6FS.readdir(readdir_id, readdir_off);
-                let mut msg_vec: Vec<String> = Vec::new();
-                match readdir_res {
-                    Ok(s) => {
-                        for (a, b, c, d) in s.iter() {
-                            let msg = format!("Add {} {} {} {}", a, b, c, d);
-                            msg_vec.push(msg);
-                        }
-                        let msg = format!("Ok");
-                        msg_vec.push(msg);
-                        let full_msg = msg_vec.join(" ");
-                        let _ = connection.write(full_msg.as_bytes());
-                    },
-                    Err(x) => {
-                        let msg = format!("Err {}", x);
-                        let _ = connection.write(msg.as_bytes());
-                    },
-                }
-            },
-            "rmdir" => {
-                if buf_vec.len() < 3 {
-                    let msg = format!("Err {}", libc::EINVAL);
-                    let _ = connection.write(msg.as_bytes());
-                    continue;
-                }
-                // if primary server, send op to backup and get ack
-                if is_primary {
-                    match send_rcv_from_backup(&backup_stream, &mut connection, &buf[0..size], 1) {
-                        Ok(_)=> (),
-                        Err(_) => {
-                            println!("rmdir - send_rcv_from_backup Err");
-                            continue;
-                        },
-                    };
-                }
-
-                let rmdir_parent: u64 = buf_vec.get(1).unwrap().parse().unwrap();
-                let rmdir_name: &str = buf_vec.get(2).unwrap();
-                let osstr_name = OsStr::new(rmdir_name);
-                let rmdir_res = XV6FS.rmdir(rmdir_parent, &osstr_name);
-                match rmdir_res {
-                    Ok(()) => {
-                        let msg = "Ok";
-                        let _ = connection.write(msg.as_bytes());
-                    },
-                    Err(x) => {
-                        let msg = format!("Err {}", x);
-                        let _ = connection.write(msg.as_bytes());
-                    },
-                }
- 
-            },
-            "unlink" => {
-                if buf_vec.len() < 3 {
-                    let msg = format!("Err {}", libc::EINVAL);
-                    let _ = connection.write(msg.as_bytes());
-                    continue;
-                }
-                // if primary server, send op to backup and get ack
-                if is_primary {
-                    match send_rcv_from_backup(&backup_stream, &mut connection, &buf[0..size], 1) {
-                        Ok(_)=> (),
-                        Err(_) => {
-                            println!("unlink - send_rcv_from_backup Err");
-                            continue;
-                        },
-                    };
-                }
-
-                let unlink_parent: u64 = buf_vec.get(1).unwrap().parse().unwrap();
-                let unlink_name: &str = buf_vec.get(2).unwrap();
-                let osstr_name = OsStr::new(unlink_name);
-                let unlink_res = XV6FS.unlink(unlink_parent, &osstr_name);
-                match unlink_res {
-                    Ok(()) => {
-                        let msg = "Ok";
-                        let _ = connection.write(msg.as_bytes());
-                    },
-                    Err(x) => {
-                        let msg = format!("Err {}", x);
-                        let _ = connection.write(msg.as_bytes());
-                    },
-                }
-            },
-            "fsync" => {
-                if buf_vec.len() < 2 {
-                    // Send error back
-                    let msg = format!("Err {}", libc::EINVAL);
-                    let _ = connection.write(msg.as_bytes());
-                    continue;
-                }
-                // if primary server, send op to backup and get ack
-                if is_primary {
-                    match send_rcv_from_backup(&backup_stream, &mut connection, &buf[0..size], 1) {
-                        Ok(_)=> (),
-                        Err(_) => {
-                            println!("fsync - send_rcv_from_backup Err");
-                            continue;
-                        },
-                    };
-                }
-
-                let fsync_res = XV6FS.fsync();
-                match fsync_res {
-                    Ok(()) => {
-                        let msg = "Ok";
-                        let _ = connection.write(msg.as_bytes());
-                    },
-                    Err(x) => {
-                        let msg = format!("Err {}", x);
-                        let _ = connection.write(msg.as_bytes());
-                    },
-                }
-            },
-            "fsyncdir" => {
-                if buf_vec.len() < 2 {
-                    // Send error back
-                    let msg = format!("Err {}", libc::EINVAL);
-                    let _ = connection.write(msg.as_bytes());
-                    continue;
-                }
-                // if primary server, send op to backup and get ack
-                if is_primary {
-                    match send_rcv_from_backup(&backup_stream, &mut connection, &buf[0..size], 1) {
-                        Ok(_)=> (),
-                        Err(_) => {
-                            println!("fsyncdir - send_rcv_from_backup Err");
-                            continue;
-                        },
-                    };
-                }
-
-                let fsyncdir_res = XV6FS.fsyncdir();
-                match fsyncdir_res {
-                    Ok(()) => {
-                        let msg = "Ok";
-                        let _ = connection.write(msg.as_bytes());
-                    },
-                    Err(x) => {
-                        let msg = format!("Err {}", x);
-                        let _ = connection.write(msg.as_bytes());
-                    },
-                }
-            },
-            "symlink" => {
-                if buf_vec.len() < 3 {
-                    // Send error back
-                    let msg = format!("Err {}", libc::EINVAL);
-                    let _ = connection.write(msg.as_bytes());
-                    continue;
-                }
-                // if primary server, send op to backup and get ack
-                if is_primary {
-                    match send_rcv_from_backup(&backup_stream, &mut connection, &buf[0..size], 22) {
-                        Ok(_)=> (),
-                        Err(_) => {
-                            println!("symlink - send_rcv_from_backup Err");
-                            continue;
-                        },
-                    };
-                }
-
-                let symlink_nodeid: u64 = buf_vec.get(1).unwrap().parse().unwrap();
-                let symlink_name: &str = buf_vec.get(2).unwrap();
-                let symlink_linkname_str = buf_vec.get(3).unwrap();
-                let osstr_name = OsStr::new(symlink_name);
-                let symlink_res = XV6FS.symlink(symlink_nodeid, &osstr_name, symlink_linkname_str);
-                match symlink_res {
-                    Ok((a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u)) => {
-                        let msg = format!("Ok {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
-                                          a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u);
-                        let _ = connection.write(msg.as_bytes());
-                    },
-                    Err(x) => {
-                        let msg = format!("Err {}", x);
-                        let _ = connection.write(msg.as_bytes());
-                    },
-                }
-            },
-            "readlink" => {
-                if buf_vec.len() < 2 {
-                    // Send error back
-                    let msg = format!("Err {}", libc::EINVAL);
-                    let _ = connection.write(msg.as_bytes());
-                    continue;
-                }
-//                // if primary server, send op to backup and get ack
-                //if is_primary {
-                    //match send_rcv_from_backup(&backup_stream, &buf[0..size], 1) {
-                        //Ok(_)=> (),
-                        //Err(_) => {
-                            //println!("readlink - send_rcv_from_backup Err");
-                            //return;
-                        //},
-                    //};
-                //}
-
-                let readlink_nodeid: u64 = buf_vec.get(1).unwrap().parse().unwrap();
-                let readlink_res = XV6FS.readlink(readlink_nodeid);
-                match readlink_res {
-                    Ok(s) => {
-                        let msg = format!("Ok {}", str::from_utf8(s.as_slice()).unwrap());
-                        let _ = connection.write(msg.as_bytes());
-                    },
-                    Err(x) => {
-                        let msg = format!("Err {}", x);
-                        let _ = connection.write(msg.as_bytes());
-                    },
-                }
-            },
-            "rename" => {
-                if buf_vec.len() < 6 {
-                    // Send error back
-                    let msg = format!("Err {}", libc::EINVAL);
-                    let _ = connection.write(msg.as_bytes());
-                    continue;
-                }
-                // if primary server, send op to backup and get ack
-                if is_primary {
-                    match send_rcv_from_backup(&backup_stream, &mut connection, &buf[0..size], 1) {
-                        Ok(_)=> (),
-                        Err(_) => {
-                            println!("rename - send_rcv_from_backup Err");
-                            continue;
-                        },
-                    };
-                }
-
-                let rename_parent_ino: u64 = buf_vec.get(1).unwrap().parse().unwrap();
-                let rename_name: &str = buf_vec.get(2).unwrap();
-                let rename_newparent_ino: u64 = buf_vec.get(3).unwrap().parse().unwrap();
-                let rename_newname: &str= buf_vec.get(4).unwrap();
-                let rename_flags: u32 = buf_vec.get(5).unwrap().parse().unwrap();
-                let osstr_name = OsStr::new(rename_name);
-                let osstr_newname = OsStr::new(rename_newname);
-
-                let rename_res = XV6FS.rename(rename_parent_ino, &osstr_name, rename_newparent_ino, osstr_newname, rename_flags);
-                match rename_res {
-                    Ok(()) => {
-                        let msg = "Ok";
-                        let _ = connection.write(msg.as_bytes());
-                    },
-                    Err(x) => {
-                        let msg = format!("Err {}", x);
-                        let _ = connection.write(msg.as_bytes());
-                    },
-                }
-            },
-            s => println!("got buf {}", s),
-        }
-    }
-    let _ = connection.shutdown(Shutdown::Both);
-    
-}
-*/
 
 impl Xv6FileSystem {
 
     fn xv6fs_init(&mut self, devname: &str) -> Result<(), i32> {
         if self.disk.is_none() {
             let disk = Disk::new(devname, BSIZE as u64);
-            //let mut disk_string = devname_str.to_string();
             let mut disk_string = devname.to_string();
             disk_string.push('\0');
             self.diskname = Some(disk_string);
@@ -1677,7 +777,6 @@ impl Xv6FileSystem {
         size: Option<u64>,
     ) -> Result<
         (i64, i32, u64, u64, u64, i64, i32, i64, i32, i64, i32, i64, i32, u32, u16, u32, u32, u32, u32, u32), i32> {
-        //println!("server - setattr");
         let inode = match self.iget(ino) {
             Ok(x) => x,
             Err(x) => {
@@ -1685,7 +784,6 @@ impl Xv6FileSystem {
             }
         };
 
-        //println!("server - setattr 1");
         let icache = self.ilock_cache.as_ref().unwrap();
         let inode_guard = match self.ilock(inode.idx, &icache, inode.inum) {
             Ok(x) => x,
@@ -1693,14 +791,12 @@ impl Xv6FileSystem {
                 return Err(x);
             }
         };
-        //println!("server - setattr 2");
         let mut internals = match inode_guard.internals.write() {
             Ok(x) => x,
             Err(_) => {
                 return Err(libc::EIO);
             }
         };
-        //println!("server - setattr 3");
 
 
         if let Some(fsize) = size {
@@ -1712,7 +808,6 @@ impl Xv6FileSystem {
             }
         }
 
-        //println!("server - setattr 4");
         let attr_valid = Timespec::new(1, 999999999);
         match self.stati(ino, &internals) {
             Ok(attr) => {
@@ -1722,7 +817,6 @@ impl Xv6FileSystem {
                     _ => 3,
                 };
 
-                //println!("server - setattr OK");
                 return  Ok((
                     attr_valid.sec,
                     attr_valid.nsec,
@@ -1748,7 +842,6 @@ impl Xv6FileSystem {
             },
             Err(x) =>  {
 
-                //println!("server - setattr 5");
                 return Err(x);
             },
         }
@@ -1840,7 +933,6 @@ impl Xv6FileSystem {
         let child = match self.create_internal(parent, T_DIR, &name, &handle) {
             Ok(x) => x,
             Err(x) => {
-                //println!("fn mkdir - 1");
                 return Err(x);
             }
         };
@@ -1849,7 +941,6 @@ impl Xv6FileSystem {
         let inode_guard = match self.ilock(child.idx, &icache, child.inum) {
             Ok(x) => x,
             Err(x) => {
-                //println!("fn mkdir - 2");
                 return Err(x);
             }
         };
@@ -1857,7 +948,6 @@ impl Xv6FileSystem {
         let internals = match inode_guard.internals.read() {
             Ok(x) => x,
             Err(_) => {
-                //println!("fn mkdir - 3");
                 return Err(libc::EIO);
             }
         };
@@ -1897,7 +987,6 @@ impl Xv6FileSystem {
                 ));
             }
             Err(x) => {
-                //println!("fn mkdir - 4");
                 return Err(x);
             }
         }
@@ -1909,7 +998,6 @@ impl Xv6FileSystem {
         let inode = match self.iget(nodeid) {
             Ok(x) => x,
             Err(x) => {
-                //println!("lookup 1");
                 return Err(x);
             }
         };
@@ -1917,14 +1005,12 @@ impl Xv6FileSystem {
         let inode_guard = match self.ilock(inode.idx, &icache, inode.inum) {
             Ok(x) => x,
             Err(x) => {
-                //println!("lookup 2");
                 return Err(x);
             }
         };
         let mut internals = match inode_guard.internals.write() {
             Ok(x) => x,
             Err(_) => {
-                //println!("lookup 3");
                 return Err(libc::EIO);
             }
         };
@@ -1932,7 +1018,6 @@ impl Xv6FileSystem {
         let child = match self.dirlookup(&mut internals, name, &mut poff) {
             Ok(x) => x,
             Err(x) => {
-                //println!("lookup 4");
                 return Err(x);
             }
         };
@@ -1944,14 +1029,12 @@ impl Xv6FileSystem {
         let child_inode_guard = match self.ilock(child.idx, &icache, child.inum) {
             Ok(x) => x,
             Err(x) => {
-                //println!("lookup 5");
                 return Err(x);
             }
         };
         let child_internals = match child_inode_guard.internals.read() {
             Ok(x) => x,
             Err(_) => {
-                //println!("lookup 6");
                 return Err(libc::EIO);
             }
         };
@@ -1987,7 +1070,6 @@ impl Xv6FileSystem {
                 ));
             }
             Err(x) => {
-                //println!("lookup 7");
                 return Err(x);
             }
         };
@@ -2061,7 +1143,6 @@ impl Xv6FileSystem {
             let inode = match self.iget(nodeid) {
                 Ok(x) => x,
                 Err(x) => {
-                    //println!("write 1");
                     return Err(x);
                 }
             };
@@ -2070,21 +1151,18 @@ impl Xv6FileSystem {
             let inode_guard = match self.ilock(inode.idx, &icache, inode.inum) {
                 Ok(x) => x,
                 Err(x) => {
-                    //println!("write 2");
                     return Err(x);
                 }
             };
             let mut internals = match inode_guard.internals.write() {
                 Ok(x) => x,
                 Err(_) => {
-                    //println!("write 3");
                     return Err(libc::EIO);
                 }
             };
 
             // Check if inode is a file
             if internals.inode_type != T_FILE {
-                //println!("write 4");
                 return Err(libc::EISDIR);
             }
 
@@ -2096,7 +1174,6 @@ impl Xv6FileSystem {
             let r = match self.writei(data_region, off, n1, &mut internals, inode.inum, &handle) {
                 Ok(x) => x,
                 Err(x) => {
-                    //println!("write 5");
                     return Err(x);
                 }
             };
@@ -2321,7 +1398,6 @@ impl Xv6FileSystem {
                             _ => 8888, 
                         };
                         readdir_vec.push((de.inum as u64, buf_off, inode_type, name_str.to_string()));
-                        // TODO: might not want to return here
                         return Ok(readdir_vec);
                     }
                     buf_off += 1;

@@ -21,7 +21,6 @@ use crate::time;
 use alloc::vec::Vec;
 
 use core::str;
-//use core::time::Duration;
 
 use bento_utils::*;
 use bento_utils::consts::*;
@@ -781,7 +780,6 @@ impl BentoFilesystem<'_> for Xv6FileSystem {
     ) {
         unsafe {
             let data_size = data.len();
-            //let mut bytes_written = 0;
             let mut w_off = 0;
             let mut w_size = 4000;
             let mut socket_guard = SOCKET.as_ref().unwrap().lock().unwrap();

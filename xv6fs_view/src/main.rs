@@ -52,47 +52,7 @@ fn main() {
     accept_hb_connection(&hb_listener, &primary_missed_hb);
     println!("..OK");
 
-    /*{
-        println!("accepting hb connection..");
-        let hb_connection = match hb_listener.accept() {
-            Ok((stream, _)) => Some(stream),
-            Err(_) => {
-                println!("..FAILED");
-                return;
-            }
-        };
-        let missed_hb_clone = primary_missed_hb.clone();
-        thread::spawn(move || {
-            let hb_connection = Some(hb_connection.unwrap());
-            let hb_missed_count = missed_hb_clone;
-            println!("backup hb thread running..");
-            loop {
-                let mut hb_buf = [0; 4096];
-                let hb_read_size = match hb_connection.as_ref().unwrap().read(&mut hb_buf) {
-                    Ok(x) if x == 0 => 0,
-                    Ok(x) => {
-                        //println!("connect.read {} bytes", x);
-                    x
-                    },
-                    Err(_) => {
-                        let _ = hb_connection.unwrap().shutdown(Shutdown::Both);
-                        println!("read from primary hb failed");
-                        return;
-                    },
-                };
-                if hb_read_size == 0 {
-                    // increase missed heart beat
-                    *hb_missed_count.lock().unwrap() += 1;
 
-                } else {
-
-                    *hb_missed_count.lock().unwrap() = 0;
-                }
-                thread::sleep(Duration::from_micros(1000));
-            }
-
-        });
-    }*/
     let mut is_primary_alive: bool = true;
     
     println!("accepting backup server..");
@@ -163,7 +123,6 @@ fn main() {
             println!("From primary: {} ", primary_buf_str);
         }
 
-        //connection = match 
         let backup_read_size = match backup_srv_connection.read(&mut backup_buf) {
             Ok(x) if x == 0 => {
                 x
@@ -229,7 +188,6 @@ fn main() {
                 break;
             },
         };
-        //let buf_str = str::from_utf8(&buf[0..size]).unwrap();
         
         // send to primary
         if is_primary_alive {
@@ -240,22 +198,32 @@ fn main() {
                 },
             };
         }
-        if is_primary_alive {
-            match send_rcv_from_srv(&mut backup_srv_connection, &mut client_connection, &buf[0..size], true) {
-                Ok(_) => (),
-                Err(_) => {
+        match send_rcv_from_srv(&mut backup_srv_connection, &mut client_connection, &buf[0..size], true) {
+            Ok(_) => (),
+            Err(_) => {
+                if is_primary_alive {
                     println!("backup stream err while primary is alive");
-                },
-            };
-        } else { // backup is now primary
-             match send_rcv_from_srv(&mut backup_srv_connection, &mut client_connection, &buf[0..size], true) {
-                Ok(_) => (),
-                Err(_) => {
-                   println!("backup stream err while backup is primary");
-                },
-            };
+                } else {
+                    println!("backup stream err while backup is primary");
+                }
+            },
+        };
+//        if is_primary_alive {
+            //match send_rcv_from_srv(&mut backup_srv_connection, &mut client_connection, &buf[0..size], true) {
+                //Ok(_) => (),
+                //Err(_) => {
+                    //println!("backup stream err while primary is alive");
+                //},
+            //};
+        //} else { // backup is now primary
+             //match send_rcv_from_srv(&mut backup_srv_connection, &mut client_connection, &buf[0..size], true) {
+                //Ok(_) => (),
+                //Err(_) => {
+                   //println!("backup stream err while backup is primary");
+                //},
+            //};
            
-        }
+        //}
     
 
     }
@@ -285,8 +253,7 @@ fn accept_hb_connection (hb_listener: &TcpListener, missed_hb: &Arc<Mutex<u32>>)
             let hb_read_size = match hb_connection.as_ref().unwrap().read(&mut hb_buf) {
                 Ok(x) if x == 0 => 0,
                 Ok(x) => {
-                    //println!("connect.read {} bytes", x);
-                x
+                    x
                 },
                 Err(_) => {
                     let _ = hb_connection.unwrap().shutdown(Shutdown::Both);
@@ -334,26 +301,4 @@ fn send_rcv_from_srv(srv_stream: &mut TcpStream, client_stream: &mut TcpStream, 
     }
 
     Ok(())
- //   let op_msg = str::from_utf8(&srv_resp[0..srv_resp_size]).unwrap();
-    //let op_vec: Vec<&str> = op_msg.split(' ').collect();
-//    match *op_vec.get(0).unwrap() {
-        //"Ok" => {
-            //return Ok(());
-        //},
-        //"Add" => {
-            //return Ok(());
-        //},
-        //"Err" => {
-            //println!("backup op - Err 1");
-            //let _ = client_stream.write(&srv_resp[0..srv_resp_size]);
-            //return Err(());
-        //},
-        //_ => {
-            //println!("backup op_msg: {}", op_msg);
-            //let _ = client_stream.write(&srv_resp[0..srv_resp_size]);
-            //return Err(());
-        //},
-
-    //};
 }
-//fn read_from_srv()
