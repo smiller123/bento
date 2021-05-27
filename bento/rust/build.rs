@@ -69,6 +69,7 @@ const INCLUDED_TYPES: &[&str] = &[
     "net_proto_family",
     "net_protocol",
     "socket_state",
+    "sock_flags",
 ];
 const INCLUDED_FUNCTIONS: &[&str] = &[
     "cdev_add",
@@ -104,6 +105,9 @@ const INCLUDED_FUNCTIONS: &[&str] = &[
     "kfree_skb",
     "sk_mem_reclaim",
     "dst_release",
+    "lock_sock_nested",
+    "release_sock",
+    "sk_stream_kill_queues",
 ];
 const INCLUDED_VARS: &[&str] = &[
     "FMODE_READ",
@@ -219,6 +223,9 @@ const INCLUDED_VARS: &[&str] = &[
     "MAX_TCP_HEADER",
     "PF_BENTO",
     "SS_UNCONNECTED",
+    "PF_EXITING",
+    "SHUTDOWN_MASK",
+    "TCP_CLOSE",
 ];
 const OPAQUE_TYPES: &[&str] = &[
     // These need to be opaque because they're both packed and aligned, which rustc

@@ -21,6 +21,7 @@
 #include <linux/kthread.h>
 #include <linux/timekeeping.h>
 #include <net/sock.h>
+#include <net/xfrm.h>
 
 void
 wait_a_bit(void) {
@@ -43,6 +44,11 @@ kthread_run_helper(int (*threadfn)(void *data), void *data, const char *namefmt)
 struct net *
 current_net(void) {
 	return current->nsproxy->net_ns;
+}
+
+unsigned int
+current_flags(void) {
+	return current->flags;
 }
 
 void
@@ -256,4 +262,56 @@ void rs_sk_refcnt_debug_inc(struct sock *sk) {
 
 void rs_sk_refcnt_debug_dec(struct sock *sk) {
 	sk_refcnt_debug_dec(sk);
+}
+
+void rs_sk_refcnt_debug_release(struct sock *sk) {
+	sk_refcnt_debug_release(sk);
+}
+
+bool rs_sock_flag(const struct sock *sk, enum sock_flags flag) {
+	return sock_flag(sk, flag);
+}
+
+void rs_sock_hold(struct sock *sk) {
+	sock_hold(sk);
+}
+
+void rs_sock_orphan(struct sock *sk) {
+	sock_orphan(sk);
+}
+
+void rs_sock_put(struct sock *sk) {
+	sock_put(sk);
+}
+
+void rs_local_bh_enable(void) {
+	local_bh_enable();
+}
+
+void rs_local_bh_disable(void) {
+	local_bh_disable();
+}
+
+void rs_bh_lock_sock(struct sock *sk) {
+	bh_lock_sock(sk);
+}
+
+void rs_bh_unlock_sock(struct sock *sk) {
+	bh_unlock_sock(sk);
+}
+
+void rs_inc_orphan(struct sock *sk) {
+	percpu_counter_inc(sk->sk_prot->orphan_count);
+}
+
+void rs_dec_orphan(struct sock *sk) {
+	percpu_counter_dec(sk->sk_prot->orphan_count);
+}
+
+void rs_xfrm_sk_free_policy(struct sock *sk) {
+	xfrm_sk_free_policy(sk);
+}
+
+void rs_sock_alloc_dec(struct sock *sk) {
+	percpu_counter_dec(sk->sk_prot->sockets_allocated);
 }

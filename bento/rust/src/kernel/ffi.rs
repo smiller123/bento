@@ -381,6 +381,20 @@ extern "C" {
     pub fn rs_release_dst_cache(sk: *mut bindings::sock);
     pub fn rs_sk_refcnt_debug_inc(sk: *mut bindings::sock);
     pub fn rs_sk_refcnt_debug_dec(sk: *mut bindings::sock);
+    pub fn rs_sk_refcnt_debug_release(sk: *mut bindings::sock);
+    pub fn rs_sock_flag(sk: *const bindings::sock, flag: bindings::sock_flags) -> bool;
+    pub fn rs_sock_hold(sk: *mut bindings::sock);
+    pub fn rs_sock_orphan(sk: *mut bindings::sock);
+    pub fn rs_sock_put(sk: *mut bindings::sock);
+    pub fn current_flags() -> u32;
+    pub fn rs_local_bh_enable();
+    pub fn rs_local_bh_disable();
+    pub fn rs_bh_lock_sock(sk: *mut bindings::sock);
+    pub fn rs_bh_unlock_sock(sk: *mut bindings::sock);
+    pub fn rs_inc_orphan(sk: *mut bindings::sock);
+    pub fn rs_dec_orphan(sk: *mut bindings::sock);
+    pub fn rs_xfrm_sk_free_policy(sk: *mut bindings::sock);
+    pub fn rs_sock_alloc_dec(sk: *mut bindings::sock);
 }
 
 pub unsafe fn sb_bread(sb: *const raw::c_void, blockno: u64) -> *const raw::c_void {
