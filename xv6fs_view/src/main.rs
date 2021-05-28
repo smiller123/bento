@@ -155,7 +155,7 @@ fn main() {
 
     println!("ready for operations..");
     // loop and listen to client commands
-    loop {
+    while is_primary_alive || is_backup_alive {
         if is_primary_alive {
             let primary_count_missed = *primary_missed_hb.lock().unwrap();
             if primary_count_missed > 5 {
@@ -191,40 +191,35 @@ fn main() {
         
         // send to primary
         if is_primary_alive {
-            match send_rcv_from_srv(&mut primary_srv_connection, &mut client_connection, &buf[0..size], false) {
+            if is_backup_alive {
+                match send_rcv_from_srv(&mut primary_srv_connection, &mut client_connection, &buf[0..size], false) {
+                    Ok(_) => (),
+                    Err(_) => {
+                        is_primary_alive = false;
+                    },
+                };
+            } else { // backup is dead, reply directly to client
+                match send_rcv_from_srv(&mut primary_srv_connection, &mut client_connection, &buf[0..size], true) {
+                    Ok(_) => (),
+                    Err(_) => {
+                        is_primary_alive = false;
+                    },
+                };
+
+            }
+        }
+        if is_backup_alive {
+            match send_rcv_from_srv(&mut backup_srv_connection, &mut client_connection, &buf[0..size], true) {
                 Ok(_) => (),
                 Err(_) => {
-                    is_primary_alive = false;
+                    if is_primary_alive {
+                        println!("backup stream err while primary is alive");
+                    } else {
+                        println!("backup stream err while backup is primary");
+                    }
                 },
             };
         }
-        match send_rcv_from_srv(&mut backup_srv_connection, &mut client_connection, &buf[0..size], true) {
-            Ok(_) => (),
-            Err(_) => {
-                if is_primary_alive {
-                    println!("backup stream err while primary is alive");
-                } else {
-                    println!("backup stream err while backup is primary");
-                }
-            },
-        };
-//        if is_primary_alive {
-            //match send_rcv_from_srv(&mut backup_srv_connection, &mut client_connection, &buf[0..size], true) {
-                //Ok(_) => (),
-                //Err(_) => {
-                    //println!("backup stream err while primary is alive");
-                //},
-            //};
-        //} else { // backup is now primary
-             //match send_rcv_from_srv(&mut backup_srv_connection, &mut client_connection, &buf[0..size], true) {
-                //Ok(_) => (),
-                //Err(_) => {
-                   //println!("backup stream err while backup is primary");
-                //},
-            //};
-           
-        //}
-    
 
     }
     
