@@ -168,8 +168,6 @@ impl Journal {
         return Some(new_journal);
     }
 
-    pub fn destroy(&self) {}
-
     // xv6_sb is the xv6 filesystem superblock.
     #[allow(dead_code)]
     pub fn initlog(&self, start: u64, len: i32, _bsize: i32) -> Result<(), libc::c_int> {
