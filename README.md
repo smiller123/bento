@@ -1,4 +1,10 @@
-Bento enables fast development of Linux kernel file systems. File systems are written in safe Rust by implementing a safe API and using safe wrappers around kernel functions. These safe interfaces are as close as possible to existing userspace (primarily standard library) interfaces, so a file system can be recompiled as a FUSE file system by only changing the `bento` includes to userspace Rust library and/or `bento_utils` includes. File systems register themselves with the BentoFS module when inserted and can be dynamically upgraded with only 10ms of service interruption by having the upgrade version reregister with the BentoFS module. More information about the system design can be found in our [report on ArXiv](https://arxiv.org/abs/2005.09723).
+Bento enables fast development of Linux kernel file systems. File systems are written in safe Rust by implementing a safe API and using safe wrappers around kernel functions. These safe interfaces are as close as possible to existing userspace (primarily standard library) interfaces, so a file system can be recompiled as a FUSE file system by only changing the `bento` includes to userspace Rust library and/or `bento_utils` includes. File systems register themselves with the BentoFS module when inserted and can be dynamically upgraded with only 10ms of service interruption by having the upgrade version reregister with the BentoFS module. More information about the system design can be found in our [paper at FAST 2021](https://www.usenix.org/system/files/fast21-miller.pdf). Please also check out our [video from FAST](https://www.usenix.org/conference/fast21/presentation/miller) for an introduction to the framework.
+
+### Before Running the Code
+To pull bentofs and datablack-rs, run: `git submodule update --init --recursive` in the root directory. 
+To update, run `git submodule update --recursive --remote`.
+
+### Directories
 
 #### BentoFS module
 BentoFS is a C kernel module that interfaces between the VFS layer and the file system and exposes a safer API for Bento file systems. It's implemented as a VFS file system, handling calls from VFS and forwarding them to the appropriate file system. File systems register themselves with the BentoFS module, so the BentoFS module must be inserted before any file system module.
@@ -26,7 +32,4 @@ Example file systems are provided. Instructions for compiling each module are in
 * **xv6fs**: Rust reimplementation of the xv6 file system. Compiled and inserted as a separate kernel module.
 * **xv6fs2**: Redeployable version of xv6fs. Nearly identical to xv6fs except for changes in kernel/lib.rs.
 * **xv6fs_prov**: Version of xv6fs with file provenance tracking.
-
-To pull bentofs and datablack-rs, run: `git submodule update --init --recursive` in the root directory. 
-To update, run `git submodule update --recursive --remote`.
 
