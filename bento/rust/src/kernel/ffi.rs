@@ -395,6 +395,12 @@ extern "C" {
     pub fn rs_dec_orphan(sk: *mut bindings::sock);
     pub fn rs_xfrm_sk_free_policy(sk: *mut bindings::sock);
     pub fn rs_sock_alloc_dec(sk: *mut bindings::sock);
+    pub fn rs_ntohs(sin: u16) -> u16;
+    pub fn rs_htons(sin: u16) -> u16;
+    pub fn rs_inet_port_requires_bind_service(net: *mut bindings::net, port: u16) -> bool;
+    pub fn rs_sock_net(sk: *const bindings::sock) -> *mut bindings::net;
+    pub fn rs_lock_sock(sk: *mut bindings::sock);
+    pub fn rs_sk_dst_reset(sk: *mut bindings::sock);
 }
 
 pub unsafe fn sb_bread(sb: *const raw::c_void, blockno: u64) -> *const raw::c_void {

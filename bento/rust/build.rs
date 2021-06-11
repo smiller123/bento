@@ -108,6 +108,9 @@ const INCLUDED_FUNCTIONS: &[&str] = &[
     "lock_sock_nested",
     "release_sock",
     "sk_stream_kill_queues",
+    "sock_common_setsockopt",
+    "ntohs",
+    "ns_capable",
 ];
 const INCLUDED_VARS: &[&str] = &[
     "FMODE_READ",
@@ -222,10 +225,14 @@ const INCLUDED_VARS: &[&str] = &[
     "__this_module",
     "MAX_TCP_HEADER",
     "PF_BENTO",
+    "AF_BENTO",
     "SS_UNCONNECTED",
     "PF_EXITING",
     "SHUTDOWN_MASK",
     "TCP_CLOSE",
+    "CAP_NET_BIND_SERVICE",
+    "SOCK_BINDADDR_LOCK",
+    "SOCK_BINDPORT_LOCK",
 ];
 const OPAQUE_TYPES: &[&str] = &[
     // These need to be opaque because they're both packed and aligned, which rustc

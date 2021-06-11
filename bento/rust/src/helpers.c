@@ -315,3 +315,27 @@ void rs_xfrm_sk_free_policy(struct sock *sk) {
 void rs_sock_alloc_dec(struct sock *sk) {
 	percpu_counter_dec(sk->sk_prot->sockets_allocated);
 }
+
+unsigned short rs_ntohs(__be16 in) {
+	return ntohs(in);
+}
+
+__be16 rs_htons(unsigned short in) {
+	return htons(in);
+}
+
+bool rs_inet_port_requires_bind_service(struct net *net, unsigned short port) {
+	return inet_port_requires_bind_service(net, port);
+}
+
+struct net *rs_sock_net(const struct sock *sk) {
+	return sock_net(sk);
+}
+
+void rs_lock_sock(struct sock *sk) {
+	return lock_sock(sk);
+}
+
+void rs_sk_dst_reset(struct sock *sk) {
+	return sk_dst_reset(sk);
+}
