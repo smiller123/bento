@@ -272,6 +272,10 @@ bool rs_sock_flag(const struct sock *sk, enum sock_flags flag) {
 	return sock_flag(sk, flag);
 }
 
+void rs_sock_set_flag(struct sock *sk, enum sock_flags flag) {
+	return sock_set_flag(sk, flag);
+}
+
 void rs_sock_hold(struct sock *sk) {
 	sock_hold(sk);
 }
@@ -338,4 +342,30 @@ void rs_lock_sock(struct sock *sk) {
 
 void rs_sk_dst_reset(struct sock *sk) {
 	return sk_dst_reset(sk);
+}
+
+void rs_reqsk_queue_alloc(struct request_sock_queue *queue)
+{
+	spin_lock_init(&queue->rskq_lock);
+
+	spin_lock_init(&queue->fastopenq.lock);
+	queue->fastopenq.rskq_rst_head = NULL;
+	queue->fastopenq.rskq_rst_tail = NULL;
+	queue->fastopenq.qlen = 0;
+
+	queue->rskq_accept_head = NULL;
+}
+
+void rs_inet_csk_delack_init(struct sock *sk) {
+	inet_csk_delack_init(sk);
+}
+
+void rs_smp_store_release(char *p, char v) {
+	smp_store_release(p, v);
+}
+
+void rs_sock_prot_inuse_add(struct net *net, struct proto *prot,
+		int inc)
+{
+	sock_prot_inuse_add(net, prot, inc);
 }

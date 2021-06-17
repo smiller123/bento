@@ -70,6 +70,8 @@ const INCLUDED_TYPES: &[&str] = &[
     "net_protocol",
     "socket_state",
     "sock_flags",
+    "sock_type",
+    "socket_state",
 ];
 const INCLUDED_FUNCTIONS: &[&str] = &[
     "cdev_add",
@@ -233,6 +235,8 @@ const INCLUDED_VARS: &[&str] = &[
     "CAP_NET_BIND_SERVICE",
     "SOCK_BINDADDR_LOCK",
     "SOCK_BINDPORT_LOCK",
+    "SOCK_STREAM",
+    "SOCK_RCU_FREE",
 ];
 const OPAQUE_TYPES: &[&str] = &[
     // These need to be opaque because they're both packed and aligned, which rustc
