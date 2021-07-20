@@ -398,6 +398,7 @@ extern "C" {
     pub fn rs_sock_alloc_dec(sk: *mut bindings::sock);
     pub fn rs_ntohs(sin: u16) -> u16;
     pub fn rs_htons(sin: u16) -> u16;
+    pub fn rs_htonl(sin: u32) -> u32;
     pub fn rs_inet_port_requires_bind_service(net: *mut bindings::net, port: u16) -> bool;
     pub fn rs_sock_net(sk: *const bindings::sock) -> *mut bindings::net;
     pub fn rs_lock_sock(sk: *mut bindings::sock);
@@ -406,6 +407,46 @@ extern "C" {
     pub fn rs_inet_csk_delack_init(sk: *mut bindings::sock);
     pub fn rs_smp_store_release(p: *mut u8, v: u8);
     pub fn rs_sock_prot_inuse_add(net: *mut bindings::net, prot: *mut bindings::proto, inc: i32);
+    pub fn rs_sock_graft(sk: *mut bindings::sock, parent: *mut bindings::socket);
+    pub fn rs_reqsk_queue_empty(queue: *const bindings::request_sock_queue) -> bool;
+    pub fn rs_sock_rcvtimeo(sk: *mut bindings::sock, noblock: bool) -> i64;
+    pub fn rs_sock_sndtimeo(sk: *mut bindings::sock, noblock: bool) -> i64;
+    pub fn rs_define_wait() -> bindings::wait_queue_entry;
+    pub fn rs_define_wait_func(func: bindings::wait_queue_func_t) -> bindings::wait_queue_entry;
+    pub fn rs_sk_sleep(sk: *mut bindings::sock) -> *mut bindings::wait_queue_head_t;
+    pub fn rs_sched_annotate_sleep();
+    pub fn rs_sock_intr_errno(timeo: i64) -> i32;
+    pub fn rs_signal_pending() -> i32;
+    pub fn rs_sock_error(sk: *mut bindings::sock) -> i32;
+    pub fn rs_get_inet_opt(
+        inet: *mut bindings::inet_sock,
+        sk: *mut bindings::sock
+    ) -> *mut bindings::ip_options_rcu;
+    pub fn rs_sk_mem_pages(amt: i32) -> i32;
+    pub fn rs_sk_memory_allocated_add(sk: *mut bindings::sock, amt: i32) -> i64;
+    pub fn rs_sk_wmem_schedule(sk: *mut bindings::sock, size: i32) -> bool;
+    pub fn rs_init_list_head(list: *mut bindings::list_head);
+    pub fn rs__skb_header_release(skb: *mut bindings::sk_buff);
+    pub fn rs_sk_wmem_queued_add(sk: *mut bindings::sock, val: i32);
+    pub fn rs_sk_mem_charge(sk: *mut bindings::sock, size: i32);
+    pub fn rs_ktime_get_ns() -> u64;
+    pub fn rs_skb_cloned(skb: *const bindings::sk_buff) -> i32;
+    pub fn rs_pskb_copy(skb: *mut bindings::sk_buff, gfp_mask: bindings::gfp_t) -> *mut bindings::sk_buff;
+    pub fn rs_skb_orphan(skb: *mut bindings::sk_buff);
+    pub fn rs_refcount_sub_and_test(i: i32, r: *mut bindings::refcount_t) -> bool;
+    pub fn rs_refcount_add(i: i32, r: *mut bindings::refcount_t);
+    pub fn rs_csum_tcpudp_magic(saddr: u32, daddr: u32, len: u32, proto: u8, sum: u32) -> u16;
+    pub fn rs_rcu_read_lock_bh();
+    pub fn rs_rcu_read_unlock_bh();
+    pub fn rs_cpu_to_be16(i: u16) -> u16;
+    pub fn rs_skb_orphan_frags_rx(skb: *mut bindings::sk_buff, gfp_mask: bindings::gfp_t) -> i32;
+    pub fn rs_gfp_atomic() -> i32;
+    pub fn rs_skb_zcopy(skb: *mut bindings::sk_buff) -> *mut bindings::ubuf_info;
+    pub fn rs_check_skb(skb: *mut bindings::sk_buff);
+    pub fn rs_dev_hard_header(skb: *mut bindings::sk_buff, dev: *mut bindings::net_device,
+                              type_: u16, daddr: *mut raw::c_void, saddr: *mut raw::c_void,
+                              len: u32) -> i32;
+    pub fn rs_secure_tcp_seq(saddr: u32, daddr: u32, sport: u16, dport: u16) -> u32;
 }
 
 pub unsafe fn sb_bread(sb: *const raw::c_void, blockno: u64) -> *const raw::c_void {

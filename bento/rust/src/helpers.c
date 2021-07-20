@@ -22,6 +22,9 @@
 #include <linux/timekeeping.h>
 #include <net/sock.h>
 #include <net/xfrm.h>
+#include <linux/siphash.h>
+
+static siphash_key_t rs_net_secret __read_mostly;
 
 void
 wait_a_bit(void) {
@@ -328,6 +331,10 @@ __be16 rs_htons(unsigned short in) {
 	return htons(in);
 }
 
+__be32 rs_htonl(unsigned long in) {
+	return htonl(in);
+}
+
 bool rs_inet_port_requires_bind_service(struct net *net, unsigned short port) {
 	return inet_port_requires_bind_service(net, port);
 }
@@ -368,4 +375,181 @@ void rs_sock_prot_inuse_add(struct net *net, struct proto *prot,
 		int inc)
 {
 	sock_prot_inuse_add(net, prot, inc);
+}
+
+void rs_sock_graft(struct sock *sk, struct socket *parent) {
+	return sock_graft(sk, parent);
+}
+
+bool rs_reqsk_queue_empty(const struct request_sock_queue *queue) {
+	return reqsk_queue_empty(queue);
+}
+
+long rs_sock_rcvtimeo(const struct sock *sk, bool noblock) {
+	return sock_rcvtimeo(sk, noblock);
+}
+
+long rs_sock_sndtimeo(const struct sock *sk, bool noblock) {
+	return sock_sndtimeo(sk, noblock);
+}
+
+struct wait_queue_entry rs_define_wait(void) {
+	DEFINE_WAIT(wait);
+	return wait;
+}
+
+struct wait_queue_entry rs_define_wait_func(wait_queue_func_t func) {
+	DEFINE_WAIT_FUNC(wait, func);
+	return wait;
+}
+
+wait_queue_head_t *rs_sk_sleep(struct sock *sk) {
+	return sk_sleep(sk);
+}
+
+void rs_sched_annotate_sleep(void) {
+	sched_annotate_sleep();
+}
+
+int rs_sock_intr_errno(long timeo) {
+	return sock_intr_errno(timeo);
+}
+
+int rs_signal_pending(void) {
+	return signal_pending(current);
+}
+
+int rs_sock_error(struct sock *sk) {
+	return sock_error(sk);
+}
+
+struct ip_options_rcu *rs_get_inet_opt(struct inet_sock *inet, struct sock *sk) {
+	return rcu_dereference_protected(inet->inet_opt, lockdep_sock_is_held(sk));
+}
+
+int rs_sk_mem_pages(int amt) {
+	return sk_mem_pages(amt);
+}
+
+long rs_sk_memory_allocated_add(struct sock *sk, int amt) {
+	return sk_memory_allocated_add(sk, amt);
+}
+
+bool rs_sk_wmem_schedule(struct sock *sk, int size) {
+	return sk_wmem_schedule(sk, size);
+}
+
+void rs_init_list_head(struct list_head *list) {
+	return INIT_LIST_HEAD(list);
+}
+
+void rs__skb_header_release(struct sk_buff *skb) {
+	return __skb_header_release(skb);
+}
+
+void rs_sk_wmem_queued_add(struct sock *sk, int val) {
+	return sk_wmem_queued_add(sk, val);
+}
+
+void rs_sk_mem_charge(struct sock *sk, int size) {
+	return sk_mem_charge(sk, size);
+}
+
+u64 rs_ktime_get_ns(void) {
+	return ktime_get_real_ns();
+}
+
+int rs_skb_cloned(const struct sk_buff *skb) {
+	return skb_cloned(skb);
+}
+
+struct sk_buff *rs_pskb_copy(struct sk_buff *skb,
+					gfp_t gfp_mask) {
+	return pskb_copy(skb, gfp_mask);
+}
+
+void rs_skb_orphan(struct sk_buff *skb) {
+	skb_orphan(skb);
+}
+
+bool rs_refcount_sub_and_test(int i, refcount_t *r) {
+	return refcount_sub_and_test(i, r);
+}
+
+void rs_refcount_add(int i, refcount_t *r) {
+	refcount_add(i, r);
+}
+
+__sum16 rs_csum_tcpudp_magic(__be32 saddr, __be32 daddr,
+			  __u32 len, __u8 proto, __wsum sum) {
+	return csum_tcpudp_magic(saddr, daddr, len, proto, sum);
+}
+
+void rs_rcu_read_lock_bh(void) {
+	rcu_read_lock_bh();
+}
+
+void rs_rcu_read_unlock_bh(void) {
+	rcu_read_unlock_bh();
+}
+
+__be16 rs_cpu_to_be16(short i) {
+	return cpu_to_be16(i);
+}
+
+int rs_skb_orphan_frags_rx(struct sk_buff *skb, gfp_t gfp_mask) {
+	return skb_orphan_frags_rx(skb, gfp_mask);
+}
+
+int rs_gfp_atomic(void) {
+	return GFP_ATOMIC;
+}
+
+struct ubuf_info *rs_skb_zcopy(struct sk_buff *skb) {
+	return skb_zcopy(skb);
+}
+
+void rs_check_skb(struct sk_buff *skb) {
+	printk(KERN_INFO "pf memalloc %d\n", skb->pfmemalloc);
+	printk(KERN_INFO "zcopy %d\n", skb_zcopy(skb));
+	printk(KERN_INFO "protocol %x\n", skb->protocol);
+}
+
+int rs_dev_hard_header(struct sk_buff *skb, struct net_device *dev,
+				  unsigned short type,
+				  const void *daddr, const void *saddr,
+				  unsigned int len) {
+	return dev_hard_header(skb, dev, type, daddr, saddr, len);
+}
+
+static __always_inline void rs_net_secret_init(void)
+{
+	net_get_random_once(&rs_net_secret, sizeof(rs_net_secret));
+}
+
+static u32 rs_seq_scale(u32 seq)
+{
+	/*
+	 *	As close as possible to RFC 793, which
+	 *	suggests using a 250 kHz clock.
+	 *	Further reading shows this assumes 2 Mb/s networks.
+	 *	For 10 Mb/s Ethernet, a 1 MHz clock is appropriate.
+	 *	For 10 Gb/s Ethernet, a 1 GHz clock should be ok, but
+	 *	we also need to limit the resolution so that the u32 seq
+	 *	overlaps less than one time per MSL (2 minutes).
+	 *	Choosing a clock of 64 ns period is OK. (period of 274 s)
+	 */
+	struct timespec64 ts;
+	ktime_get_real_ts64(&ts);
+	return seq + (timespec64_to_ktime(ts) >> 6);
+}
+
+u32 rs_secure_tcp_seq(__be32 saddr, __be32 daddr,
+		   __be16 sport, __be16 dport) {
+	u32 hash;
+	rs_net_secret_init();
+	hash = siphash_3u32((__force u32)saddr, (__force u32)daddr,
+			    (__force u32)sport << 16 | (__force u32)dport,
+			    &rs_net_secret);
+	return rs_seq_scale(hash);
 }
