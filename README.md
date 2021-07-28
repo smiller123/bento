@@ -4,6 +4,16 @@ Bento enables fast development of Linux kernel file systems. File systems are wr
 To pull bentofs and datablack-rs, run: `git submodule update --init --recursive` in the root directory. 
 To update, run `git submodule update --recursive --remote`.
 
+#### Rust Version
+Newer versions of the Rust compiler have changed how kernel code is compiled. If you're using a recent version of Rust and run into issues, try the following steps, which can be seen in the tcp_support branch for the bento and xv6fs directories.
+* Use the bento/rust/build.rs file from the tcp_support branch.
+* In the KBuild files, replace `x86_64-linux-kernel` with `x86_64-unknown-none-linuxkernel`.
+* In bento/rust/src/lib.rs, remove `#![feature(const_fn)]` and add `#![feature(rustc_private)]`.
+* In the bento directory and the file system kernel directories, remove `rlibc `from the Cargo.toml files and the `rlibc `import from the src/lib.rs files.
+* In bento/bento/rust/src/kernel/mem.rs, remove the `use rlibc` line and replace `rlibc::memcpy` and `rlibc::memset` with `compiler_builtins::mem::memcpy` and `compiler_builtins::mem::memset`.
+* If you see and error saying `.{FILE_NAME}.rust.o.cmd: No such file or directory`, touch the file to create it. 
+* If you still have problems, reach out to me.
+
 ### Directories
 
 #### BentoFS module
