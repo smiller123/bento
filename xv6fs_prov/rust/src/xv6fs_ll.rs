@@ -82,7 +82,9 @@ impl BentoFilesystem<'_, Xv6State,Xv6State> for Xv6FileSystem {
     }
 
     fn bento_destroy(&mut self, _req: &Request) {
-        self.log.as_ref().unwrap().destroy();
+        // Allow log and disk to be dropped
+        self.log = None;
+        self.disk = None;
     }
 
 

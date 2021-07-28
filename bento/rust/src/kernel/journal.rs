@@ -124,8 +124,10 @@ impl Journal {
             return rs_jbd2_journal_force_commit((*self.journal.get()).get_raw() as *const c_void);
         }
     }
+}
 
-    pub fn destroy(&self) {
+impl Drop for Journal {
+    fn drop(&mut self) {
         println!("cleaning up journal");
         unsafe {
             //self.force_commit();
