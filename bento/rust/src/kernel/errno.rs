@@ -19,5 +19,6 @@ pub enum Error {
     ENOSYS = -(ENOSYS as isize),
     ENAMETOOLONG = -(ENAMETOOLONG as isize),
     EOVERFLOW = -(EOVERFLOW as isize),
+    EPROTONOSUPPORT = -(EPROTONOSUPPORT as isize),
     ENOTEMPTY = -(ENOTEMPTY as isize),
 }

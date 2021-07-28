@@ -275,6 +275,12 @@ const INCLUDED_VARS: &[&str] = &[
     "MAX_TCP_OPTION_SPACE",
     "TCPOLEN_MSS_ALIGNED",
     "LOOPBACK_IFINDEX",
+    "NET_RX_DROP",
+    "NET_RX_SUCCESS",
+    "PACKET_OTHERHOST",
+    "PACKET_HOST",
+    "IP_DF",
+    "IPDEFTTL",
 ];
 const OPAQUE_TYPES: &[&str] = &[
     // These need to be opaque because they're both packed and aligned, which rustc

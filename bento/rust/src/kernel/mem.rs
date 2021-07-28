@@ -10,7 +10,6 @@ use core;
 use core::slice;
 use kernel::ffi::*;
 use kernel::raw::*;
-use rlibc;
 
 /// Memcpy between two `MemContainer`s.
 ///
@@ -29,7 +28,7 @@ pub fn memcpy_rust<T>(
         return Err(-1);
     }
     unsafe {
-        rlibc::memcpy(
+        compiler_builtins::mem::memcpy(
             to.as_mut_ptr() as *mut u8,
             from.as_mut_ptr() as *const u8,
             _size as usize,
@@ -48,7 +47,7 @@ pub fn strcpy_rust(to: &MemContainer<c_uchar>, from: &str) -> Result<(), i32> {
         return Err(-1);
     }
     unsafe {
-        rlibc::memcpy(to.as_mut_ptr() as *mut u8, from.as_ptr() as *const u8, size);
+        compiler_builtins::mem::memcpy(to.as_mut_ptr() as *mut u8, from.as_ptr() as *const u8, size);
     }
     return Ok(());
 }
@@ -63,7 +62,7 @@ pub fn memset_rust(s: &mut MemContainer<c_uchar>, c: u8, _n: c_size_t) -> Result
         return Err(-1);
     }
     unsafe {
-        rlibc::memset(s.as_mut_ptr() as *mut u8, c as i32, n);
+        compiler_builtins::mem::memset(s.as_mut_ptr() as *mut u8, c as i32, n);
     }
     Ok(())
 }

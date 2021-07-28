@@ -14,7 +14,6 @@ extern crate arr_macro;
 extern crate bento;
 extern crate datablock;
 extern crate hash32;
-extern crate rlibc;
 extern crate serde;
 
 use bento::bento_utils;
