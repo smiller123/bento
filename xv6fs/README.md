@@ -16,7 +16,8 @@ make
 
 ## Kernel version
 **To compile:**
-First, compile bentofs in a neighboring directory.
+First, compile bentofs in a neighboring directory using the instructions in the bentofs directory.
+Then, in this directory:
 ```
 make
 ```
@@ -27,7 +28,8 @@ cargo clean
 ```
 
 **To insert:**
-First, insert bentofs kernel module.
+First, insert bentofs kernel module using the instructions in the bentofs directory.
+Then, in this directory:
 ```
 sudo insmod kernel/xv6fs.ko
 ```
