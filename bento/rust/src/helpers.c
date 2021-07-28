@@ -553,3 +553,49 @@ u32 rs_secure_tcp_seq(__be32 saddr, __be32 daddr,
 			    &rs_net_secret);
 	return rs_seq_scale(hash);
 }
+
+struct sk_buff *rs_skb_share_check(struct sk_buff *skb) {
+	return skb_share_check(skb, GFP_ATOMIC);
+}
+
+bool rs_pskb_may_pull(struct sk_buff *skb, unsigned int len) {
+	return pskb_may_pull(skb, len);
+}
+
+__sum16 rs_ip_fast_csum(const void *iph, unsigned int ihl) {
+	return ip_fast_csum(iph, ihl);
+}
+
+int rs_pskb_trim_rcsum(struct sk_buff *skb, unsigned int len) {
+	return pskb_trim_rcsum(skb, len);
+}
+
+struct net *rs_dev_net(const struct net_device *dev) {
+	return dev_net(dev);
+}
+
+void *rs___skb_pull(struct sk_buff *skb, unsigned int len) {
+	return __skb_pull(skb, len);
+}
+
+void rs_rcu_read_lock(void) {
+	rcu_read_lock();
+}
+
+void rs_rcu_read_unlock(void) {
+	rcu_read_unlock();
+}
+
+__wsum rs_inet_compute_pseudo(struct sk_buff *skb, int proto)
+{
+	return csum_tcpudp_nofold(ip_hdr(skb)->saddr, ip_hdr(skb)->daddr,
+				  skb->len, proto, 0);
+}
+
+__sum16 rs_skb_checksum_init(struct sk_buff *skb, int proto) {
+	return skb_checksum_init(skb, proto, rs_inet_compute_pseudo);
+}
+
+void rs_sk_incoming_cpu_update(struct sock *sk) {
+	return sk_incoming_cpu_update(sk);
+}

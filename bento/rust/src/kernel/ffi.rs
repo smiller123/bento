@@ -447,6 +447,16 @@ extern "C" {
                               type_: u16, daddr: *mut raw::c_void, saddr: *mut raw::c_void,
                               len: u32) -> i32;
     pub fn rs_secure_tcp_seq(saddr: u32, daddr: u32, sport: u16, dport: u16) -> u32;
+    pub fn rs_skb_share_check(skb: *mut bindings::sk_buff) -> *mut bindings::sk_buff;
+    pub fn rs_pskb_may_pull(skb: *mut bindings::sk_buff, len: u32) -> bool;
+    pub fn rs_ip_fast_csum(iph: *mut raw::c_char, len: u32) -> u16;
+    pub fn rs_pskb_trim_rcsum(skb: *mut bindings::sk_buff, len: u32) -> i32;
+    pub fn rs_dev_net(dev: *mut bindings::net_device) -> *mut bindings::net;
+    pub fn rs___skb_pull(skb: *mut bindings::sk_buff, len: u32) -> *mut raw::c_void;
+    pub fn rs_rcu_read_lock();
+    pub fn rs_rcu_read_unlock();
+    pub fn rs_skb_checksum_init(skb: *mut bindings::sk_buff, proto: i32) -> u16;
+    pub fn rs_sk_incoming_cpu_update(sk: *mut bindings::sock);
 }
 
 pub unsafe fn sb_bread(sb: *const raw::c_void, blockno: u64) -> *const raw::c_void {
