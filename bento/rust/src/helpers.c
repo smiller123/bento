@@ -335,6 +335,10 @@ __be32 rs_htonl(unsigned long in) {
 	return htonl(in);
 }
 
+unsigned long rs_ntohl(__be32 in) {
+	return ntohl(in);
+}
+
 bool rs_inet_port_requires_bind_service(struct net *net, unsigned short port) {
 	return inet_port_requires_bind_service(net, port);
 }
@@ -598,4 +602,39 @@ __sum16 rs_skb_checksum_init(struct sk_buff *skb, int proto) {
 
 void rs_sk_incoming_cpu_update(struct sock *sk) {
 	return sk_incoming_cpu_update(sk);
+}
+
+int rs_skb_csum_unnecessary(const struct sk_buff *skb) {
+	return skb_csum_unnecessary(skb);
+}
+
+struct request_sock *
+rs_reqsk_alloc(const struct request_sock_ops *ops, struct sock *sk_listener,
+	    bool attach_listener) {
+	return reqsk_alloc(ops, sk_listener, attach_listener);
+}
+
+void rs_skb_set_owner_w(struct sk_buff *skb, struct sock *sk)
+{
+	int alloc_offset = offsetof(struct sock, sk_wmem_alloc);
+	printk(KERN_INFO "alloc offset %d\n", alloc_offset);
+	int rcv_nxt_off = offsetof(struct tcp_request_sock, rcv_nxt);
+	printk(KERN_INFO "last tcp_request offset %d\n", rcv_nxt_off);
+	skb_orphan(skb);
+	skb->sk = sk;
+#ifdef CONFIG_INET
+	printk(KERN_INFO "yes config inet\n");
+	if (unlikely(!sk_fullsock(sk))) {
+		printk(KERN_INFO "not full sock\n");
+		skb->destructor = sock_edemux;
+		sock_hold(sk);
+		return;
+	}
+#endif
+	skb->destructor = sock_wfree;
+	skb_set_hash_from_sk(skb, sk);
+}
+
+void rs_refcount_set(refcount_t *r, int n) {
+	refcount_set(r, n);
 }

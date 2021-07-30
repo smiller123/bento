@@ -79,6 +79,7 @@ const INCLUDED_TYPES: &[&str] = &[
     "iphdr",
     "packet_type",
     "ubuf_info",
+    "tcp_request_sock",
 ];
 const INCLUDED_FUNCTIONS: &[&str] = &[
     "cdev_add",
@@ -138,6 +139,9 @@ const INCLUDED_FUNCTIONS: &[&str] = &[
     "dev_add_pack",
     "dev_remove_pack",
     "netif_receive_skb_core",
+    "__skb_checksum_complete",
+    "consume_skb",
+    "skb_set_owner_w",
 ];
 const INCLUDED_VARS: &[&str] = &[
     "FMODE_READ",

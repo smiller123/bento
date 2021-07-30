@@ -399,6 +399,7 @@ extern "C" {
     pub fn rs_ntohs(sin: u16) -> u16;
     pub fn rs_htons(sin: u16) -> u16;
     pub fn rs_htonl(sin: u32) -> u32;
+    pub fn rs_ntohl(sin: u32) -> u32;
     pub fn rs_inet_port_requires_bind_service(net: *mut bindings::net, port: u16) -> bool;
     pub fn rs_sock_net(sk: *const bindings::sock) -> *mut bindings::net;
     pub fn rs_lock_sock(sk: *mut bindings::sock);
@@ -457,6 +458,14 @@ extern "C" {
     pub fn rs_rcu_read_unlock();
     pub fn rs_skb_checksum_init(skb: *mut bindings::sk_buff, proto: i32) -> u16;
     pub fn rs_sk_incoming_cpu_update(sk: *mut bindings::sock);
+    pub fn rs_skb_csum_unnecessary(skb: *const bindings::sk_buff) -> i32;
+    pub fn rs_reqsk_alloc(
+        ops: *const bindings::request_sock_ops,
+        sk_listener: *mut bindings::sock,
+        attach_listener: bool
+    ) -> *mut bindings::request_sock;
+    pub fn rs_skb_set_owner_w(skb: *mut bindings::sk_buff, sk: *mut bindings::sock);
+    pub fn rs_refcount_set(r: *mut bindings::refcount_t, n: i32);
 }
 
 pub unsafe fn sb_bread(sb: *const raw::c_void, blockno: u64) -> *const raw::c_void {
