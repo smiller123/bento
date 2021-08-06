@@ -293,7 +293,6 @@ extern "C" {
     pub fn msleep(msecs: u32);
     pub fn rs_ndelay(usecs: u32);
 
-    pub fn getnstimeofday64(ts: *const raw::c_void);
     pub fn current_kernel_time_rs() -> bindings::timespec64;
 
     pub fn rs_get_wait_queue_head() -> *mut raw::c_void;
@@ -384,6 +383,7 @@ extern "C" {
     pub fn rs_sk_refcnt_debug_release(sk: *mut bindings::sock);
     pub fn rs_sock_flag(sk: *const bindings::sock, flag: bindings::sock_flags) -> bool;
     pub fn rs_sock_set_flag(sk: *mut bindings::sock, flag: bindings::sock_flags);
+    pub fn rs_sock_reset_flag(sk: *mut bindings::sock, flag: bindings::sock_flags);
     pub fn rs_sock_hold(sk: *mut bindings::sock);
     pub fn rs_sock_orphan(sk: *mut bindings::sock);
     pub fn rs_sock_put(sk: *mut bindings::sock);
@@ -391,6 +391,7 @@ extern "C" {
     pub fn rs_local_bh_enable();
     pub fn rs_local_bh_disable();
     pub fn rs_bh_lock_sock(sk: *mut bindings::sock);
+    pub fn rs_bh_lock_sock_nested(sk: *mut bindings::sock);
     pub fn rs_bh_unlock_sock(sk: *mut bindings::sock);
     pub fn rs_inc_orphan(sk: *mut bindings::sock);
     pub fn rs_dec_orphan(sk: *mut bindings::sock);
@@ -466,6 +467,11 @@ extern "C" {
     ) -> *mut bindings::request_sock;
     pub fn rs_skb_set_owner_w(skb: *mut bindings::sk_buff, sk: *mut bindings::sock);
     pub fn rs_refcount_set(r: *mut bindings::refcount_t, n: i32);
+    pub fn rs_net_xmit_eval(e: i32) -> i32;
+    pub fn rs_write_pnet(pnet: *mut bindings::possible_net_t, net: *mut bindings::net);
+    pub fn rs_read_pnet(pnet: *mut bindings::possible_net_t) -> *mut bindings::net;
+    pub fn rs_kfree_skb_mod(skb: *mut bindings::sk_buff);
+    pub fn rs_reqsk_put(req: *mut bindings::request_sock);
 }
 
 pub unsafe fn sb_bread(sb: *const raw::c_void, blockno: u64) -> *const raw::c_void {

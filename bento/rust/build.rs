@@ -142,6 +142,8 @@ const INCLUDED_FUNCTIONS: &[&str] = &[
     "__skb_checksum_complete",
     "consume_skb",
     "skb_set_owner_w",
+    "ktime_get_real_ts64",
+    "sk_clone_lock",
 ];
 const INCLUDED_VARS: &[&str] = &[
     "FMODE_READ",
@@ -275,6 +277,7 @@ const INCLUDED_VARS: &[&str] = &[
     "SK_MEM_QUANTUM",
     "CHECKSUM_PARTIAL",
     "TCPHDR_SYN",
+    "TCPHDR_ACK",
     "TCPHDR_FIN",
     "MAX_TCP_OPTION_SPACE",
     "TCPOLEN_MSS_ALIGNED",

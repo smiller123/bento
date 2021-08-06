@@ -49,6 +49,34 @@ current_net(void) {
 	return current->nsproxy->net_ns;
 }
 
+int
+kernel_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len) {
+	return sock->ops->bind(sock, uaddr, addr_len);
+}
+
+int
+kernel_listen(struct socket *sock, int backlog) {
+	return sock->ops->listen(sock, backlog);
+}
+
+int
+kernel_getsockopt(struct socket *sock, int level, int optname,
+			   char *optval, int *optlen) {
+	return sock->ops->getsockopt(sock, level, optname, optval, optlen);
+}
+
+int
+kernel_setsockopt(struct socket *sock, int level, int optname,
+			   char *optval, int *optlen) {
+	return sock->ops->setsockopt(sock, level, optname, optval, optlen);
+}
+
+int
+kernel_getname(struct socket *sock, struct sockaddr *uaddr,
+		 int peer) {
+	return sock->ops->getname(sock, uaddr, peer);
+}
+
 unsigned int
 current_flags(void) {
 	return current->flags;
@@ -279,6 +307,10 @@ void rs_sock_set_flag(struct sock *sk, enum sock_flags flag) {
 	return sock_set_flag(sk, flag);
 }
 
+void rs_sock_reset_flag(struct sock *sk, enum sock_flags flag) {
+	return sock_reset_flag(sk, flag);
+}
+
 void rs_sock_hold(struct sock *sk) {
 	sock_hold(sk);
 }
@@ -301,6 +333,10 @@ void rs_local_bh_disable(void) {
 
 void rs_bh_lock_sock(struct sock *sk) {
 	bh_lock_sock(sk);
+}
+
+void rs_bh_lock_sock_nested(struct sock *sk) {
+	bh_lock_sock_nested(sk);
 }
 
 void rs_bh_unlock_sock(struct sock *sk) {
@@ -617,8 +653,8 @@ rs_reqsk_alloc(const struct request_sock_ops *ops, struct sock *sk_listener,
 void rs_skb_set_owner_w(struct sk_buff *skb, struct sock *sk)
 {
 	int alloc_offset = offsetof(struct sock, sk_wmem_alloc);
-	printk(KERN_INFO "alloc offset %d\n", alloc_offset);
 	int rcv_nxt_off = offsetof(struct tcp_request_sock, rcv_nxt);
+	printk(KERN_INFO "alloc offset %d\n", alloc_offset);
 	printk(KERN_INFO "last tcp_request offset %d\n", rcv_nxt_off);
 	skb_orphan(skb);
 	skb->sk = sk;
@@ -638,3 +674,66 @@ void rs_skb_set_owner_w(struct sk_buff *skb, struct sock *sk)
 void rs_refcount_set(refcount_t *r, int n) {
 	refcount_set(r, n);
 }
+
+int rs_net_xmit_eval(int e) {
+	return net_xmit_eval(e);
+}
+
+void rs_write_pnet(possible_net_t *pnet, struct net *net) {
+	return write_pnet(pnet, net);
+}
+
+struct net *rs_read_pnet(possible_net_t *pnet) {
+	return read_pnet(pnet);
+}
+
+void rs_kfree_skb_mod(struct sk_buff *skb) {
+	if (!skb_unref(skb))
+		return;
+
+//	__kfree_skb(skb);
+	//skb_release_all(skb);
+	//skb_release_head_state(skb);
+	skb_dst_drop(skb);
+	if (skb->destructor) {
+		WARN_ON(in_irq());
+		skb->destructor(skb);
+	}
+#if IS_ENABLED(CONFIG_NF_CONNTRACK)
+	nf_conntrack_put(skb_nfct(skb));
+#endif
+	skb_ext_put(skb);
+	if (likely(skb->head)) {
+		//skb_release_data(skb);
+		struct skb_shared_info *shinfo = skb_shinfo(skb);
+		int i;
+
+		if (skb->cloned &&
+		    atomic_sub_return(skb->nohdr ? (1 << SKB_DATAREF_SHIFT) + 1 : 1,
+				      &shinfo->dataref))
+			return;
+
+		for (i = 0; i < shinfo->nr_frags; i++)
+			__skb_frag_unref(&shinfo->frags[i]);
+
+		if (shinfo->frag_list)
+			kfree_skb_list(shinfo->frag_list);
+
+		//skb_zcopy_clear(skb, true);
+		//skb_free_head(skb);
+		{
+			unsigned char *head = skb->head;
+
+			if (skb->head_frag)
+				skb_free_frag(head);
+			//else
+			//	kfree(head);
+		}
+	}
+	//kfree_skbmem(skb);
+}
+
+void rs_reqsk_put(struct request_sock *req) {
+	return reqsk_put(req);
+}
+

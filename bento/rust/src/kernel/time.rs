@@ -32,5 +32,5 @@ pub fn diff_ns(lhs: &Timespec64, rhs: &Timespec64) -> i64 {
 
 /// Get the current time of day in nanoseconds.
 pub fn getnstimeofday64_rs(ts: &mut Timespec64) {
-    unsafe { getnstimeofday64(ts as *mut Timespec64 as *mut c_void) }
+    unsafe { ::bindings::ktime_get_real_ts64(ts as *mut Timespec64 as *mut ::bindings::timespec64) }
 }
