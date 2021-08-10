@@ -63,8 +63,11 @@ make clean
 
 **To mount/insert:**
 ```
-sudo userspace/target/release/user_xv6fs mkfs/fs.img /mnt/xv6fsll blkdev
+sudo userspace/target/release/user_xv6fs mkfs/fs.img /mnt/xv6fsll
 ```
+If using a physical block device to back the file system, add ```blkdev``` to the end of the command.
+
+This will start a process that will remain running while the FUSE file system is mounted.
 
 **To unmount:**
 ```

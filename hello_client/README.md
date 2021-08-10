@@ -54,8 +54,11 @@ make clean
 **To insert/mount:**
 ```
 sudo mkdir -p /mnt/hello_ll
-sudo userspace/target/release/hello_client hello /mnt/hello_ll blkdev
+sudo userspace/target/release/hello_client hello /mnt/hello_ll
 ```
+If using a physical block device to back the file system, add ```blkdev``` to the end of the second command.
+
+This will start a process that will remain running while the FUSE file system is mounted.
 
 **To unmount:**
 ```
