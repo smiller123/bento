@@ -687,53 +687,20 @@ struct net *rs_read_pnet(possible_net_t *pnet) {
 	return read_pnet(pnet);
 }
 
-void rs_kfree_skb_mod(struct sk_buff *skb) {
-	if (!skb_unref(skb))
-		return;
-
-//	__kfree_skb(skb);
-	//skb_release_all(skb);
-	//skb_release_head_state(skb);
-	skb_dst_drop(skb);
-	if (skb->destructor) {
-		WARN_ON(in_irq());
-		skb->destructor(skb);
-	}
-#if IS_ENABLED(CONFIG_NF_CONNTRACK)
-	nf_conntrack_put(skb_nfct(skb));
-#endif
-	skb_ext_put(skb);
-	if (likely(skb->head)) {
-		//skb_release_data(skb);
-		struct skb_shared_info *shinfo = skb_shinfo(skb);
-		int i;
-
-		if (skb->cloned &&
-		    atomic_sub_return(skb->nohdr ? (1 << SKB_DATAREF_SHIFT) + 1 : 1,
-				      &shinfo->dataref))
-			return;
-
-		for (i = 0; i < shinfo->nr_frags; i++)
-			__skb_frag_unref(&shinfo->frags[i]);
-
-		if (shinfo->frag_list)
-			kfree_skb_list(shinfo->frag_list);
-
-		//skb_zcopy_clear(skb, true);
-		//skb_free_head(skb);
-		{
-			unsigned char *head = skb->head;
-
-			if (skb->head_frag)
-				skb_free_frag(head);
-			//else
-			//	kfree(head);
-		}
-	}
-	//kfree_skbmem(skb);
-}
-
 void rs_reqsk_put(struct request_sock *req) {
 	return reqsk_put(req);
 }
 
+void rs__skb_queue_tail(struct sk_buff_head *list,
+				   struct sk_buff *newsk) {
+	return __skb_queue_tail(list, newsk);
+}
+
+struct sk_buff *rs_skb_peek(struct sk_buff_head *list) {
+	return skb_peek(list);
+}
+
+void rs__skb_unlink(struct sk_buff *skb, struct sk_buff_head *list)
+{
+	return __skb_unlink(skb, list);
+}

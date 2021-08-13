@@ -470,8 +470,10 @@ extern "C" {
     pub fn rs_net_xmit_eval(e: i32) -> i32;
     pub fn rs_write_pnet(pnet: *mut bindings::possible_net_t, net: *mut bindings::net);
     pub fn rs_read_pnet(pnet: *mut bindings::possible_net_t) -> *mut bindings::net;
-    pub fn rs_kfree_skb_mod(skb: *mut bindings::sk_buff);
     pub fn rs_reqsk_put(req: *mut bindings::request_sock);
+    pub fn rs__skb_queue_tail(list: *mut bindings::sk_buff_head, newsk: *mut bindings::sk_buff);
+    pub fn rs_skb_peek(list: *mut bindings::sk_buff_head) -> *mut bindings::sk_buff;
+    pub fn rs__skb_unlink(skb: *mut bindings::sk_buff, list: *mut bindings::sk_buff_head);
 }
 
 pub unsafe fn sb_bread(sb: *const raw::c_void, blockno: u64) -> *const raw::c_void {
