@@ -474,6 +474,13 @@ extern "C" {
     pub fn rs__skb_queue_tail(list: *mut bindings::sk_buff_head, newsk: *mut bindings::sk_buff);
     pub fn rs_skb_peek(list: *mut bindings::sk_buff_head) -> *mut bindings::sk_buff;
     pub fn rs__skb_unlink(skb: *mut bindings::sk_buff, list: *mut bindings::sk_buff_head);
+    pub fn rs__skb_pull(skb: *mut bindings::sk_buff, len: u32) -> *mut raw::c_void;
+    pub fn rs_timer_setup(
+        timer: *mut bindings::timer_list, 
+        func: unsafe extern "C" fn(*mut bindings::timer_list),
+        flags: u32
+    );
+    pub fn rs_get_jiffies_64() -> u64;
 }
 
 pub unsafe fn sb_bread(sb: *const raw::c_void, blockno: u64) -> *const raw::c_void {

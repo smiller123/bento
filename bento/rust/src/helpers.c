@@ -704,3 +704,19 @@ void rs__skb_unlink(struct sk_buff *skb, struct sk_buff_head *list)
 {
 	return __skb_unlink(skb, list);
 }
+
+void *rs__skb_pull(struct sk_buff *skb, unsigned int len) {
+	return __skb_pull(skb, len);
+}
+
+void timer_func(struct timer_list *timer) {
+}
+
+void rs_timer_setup(struct timer_list *timer,
+		    void (*func)(struct timer_list *), unsigned int flags) {
+	timer_setup(timer, func, flags);
+}
+
+u64 rs_get_jiffies_64(void) {
+	return get_jiffies_64();
+}

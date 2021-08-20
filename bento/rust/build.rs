@@ -80,6 +80,7 @@ const INCLUDED_TYPES: &[&str] = &[
     "packet_type",
     "ubuf_info",
     "tcp_request_sock",
+    "timer_list",
 ];
 const INCLUDED_FUNCTIONS: &[&str] = &[
     "cdev_add",
@@ -144,6 +145,8 @@ const INCLUDED_FUNCTIONS: &[&str] = &[
     "skb_set_owner_w",
     "ktime_get_real_ts64",
     "sk_clone_lock",
+    "sk_stream_wait_close",
+    "mod_timer",
 ];
 const INCLUDED_VARS: &[&str] = &[
     "FMODE_READ",
@@ -288,6 +291,11 @@ const INCLUDED_VARS: &[&str] = &[
     "PACKET_HOST",
     "IP_DF",
     "IPDEFTTL",
+    "SEND_SHUTDOWN",
+    "RCV_SHUTDOWN",
+    "TCP_STATE_MASK",
+    "TCP_TIMEWAIT_LEN",
+    "TIMER_PINNED",
 ];
 const OPAQUE_TYPES: &[&str] = &[
     // These need to be opaque because they're both packed and aligned, which rustc
