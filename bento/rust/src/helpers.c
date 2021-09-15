@@ -417,6 +417,11 @@ void rs_sock_prot_inuse_add(struct net *net, struct proto *prot,
 	sock_prot_inuse_add(net, prot, inc);
 }
 
+int rs_sock_prot_inuse_get(struct net *net, struct proto *prot)
+{
+	return sock_prot_inuse_get(net, prot);
+}
+
 void rs_sock_graft(struct sock *sk, struct socket *parent) {
 	return sock_graft(sk, parent);
 }
@@ -719,4 +724,35 @@ void rs_timer_setup(struct timer_list *timer,
 
 u64 rs_get_jiffies_64(void) {
 	return get_jiffies_64();
+}
+
+void rs_req_prot_cleanup(struct request_sock_ops *rsk_prot)
+{
+	if (!rsk_prot)
+		return;
+	kfree(rsk_prot->slab_name);
+	rsk_prot->slab_name = NULL;
+	kmem_cache_destroy(rsk_prot->slab);
+	rsk_prot->slab = NULL;
+}
+
+void rs_proto_unregister_mod(struct proto *prot) {
+	//mutex_lock(&proto_list_mutex);
+	//release_proto_idx(prot);
+	list_del(&prot->node);
+	//mutex_unlock(&proto_list_mutex);
+
+	kmem_cache_destroy(prot->slab);
+	prot->slab = NULL;
+
+	rs_req_prot_cleanup(prot->rsk_prot);
+	if (prot->twsk_prot != NULL && prot->twsk_prot->twsk_slab != NULL) {
+		kmem_cache_destroy(prot->twsk_prot->twsk_slab);
+		kfree(prot->twsk_prot->twsk_slab_name);
+		prot->twsk_prot->twsk_slab = NULL;
+	}
+}
+
+void mod_print_stats(struct module *module) {
+	printk(KERN_INFO "does mod have exit? %p", module->exit);
 }

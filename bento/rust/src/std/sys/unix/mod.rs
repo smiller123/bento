@@ -2,6 +2,8 @@ use crate::std::io::ErrorKind;
 
 use crate::libc;
 
+pub mod net;
+
 pub fn decode_error_kind(errno: libc::c_int) -> ErrorKind {
     match errno {
         libc::ECONNREFUSED => ErrorKind::ConnectionRefused,

@@ -409,6 +409,7 @@ extern "C" {
     pub fn rs_inet_csk_delack_init(sk: *mut bindings::sock);
     pub fn rs_smp_store_release(p: *mut u8, v: u8);
     pub fn rs_sock_prot_inuse_add(net: *mut bindings::net, prot: *mut bindings::proto, inc: i32);
+    pub fn rs_sock_prot_inuse_get(net: *mut bindings::net, prot: *mut bindings::proto) -> i32;
     pub fn rs_sock_graft(sk: *mut bindings::sock, parent: *mut bindings::socket);
     pub fn rs_reqsk_queue_empty(queue: *const bindings::request_sock_queue) -> bool;
     pub fn rs_sock_rcvtimeo(sk: *mut bindings::sock, noblock: bool) -> i64;
@@ -481,6 +482,8 @@ extern "C" {
         flags: u32
     );
     pub fn rs_get_jiffies_64() -> u64;
+    pub fn rs_proto_unregister_mod(prot: *mut bindings::proto);
+    pub fn mod_print_stats(module: *mut bindings::module);
 }
 
 pub unsafe fn sb_bread(sb: *const raw::c_void, blockno: u64) -> *const raw::c_void {
