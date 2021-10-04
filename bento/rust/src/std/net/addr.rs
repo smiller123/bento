@@ -91,6 +91,14 @@ impl SocketAddrV4 {
     pub fn set_port(&mut self, new_port: u16) {
         self.inner.sin_port = new_port.to_be()
     }
+
+    pub unsafe fn from_raw(sin: *mut sockaddr_in) -> Self {
+        Self { inner: *sin }
+    }
+
+    pub fn family(&self) -> sa_family_t {
+        self.inner.sin_family
+    }
 }
 
 impl SocketAddrV6 {
