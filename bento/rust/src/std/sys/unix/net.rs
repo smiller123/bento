@@ -127,10 +127,51 @@ impl Socket {
         }
     }
 
-    pub fn set_backlog(&mut self, backlog: u32) {
+    pub fn set_max_ack_backlog(&mut self, backlog: u32) {
         unsafe {
             core::ptr::write_volatile(&mut (*self.inner).sk_max_ack_backlog as *mut u32, backlog);
         }
+    }
+
+    pub fn set_ack_backlog(&mut self, backlog: u32) {
+        unsafe {
+            core::ptr::write_volatile(&mut (*self.inner).sk_ack_backlog as *mut u32, backlog);
+        }
+    }
+
+    pub fn store_state(&mut self, state: u8) {
+        unsafe {
+            ffi::rs_smp_store_release(&mut (*self.inner).__sk_common.skc_state as *mut u8, state);
+        }
+    }
+
+    pub fn set_flag(&mut self, flag: c::sock_flags) {
+        unsafe {
+            ffi::rs_sock_set_flag(self.inner, flag);
+        }
+    }
+
+    pub fn prot_inuse_add(&mut self, val: i32) {
+        unsafe {
+            ffi::rs_sock_prot_inuse_add(ffi::rs_sock_net(self.inner), (*self.inner).__sk_common.skc_prot, val);
+        }
+    }
+
+    pub fn set_state(&mut self, state: u8) {
+        unsafe {
+            (*self.inner).__sk_common.skc_state = state;
+        }
+    }
+
+    pub fn net(&self) -> *mut c::net {
+        unsafe {
+            ffi::rs_sock_net(self.inner)
+        }
+    }
+
+    // TODO: Get this so it doesn't take a raw pointer
+    pub unsafe fn graft(&mut self, parent: *mut c::socket) {
+        ffi::rs_sock_graft(self.inner, parent);
     }
 }
 
