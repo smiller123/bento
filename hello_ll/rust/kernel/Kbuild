@@ -9,10 +9,10 @@ CARGO ?= cargo
 
 export c_flags
 
-$(src)/target/x86_64-linux-kernel/release/libhello_ll.a: cargo_will_determine_dependencies
-	cd $(src); env -u MAKE -u MAKEFLAGS $(CARGO) build -Z build-std=core,alloc --release --target=x86_64-linux-kernel
+$(src)/target/x86_64-unknown-none-linuxkernel/release/libhello_ll.a: cargo_will_determine_dependencies
+	cd $(src); env -u MAKE -u MAKEFLAGS $(CARGO) build -Z build-std=core,alloc --release --target=x86_64-unknown-none-linuxkernel
 
 .PHONY: cargo_will_determine_dependencies
 
-%.rust.o: target/x86_64-linux-kernel/release/lib%.a
+%.rust.o: target/x86_64-unknown-none-linuxkernel/release/lib%.a
 	$(LD) -r -o $@ --whole-archive $<
