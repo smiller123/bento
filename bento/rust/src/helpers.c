@@ -23,6 +23,7 @@
 #include <net/sock.h>
 #include <net/xfrm.h>
 #include <linux/siphash.h>
+#include <linux/sockptr.h>
 
 static siphash_key_t rs_net_secret __read_mostly;
 
@@ -67,7 +68,8 @@ kernel_getsockopt(struct socket *sock, int level, int optname,
 
 int
 kernel_setsockopt(struct socket *sock, int level, int optname,
-			   char *optval, int *optlen) {
+			   char *kernel_optval, int *optlen) {
+	sockptr_t optval = KERNEL_SOCKPTR(kernel_optval);
 	return sock->ops->setsockopt(sock, level, optname, optval, optlen);
 }
 
@@ -203,7 +205,9 @@ journal_t* rs_jbd2_journal_init_dev(struct block_device *bdev,
                                     int len, 
                                     int bsize) {
     journal_t *journal = jbd2_journal_init_dev(bdev, fs_dev, start, len, bsize);
-    journal->j_max_transaction_buffers = journal->j_maxlen / 4;
+    //journal->j_max_transaction_buffers = journal->j_maxlen / 4;
+    journal->j_max_transaction_buffers =
+	    (journal->j_total_len - journal->j_fc_wbufsize) / 4;
 
     return journal; 
 }
