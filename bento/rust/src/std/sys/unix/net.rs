@@ -8,6 +8,10 @@ pub struct Socket {
     pub inner: *mut c::sock,
 }
 
+pub struct Net {
+    pub inner: *mut c::net,
+}
+
 pub struct SocketLockGuard<'a> {
     sock: &'a mut Socket
 }
@@ -109,9 +113,21 @@ impl Socket {
         }
     }
 
+    pub fn dest_addr(&self) -> u32 {
+        unsafe {
+            (*self.inner).__sk_common.__bindgen_anon_1.__bindgen_anon_1.skc_daddr
+        }
+    }
+
     pub fn set_dest_addr(&mut self, daddr: u32) {
         unsafe {
             (*self.inner).__sk_common.__bindgen_anon_1.__bindgen_anon_1.skc_daddr = daddr;
+        }
+    }
+
+    pub fn dest_port(&self) -> u16 {
+        unsafe {
+            (*self.inner).__sk_common.__bindgen_anon_3.__bindgen_anon_1.skc_dport
         }
     }
 
@@ -142,6 +158,12 @@ impl Socket {
     pub fn store_state(&mut self, state: u8) {
         unsafe {
             ffi::rs_smp_store_release(&mut (*self.inner).__sk_common.skc_state as *mut u8, state);
+        }
+    }
+
+    pub fn flag(&self, flag: c::sock_flags) -> bool {
+        unsafe {
+            ffi::rs_sock_flag(self.inner, flag)
         }
     }
 
@@ -189,3 +211,14 @@ impl DerefMut for Socket {
     }
 }
 
+impl Net {
+    pub unsafe fn from_raw(raw: *mut c::net) -> Self {
+        Self { inner: raw }
+    }
+
+    pub fn ns_capable(&self, cap: i32) -> bool {
+        unsafe {
+            c::ns_capable((*self.inner).user_ns, cap)
+        }
+    }
+}

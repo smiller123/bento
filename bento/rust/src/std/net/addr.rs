@@ -99,6 +99,10 @@ impl SocketAddrV4 {
     pub fn family(&self) -> sa_family_t {
         self.inner.sin_family
     }
+
+    pub fn set_family(&mut self, family: sa_family_t) {
+        self.inner.sin_family = family;
+    }
 }
 
 impl SocketAddrV6 {
