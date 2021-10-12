@@ -452,7 +452,7 @@ extern "C" {
     pub fn rs_secure_tcp_seq(saddr: u32, daddr: u32, sport: u16, dport: u16) -> u32;
     pub fn rs_skb_share_check(skb: *mut bindings::sk_buff) -> *mut bindings::sk_buff;
     pub fn rs_pskb_may_pull(skb: *mut bindings::sk_buff, len: u32) -> bool;
-    pub fn rs_ip_fast_csum(iph: *mut raw::c_char, len: u32) -> u16;
+    pub fn rs_ip_fast_csum(iph: *const raw::c_char, len: u32) -> u16;
     pub fn rs_pskb_trim_rcsum(skb: *mut bindings::sk_buff, len: u32) -> i32;
     pub fn rs_dev_net(dev: *mut bindings::net_device) -> *mut bindings::net;
     pub fn rs___skb_pull(skb: *mut bindings::sk_buff, len: u32) -> *mut raw::c_void;
