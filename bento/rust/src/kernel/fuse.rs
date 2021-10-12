@@ -43,7 +43,7 @@ impl fuse_attr {
             gid: 0,
             rdev: 0,
             blksize: 0,
-            padding: 0,
+            flags: 0,
         }
     }
 }

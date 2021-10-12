@@ -68,7 +68,7 @@ kernel_getsockopt(struct socket *sock, int level, int optname,
 
 int
 kernel_setsockopt(struct socket *sock, int level, int optname,
-			   char *kernel_optval, int *optlen) {
+			   char *kernel_optval, int optlen) {
 	sockptr_t optval = KERNEL_SOCKPTR(kernel_optval);
 	return sock->ops->setsockopt(sock, level, optname, optval, optlen);
 }
