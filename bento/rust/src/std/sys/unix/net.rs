@@ -233,9 +233,11 @@ impl Net {
 }
 
 impl SkBuff {
-    pub fn skb_share_check(mut self) -> Option<Box<Self>> {
+    pub fn skb_share_check(mut self: Box<Self>) -> Option<Box<Self>> {
         unsafe {
-            let skb = ffi::rs_skb_share_check(&mut self);
+            // TODO: Get the C funtion to actally accept ownership somehow
+            let self_ref = Box::leak(self);
+            let skb = ffi::rs_skb_share_check(self_ref);
             if skb.is_null() {
                 None
             } else {
