@@ -484,6 +484,12 @@ extern "C" {
     pub fn rs_get_jiffies_64() -> u64;
     pub fn rs_proto_unregister_mod(prot: *mut bindings::proto);
     pub fn mod_print_stats(module: *mut bindings::module);
+    pub fn rs_kern_path(name: *const raw::c_char, flag: u32, path: *mut bindings::path) -> raw::c_int;
+    pub fn rs_current_cred() -> *mut bindings::cred;
+    pub fn rs_clone_private_mount(path: *const bindings::path) -> *mut bindings::vfsmount;
+    pub fn rs_vfsmount_get_mnt_sb(mnt: *mut bindings::vfsmount) -> *mut bindings::super_block;
+    pub fn rs_vfsmount_get_name(mnt: *mut bindings::vfsmount) -> *const raw::c_char;
+    pub fn rs_GHOST_IOC_CREATE_QUEUE() -> usize;
 }
 
 pub unsafe fn sb_bread(sb: *const raw::c_void, blockno: u64) -> *const raw::c_void {

@@ -81,6 +81,8 @@ const INCLUDED_TYPES: &[&str] = &[
     "ubuf_info",
     "tcp_request_sock",
     "timer_list",
+    "vfsmount",
+    "ghost_ioc_create_queue",
 ];
 const INCLUDED_FUNCTIONS: &[&str] = &[
     "cdev_add",
@@ -146,7 +148,13 @@ const INCLUDED_FUNCTIONS: &[&str] = &[
     "ktime_get_real_ts64",
     "sk_clone_lock",
     "sk_stream_wait_close",
+    "kern_path",
     "mod_timer",
+    "dentry_open",
+    "kernel_write",
+    "filp_close",
+    "vfs_ioctl",
+    "clone_private_mount",
 ];
 const INCLUDED_VARS: &[&str] = &[
     "FMODE_READ",
@@ -296,6 +304,7 @@ const INCLUDED_VARS: &[&str] = &[
     "TCP_STATE_MASK",
     "TCP_TIMEWAIT_LEN",
     "TIMER_PINNED",
+    "GHOST_IOC_CREATE_QUEUE",
 ];
 const OPAQUE_TYPES: &[&str] = &[
     // These need to be opaque because they're both packed and aligned, which rustc

@@ -143,6 +143,7 @@ pub const O_DIRECT: c_int = 0x4000;
 pub const O_DIRECTORY: c_int = 0x10000;
 pub const O_NOFOLLOW: c_int = 0x20000;
 
+pub const O_RDWR: c_int = 2;
 pub const O_APPEND: c_int = 1024;
 pub const O_CREAT: c_int = 64;
 pub const O_EXCL: c_int = 128;
@@ -157,6 +158,7 @@ pub const O_CLOEXEC: c_int = 0o2000000;
 pub const O_PATH: c_int = 0o10000000;
 pub const O_TMPFILE: c_int = 0o20000000 | O_DIRECTORY;
 
+pub const O_WRONLY: c_int = 1;
 pub const O_TRUNC: c_int = 512;
 
 pub const SOCK_CLOEXEC: c_int = O_CLOEXEC;

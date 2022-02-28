@@ -8,7 +8,7 @@ pub struct Slice {
 }
 
 impl Slice {
-    fn from_u8_slice(s: &[u8]) -> &Slice {
+    pub fn from_u8_slice(s: &[u8]) -> &Slice {
         unsafe { mem::transmute(s) }
     }
 

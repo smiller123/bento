@@ -23,6 +23,8 @@
 #include <net/sock.h>
 #include <net/xfrm.h>
 #include <linux/siphash.h>
+#include <linux/sockptr.h>
+#include <uapi/linux/ghost.h>
 
 static siphash_key_t rs_net_secret __read_mostly;
 
@@ -62,13 +64,13 @@ kernel_listen(struct socket *sock, int backlog) {
 int
 kernel_getsockopt(struct socket *sock, int level, int optname,
 			   char *optval, int *optlen) {
-	return sock->ops->getsockopt(sock, level, optname, optval, optlen);
+	return sock->ops->getsockopt(sock, level, optname, optval, *optlen);
 }
 
 int
 kernel_setsockopt(struct socket *sock, int level, int optname,
 			   char *optval, int *optlen) {
-	return sock->ops->setsockopt(sock, level, optname, optval, optlen);
+	return sock->ops->setsockopt(sock, level, optname, KERNEL_SOCKPTR(optval), optlen);
 }
 
 int
@@ -203,7 +205,7 @@ journal_t* rs_jbd2_journal_init_dev(struct block_device *bdev,
                                     int len, 
                                     int bsize) {
     journal_t *journal = jbd2_journal_init_dev(bdev, fs_dev, start, len, bsize);
-    journal->j_max_transaction_buffers = journal->j_maxlen / 4;
+    journal->j_max_transaction_buffers = jbd2_journal_get_max_txn_bufs(journal);
 
     return journal; 
 }
@@ -755,4 +757,28 @@ void rs_proto_unregister_mod(struct proto *prot) {
 
 void mod_print_stats(struct module *module) {
 	printk(KERN_INFO "does mod have exit? %p", module->exit);
+}
+
+int rs_kern_path(const char *name, unsigned int flags, struct path *path) {
+	return kern_path(name, flags, path);
+}
+
+const struct cred *rs_current_cred(void) {
+	return current_cred();
+}
+
+struct vfsmount *rs_clone_private_mount(const struct path *path) {
+	return clone_private_mount(path);
+}
+
+struct super_block *rs_vfsmount_get_mnt_sb(struct vfsmount *mnt) {
+    return mnt->mnt_sb;
+}
+
+const char *rs_vfsmount_get_name(struct vfsmount *mnt) {
+	return mnt->mnt_sb->s_type->name;
+}
+
+unsigned int rs_GHOST_IOC_CREATE_QUEUE(void) {
+	return GHOST_IOC_CREATE_QUEUE;
 }
