@@ -27,6 +27,8 @@
 #include <net/tcp.h>
 #include <net/inet_connection_sock.h>
 #include <net/protocol.h>
+#include <linux/ghost.h>
+#include <uapi/linux/ghost.h>
 
 // Bindgen gets confused at certain things
 //

@@ -24,7 +24,8 @@
 #include <net/xfrm.h>
 #include <linux/siphash.h>
 #include <linux/sockptr.h>
-#include <uapi/linux/ghost.h>
+#include <linux/ghost.h>
+//#include <uapi/linux/ghost.h>
 
 static siphash_key_t rs_net_secret __read_mostly;
 
@@ -782,3 +783,15 @@ const char *rs_vfsmount_get_name(struct vfsmount *mnt) {
 unsigned int rs_GHOST_IOC_CREATE_QUEUE(void) {
 	return GHOST_IOC_CREATE_QUEUE;
 }
+
+struct fd rs_fdget(unsigned int fd) {
+	return fdget(fd);
+}
+
+struct ghost_queue *rs_fd_to_queue(struct fd fd) {
+	return fd_to_queue(fd);
+}
+
+//int rs_register_ghost_agent(struct ghost_agent_type * agent) {
+//	return register_ghost_agent(agent);
+//}

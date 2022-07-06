@@ -164,6 +164,7 @@ use core::panic::PanicInfo;
 #[panic_handler]
 // #[cfg(not(test))]
 fn panic(_info: &PanicInfo) -> ! {
+    println!("panicing and it's bad\n");
     loop {}
 }
 

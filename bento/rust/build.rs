@@ -83,6 +83,14 @@ const INCLUDED_TYPES: &[&str] = &[
     "timer_list",
     "vfsmount",
     "ghost_ioc_create_queue",
+    "fd",
+    "ghost_queue",
+    "ghost_agent_type",
+    "ghost_msg_payload_task_wakeup",
+    "ghost_msg_payload_task_new",
+    "ghost_msg_payload_task_blocked",
+    "ghost_msg_payload_task_preempt",
+    "ghost_msg_payload_pnt",
 ];
 const INCLUDED_FUNCTIONS: &[&str] = &[
     "cdev_add",
@@ -155,6 +163,7 @@ const INCLUDED_FUNCTIONS: &[&str] = &[
     "filp_close",
     "vfs_ioctl",
     "clone_private_mount",
+    "register_ghost_agent",
 ];
 const INCLUDED_VARS: &[&str] = &[
     "FMODE_READ",
@@ -305,6 +314,10 @@ const INCLUDED_VARS: &[&str] = &[
     "TCP_TIMEWAIT_LEN",
     "TIMER_PINNED",
     "GHOST_IOC_CREATE_QUEUE",
+    "MSG_TASK_NEW",
+    "MSG_TASK_WAKEUP",
+    "MSG_PNT",
+    "MSG_TASK_BLOCKED",
 ];
 const OPAQUE_TYPES: &[&str] = &[
     // These need to be opaque because they're both packed and aligned, which rustc

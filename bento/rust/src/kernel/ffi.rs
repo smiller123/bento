@@ -490,8 +490,13 @@ extern "C" {
     pub fn rs_vfsmount_get_mnt_sb(mnt: *mut bindings::vfsmount) -> *mut bindings::super_block;
     pub fn rs_vfsmount_get_name(mnt: *mut bindings::vfsmount) -> *const raw::c_char;
     pub fn rs_GHOST_IOC_CREATE_QUEUE() -> usize;
+    pub fn rs_fdget(fd: u32) -> bindings::fd;
+    pub fn rs_fd_to_queue(fd: bindings::fd) -> *mut bindings::ghost_queue;
 }
 
 pub unsafe fn sb_bread(sb: *const raw::c_void, blockno: u64) -> *const raw::c_void {
     rs_sb_bread(sb, blockno)
 }
+
+unsafe impl Send for bindings::ghost_agent_type {}
+unsafe impl Sync for bindings::ghost_agent_type {}
