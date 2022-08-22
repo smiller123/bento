@@ -33,6 +33,7 @@ pub mod fuse;
 pub mod kernel;
 #[allow(non_camel_case_types)]
 pub mod libc;
+pub mod scheduler_utils;
 pub mod std;
 pub mod time;
 

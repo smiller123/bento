@@ -788,10 +788,6 @@ struct fd rs_fdget(unsigned int fd) {
 	return fdget(fd);
 }
 
-struct ghost_queue *rs_fd_to_queue(struct fd fd) {
-	return fd_to_queue(fd);
-}
-
 //int rs_register_ghost_agent(struct ghost_agent_type * agent) {
 //	return register_ghost_agent(agent);
 //}
