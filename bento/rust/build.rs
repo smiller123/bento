@@ -100,6 +100,9 @@ const INCLUDED_TYPES: &[&str] = &[
     "ghost_msg_payload_cpu_tick",
     "ghost_msg_payload_timer",
     "ghost_msg_payload_cpu_not_idle",
+    "ghost_msg_payload_select_task_rq",
+    "ghost_msg_payload_migrate_task_rq",
+    "ghost_msg_payload_balance",
 ];
 const INCLUDED_FUNCTIONS: &[&str] = &[
     "cdev_add",

@@ -87,6 +87,18 @@ pub extern "C" fn parse_message<T: BentoScheduler> (
                 let payload_data = payload as *const c::ghost_msg_payload_cpu_not_idle;
                 agent.cpu_not_idle((*payload_data).cpu, (*payload_data).next_pid);
             }
+            c::MSG_TASK_SELECT_RQ => {
+                let payload_data = payload as *const c::ghost_msg_payload_select_task_rq;
+                agent.select_task_rq((*payload_data).pid, &mut *retval);
+            }
+            c::MSG_TASK_MIGRATE_RQ => {
+                let payload_data = payload as *const c::ghost_msg_payload_migrate_task_rq;
+                agent.migrate_task_rq((*payload_data).pid, (*payload_data).new_cpu);
+            }
+            c::MSG_BALANCE => {
+                let payload_data = payload as *const c::ghost_msg_payload_balance;
+                agent.balance();
+            }
             _ => {
                 println!("Unsupported message type");
             }
@@ -262,4 +274,10 @@ pub trait BentoScheduler {
     fn cpu_tick(&self, _cpu: i32) {}
 
     fn cpu_not_idle(&self, _cpu: i32, _next_pid: u64) {}
+
+    fn select_task_rq(&self, _pid: u64, _retval: &mut i32) {}
+    
+    fn migrate_task_rq(&self, _pid: u64, _new_cpu: i32) {}
+
+    fn balance(&self) {}
 }
