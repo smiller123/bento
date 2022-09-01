@@ -97,7 +97,7 @@ pub extern "C" fn parse_message<T: BentoScheduler> (
             }
             c::MSG_BALANCE => {
                 let payload_data = payload as *const c::ghost_msg_payload_balance;
-                agent.balance();
+                agent.balance((*payload_data).cpu);
             }
             _ => {
                 println!("Unsupported message type");
@@ -151,7 +151,7 @@ pub trait BentoScheduler {
 
     fn unregister(&self) -> i32 {
         return unsafe {
-            unregister_ghost_agent(self.get_policy())
+            unregister_ghost_agent(self as *const Self as *const raw::c_void)
         };
     }
 
@@ -279,5 +279,5 @@ pub trait BentoScheduler {
     
     fn migrate_task_rq(&self, _pid: u64, _new_cpu: i32) {}
 
-    fn balance(&self) {}
+    fn balance(&self, _cpu: i32) {}
 }

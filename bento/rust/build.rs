@@ -177,6 +177,7 @@ const INCLUDED_FUNCTIONS: &[&str] = &[
     "clone_private_mount",
     "register_ghost_agent",
     "unregister_ghost_agent",
+    "ghost_run_pid_on",
 ];
 const INCLUDED_VARS: &[&str] = &[
     "FMODE_READ",
