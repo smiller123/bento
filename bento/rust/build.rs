@@ -103,6 +103,8 @@ const INCLUDED_TYPES: &[&str] = &[
     "ghost_msg_payload_select_task_rq",
     "ghost_msg_payload_migrate_task_rq",
     "ghost_msg_payload_balance",
+    "ghost_msg_payload_rereg_prep",
+    "ghost_msg_payload_rereg_init",
 ];
 const INCLUDED_FUNCTIONS: &[&str] = &[
     "cdev_add",
@@ -176,6 +178,7 @@ const INCLUDED_FUNCTIONS: &[&str] = &[
     "vfs_ioctl",
     "clone_private_mount",
     "register_ghost_agent",
+    "reregister_ghost_agent",
     "unregister_ghost_agent",
     "ghost_run_pid_on",
 ];

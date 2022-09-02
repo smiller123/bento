@@ -1,18 +1,18 @@
+use alloc::boxed::Box;
 use libc::ENOSYS;
 
 use time::Timespec;
 
 use bindings as c;
-use bindings::{register_ghost_agent,unregister_ghost_agent};
+use bindings::{register_ghost_agent,unregister_ghost_agent,reregister_ghost_agent};
 use kernel::raw;
-
-use serde::{Serialize, Deserialize};
 
 pub const BENTO_KERNEL_VERSION: u32 = 1;
 pub const BENTO_KERNEL_MINOR_VERSION: u32 = 0;
 
-pub extern "C" fn parse_message<T: BentoScheduler> (
-    agent: &T,
+pub fn parse_message<TransferIn: Send, TransferOut: Send, T: BentoScheduler<TransferIn, TransferOut>>(
+//pub extern "C" fn parse_message<T: BentoScheduler> (
+    agent: &mut T,
     type_: i32,
     msglen: i32,
     barrier: u32,
@@ -99,6 +99,20 @@ pub extern "C" fn parse_message<T: BentoScheduler> (
                 let payload_data = payload as *const c::ghost_msg_payload_balance;
                 agent.balance((*payload_data).cpu);
             }
+            c::MSG_REREGISTER_PREPARE => {
+                let payload_data = payload as *mut c::ghost_msg_payload_rereg_prep;
+                let data = agent.reregister_prepare();
+                (*payload_data).data = Box::into_raw(Box::new(data)) as *mut _ as *mut raw::c_void;
+            }
+            c::MSG_REREGISTER_INIT => {
+                let payload_data = payload as *const c::ghost_msg_payload_rereg_init;
+                let data = if (*payload_data).data.is_null() {
+                    None
+                } else {
+                    unsafe { Some(*Box::from_raw((*payload_data).data as *mut TransferIn)) }
+                };
+                agent.reregister_init(data);
+            }
             _ => {
                 println!("Unsupported message type");
             }
@@ -111,8 +125,7 @@ pub extern "C" fn parse_message<T: BentoScheduler> (
 /// This trait is derived from the Filesystem trait from the fuse Rust crate.
 ///
 /// This trait must be implemented to provide a Bento scheduler.
-//pub trait BentoScheduler<'de, TransferIn: Send + Deserialize<'de>=i32,TransferOut: Send + Serialize=i32> {
-pub trait BentoScheduler {
+pub trait BentoScheduler<TransferIn: Send, TransferOut: Send> {
     fn get_policy(&self) -> i32;
     /// Register the filesystem with Bento.
     ///
@@ -126,28 +139,23 @@ pub trait BentoScheduler {
             register_ghost_agent(
                 self as *const Self as *const raw::c_void,
                 self.get_policy(),
-                parse_message::<Self> as *const raw::c_void
+                parse_message::<TransferIn, TransferOut, Self> as *const raw::c_void
             )
         };
     }
 
-    ///// Reregister the filesystem with Bento on top of an existing register.
-    /////
-    ///// This should be called when the filesystem module is inserted using the
-    ///// name of an existing filesystem that has been previously inserted. The existing
-    ///// filesystem implementation will be overwritten with the new filesystem.
-    //fn reregister(&self) -> i32
-    //where
-    //    Self: core::marker::Sized,
-    //{
-    //    return unsafe {
-    //        reregister_bento_fs(
-    //            self as *const Self as *const raw::c_void,
-    //            self.get_name().as_bytes().as_ptr() as *const raw::c_void,
-    //            dispatch::<TransferIn, TransferOut, Self> as *const raw::c_void,
-    //        )
-    //    };
-    //}
+    fn reregister(&self) -> i32
+    where
+        Self: core::marker::Sized,
+    {
+        return unsafe {
+            reregister_ghost_agent(
+                self as *const Self as *const raw::c_void,
+                self.get_policy(),
+                parse_message::<TransferIn, TransferOut, Self> as *const raw::c_void
+            )
+        };
+    }
 
     fn unregister(&self) -> i32 {
         return unsafe {
@@ -280,4 +288,11 @@ pub trait BentoScheduler {
     fn migrate_task_rq(&self, _pid: u64, _new_cpu: i32) {}
 
     fn balance(&self, _cpu: i32) {}
+
+    //fn bento_update_prepare(&mut self) -> Option<TransferOut> {
+    fn reregister_prepare(&mut self) -> Option<TransferOut> {
+        None
+    }
+
+    fn reregister_init(&mut self, Option<TransferIn>) {}
 }
