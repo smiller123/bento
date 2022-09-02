@@ -23,8 +23,10 @@ pub fn parse_message<TransferIn: Send, TransferOut: Send, T: BentoScheduler<Tran
     unsafe {
         match type_ as u32 {
             c::MSG_PNT => {
-                let payload_data = payload as *const c::ghost_msg_payload_pnt;
-                agent.pick_next_task((*payload_data).cpu, &mut *retval);
+                let payload_data = payload as *mut c::ghost_msg_payload_pnt;
+                let next_task = agent.pick_next_task((*payload_data).cpu);
+                (*payload_data).pick_task = next_task.is_some();
+                (*payload_data).ret_pid = next_task.unwrap_or_default();
             }
             c::MSG_TASK_DEAD => {
                 let payload_data = payload as *const c::ghost_msg_payload_task_dead;
@@ -39,7 +41,7 @@ pub fn parse_message<TransferIn: Send, TransferOut: Send, T: BentoScheduler<Tran
             c::MSG_TASK_WAKEUP => {
                 let payload_data = payload as *const c::ghost_msg_payload_task_wakeup;
                 agent.task_wakeup((*payload_data).pid, (*payload_data).agent_data,
-                    (*payload_data).deferrable, (*payload_data).last_ran_cpu,
+                    (*payload_data).deferrable > 0, (*payload_data).last_ran_cpu,
                     (*payload_data).wake_up_cpu, (*payload_data).waker_cpu);
             }
             c::MSG_TASK_NEW => {
@@ -88,16 +90,19 @@ pub fn parse_message<TransferIn: Send, TransferOut: Send, T: BentoScheduler<Tran
                 agent.cpu_not_idle((*payload_data).cpu, (*payload_data).next_pid);
             }
             c::MSG_TASK_SELECT_RQ => {
-                let payload_data = payload as *const c::ghost_msg_payload_select_task_rq;
-                agent.select_task_rq((*payload_data).pid, &mut *retval);
+                let payload_data = payload as *mut c::ghost_msg_payload_select_task_rq;
+                let cpu = agent.select_task_rq((*payload_data).pid);
+                (*payload_data).ret_cpu = cpu;
             }
             c::MSG_TASK_MIGRATE_RQ => {
                 let payload_data = payload as *const c::ghost_msg_payload_migrate_task_rq;
                 agent.migrate_task_rq((*payload_data).pid, (*payload_data).new_cpu);
             }
             c::MSG_BALANCE => {
-                let payload_data = payload as *const c::ghost_msg_payload_balance;
-                agent.balance((*payload_data).cpu);
+                let payload_data = payload as *mut c::ghost_msg_payload_balance;
+                let next_pid = agent.balance((*payload_data).cpu);
+                (*payload_data).do_move = next_pid.is_some();
+                (*payload_data).move_pid = next_pid.unwrap_or_default();
             }
             c::MSG_REREGISTER_PREPARE => {
                 let payload_data = payload as *mut c::ghost_msg_payload_rereg_prep;
@@ -199,9 +204,8 @@ pub trait BentoScheduler<TransferIn: Send, TransferOut: Send> {
     fn pick_next_task(
         &self,
         _cpu: i32,
-        ret: &mut i32
-    ) {
-        *ret = 0;
+    ) -> Option<u64> {
+        None
     }
 
     fn task_dead(&self, _pid: u64) {}
@@ -219,7 +223,7 @@ pub trait BentoScheduler<TransferIn: Send, TransferOut: Send> {
         &self,
         _pid: u64,
         _agent_data: u64,
-        _deferrable: i8,
+        _deferrable: bool,
         _last_run_cpu: i32,
         _wake_up_cpu: i32,
         _waker_cpu: i32
@@ -283,11 +287,11 @@ pub trait BentoScheduler<TransferIn: Send, TransferOut: Send> {
 
     fn cpu_not_idle(&self, _cpu: i32, _next_pid: u64) {}
 
-    fn select_task_rq(&self, _pid: u64, _retval: &mut i32) {}
+    fn select_task_rq(&self, _pid: u64) -> i32 { 0 }
     
     fn migrate_task_rq(&self, _pid: u64, _new_cpu: i32) {}
 
-    fn balance(&self, _cpu: i32) {}
+    fn balance(&self, _cpu: i32) -> Option<u64> { None }
 
     //fn bento_update_prepare(&mut self) -> Option<TransferOut> {
     fn reregister_prepare(&mut self) -> Option<TransferOut> {
