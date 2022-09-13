@@ -1,3 +1,5 @@
+pub mod ringbuffer;
+
 use alloc::boxed::Box;
 use libc::ENOSYS;
 
@@ -7,10 +9,13 @@ use bindings as c;
 use bindings::{register_ghost_agent,unregister_ghost_agent,reregister_ghost_agent};
 use kernel::raw;
 
+use self::ringbuffer::RingBuffer;
+
 pub const BENTO_KERNEL_VERSION: u32 = 1;
 pub const BENTO_KERNEL_MINOR_VERSION: u32 = 0;
 
-pub fn parse_message<TransferIn: Send, TransferOut: Send, T: BentoScheduler<TransferIn, TransferOut>>(
+pub fn parse_message<TransferIn: Send, TransferOut: Send, UserMessage: Send + Sync + Copy,
+    T: BentoScheduler<TransferIn, TransferOut, UserMessage>>(
 //pub extern "C" fn parse_message<T: BentoScheduler> (
     agent: &mut T,
     type_: i32,
@@ -118,6 +123,28 @@ pub fn parse_message<TransferIn: Send, TransferOut: Send, T: BentoScheduler<Tran
                 };
                 agent.reregister_init(data);
             }
+            c::MSG_MSG_SIZE => {
+                let payload_data = payload as *mut c::ghost_msg_payload_msg_size;
+                //let next_pid = agent.balance((*payload_data).cpu);
+                (*payload_data).msg_size = core::mem::size_of::<UserMessage>() as u32;
+                //(*payload_data).move_pid = next_pid.unwrap_or_default();
+            }
+            c::MSG_CREATE_QUEUE => {
+                let payload_data = payload as *const c::ghost_msg_payload_create_queue;
+                println!("q ptr {:?}", (*payload_data).q);
+                let q = unsafe { RingBuffer::from_raw((*payload_data).q) };
+                //let q = unsafe { &mut*((*payload_data).q as *mut RingBuffer<UserMessage>) };
+                agent.register_queue(q);
+            }
+            c::MSG_ENTER_QUEUE => {
+                let payload_data = payload as *const c::ghost_msg_payload_enter_queue;
+                agent.enter_queue((*payload_data).entries);
+            }
+            c::MSG_UNREGISTER_QUEUE => {
+                //let payload_data = payload as *const c::ghost_msg_payload_enter_queue;
+                // I'm like 60% sure this won't try to free the queue and will let linux do it.
+                agent.unregister_queue();
+            }
             _ => {
                 println!("Unsupported message type");
             }
@@ -130,7 +157,7 @@ pub fn parse_message<TransferIn: Send, TransferOut: Send, T: BentoScheduler<Tran
 /// This trait is derived from the Filesystem trait from the fuse Rust crate.
 ///
 /// This trait must be implemented to provide a Bento scheduler.
-pub trait BentoScheduler<TransferIn: Send, TransferOut: Send> {
+pub trait BentoScheduler<TransferIn: Send, TransferOut: Send, UserMessage: Send + Sync + Copy> {
     fn get_policy(&self) -> i32;
     /// Register the filesystem with Bento.
     ///
@@ -144,7 +171,7 @@ pub trait BentoScheduler<TransferIn: Send, TransferOut: Send> {
             register_ghost_agent(
                 self as *const Self as *const raw::c_void,
                 self.get_policy(),
-                parse_message::<TransferIn, TransferOut, Self> as *const raw::c_void
+                parse_message::<TransferIn, TransferOut, UserMessage, Self> as *const raw::c_void
             )
         };
     }
@@ -157,7 +184,7 @@ pub trait BentoScheduler<TransferIn: Send, TransferOut: Send> {
             reregister_ghost_agent(
                 self as *const Self as *const raw::c_void,
                 self.get_policy(),
-                parse_message::<TransferIn, TransferOut, Self> as *const raw::c_void
+                parse_message::<TransferIn, TransferOut, UserMessage, Self> as *const raw::c_void
             )
         };
     }
@@ -299,4 +326,10 @@ pub trait BentoScheduler<TransferIn: Send, TransferOut: Send> {
     }
 
     fn reregister_init(&mut self, Option<TransferIn>) {}
+
+    fn register_queue(&self, RingBuffer<UserMessage>) {}
+
+    fn enter_queue(&self, _entries: u32) {}
+
+    fn unregister_queue(&self) -> RingBuffer<UserMessage>;
 }

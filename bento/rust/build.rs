@@ -82,7 +82,8 @@ const INCLUDED_TYPES: &[&str] = &[
     "tcp_request_sock",
     "timer_list",
     "vfsmount",
-    "ghost_ioc_create_queue",
+    "bento_ioc_create_queue",
+    "ghost_ring_offsets",
     "fd",
     "ghost_queue",
     "ghost_agent_type",
@@ -105,6 +106,10 @@ const INCLUDED_TYPES: &[&str] = &[
     "ghost_msg_payload_balance",
     "ghost_msg_payload_rereg_prep",
     "ghost_msg_payload_rereg_init",
+    "ghost_msg_payload_msg_size",
+    "ghost_msg_payload_create_queue",
+    "ghost_msg_payload_enter_queue",
+    "ghost_msg_payload_unreg_queue",
 ];
 const INCLUDED_FUNCTIONS: &[&str] = &[
     "cdev_add",
