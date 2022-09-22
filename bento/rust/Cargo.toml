@@ -17,6 +17,7 @@ shlex = "0.1"
 [dependencies]
 datablock = { path = "../../datablock-rs/datablock" }
 hash32 = "0.1.1"
+postcard = "1.0.0"
 
 [dependencies.capnp]
 version = "0.13.3"

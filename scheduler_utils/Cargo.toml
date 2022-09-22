@@ -1,0 +1,9 @@
+[package]
+name = "scheduler_utils"
+version = "0.1.0"
+authors = ["Samantha Miller <sm237@cs.washington.edu>"]
+
+[dependencies]
+libc = "0.2.76"
+postcard = "1.0.0"
+serde = { version = "1.0.*", default-features = false }

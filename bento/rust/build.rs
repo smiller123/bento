@@ -186,6 +186,8 @@ const INCLUDED_FUNCTIONS: &[&str] = &[
     "reregister_ghost_agent",
     "unregister_ghost_agent",
     "ghost_run_pid_on",
+    "printk_deferred",
+    "file_write_deferred",
 ];
 const INCLUDED_VARS: &[&str] = &[
     "FMODE_READ",

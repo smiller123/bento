@@ -1,13 +1,21 @@
 /// Based on ringbuffer on Github https://github.com/NULLx76/ringbuffer
 
 extern crate alloc;
+extern crate serde;
+extern crate postcard;
 // We need vecs so depend on alloc
 use alloc::vec::Vec;
+use core::fmt::Debug;
 use core::iter::FromIterator;
 use core::mem;
 use core::mem::MaybeUninit;
 use core::slice;
 use kernel::raw;
+use bindings as c; 
+
+use serde::{Serialize, Deserialize};
+use core::convert::TryInto;
+//use postcard;
 
 pub struct BufferInner<T> {
     pub offset: u32,
@@ -19,10 +27,11 @@ pub struct BufferInner<T> {
 
 pub struct RingBuffer<T> {
 //    buf: Vec<MaybeUninit<T>>,
-    pub inner: *mut BufferInner<T>
+    pub inner: *mut BufferInner<T>,
+    pub policy: i32
 }
 
-impl<T: Copy> BufferInner<T> {
+impl<'a, T: Copy + Serialize + Deserialize<'a>> BufferInner<T> {
     fn len(&self) -> u32 {
         self.writeptr - self.readptr
     }
@@ -56,7 +65,7 @@ impl<T: Copy> BufferInner<T> {
     }
 }
 
-impl<T: Copy> RingBuffer<T> {
+impl<'a, T: Copy + Serialize + Deserialize<'a>> RingBuffer<T> {
     fn len(&self) -> u32 {
         unsafe {
             (*self.inner).len()
@@ -80,13 +89,32 @@ impl<T: Copy> RingBuffer<T> {
 
     pub fn dequeue(&mut self) -> Option<T> {
         unsafe {
-            (*self.inner).dequeue(self.inner)
+            let ret = (*self.inner).dequeue(self.inner);
+
+            // make this size more correct.
+            let mut buf = [0u8; 128];
+            postcard::to_slice(&ret, &mut buf);
+            let num1 = u128::from_be_bytes(buf[0..16].try_into().unwrap());
+            let num2 = u128::from_be_bytes(buf[16..32].try_into().unwrap());
+            let num3 = u128::from_be_bytes(buf[32..48].try_into().unwrap());
+            let num4 = u128::from_be_bytes(buf[48..64].try_into().unwrap());
+            let num5 = u128::from_be_bytes(buf[64..80].try_into().unwrap());
+            let num6 = u128::from_be_bytes(buf[80..96].try_into().unwrap());
+            let num7 = u128::from_be_bytes(buf[96..112].try_into().unwrap());
+            let num8 = u128::from_be_bytes(buf[112..128].try_into().unwrap());
+            let mut write_str = alloc::format!("dequeue: {} {} {} {} {} {} {} {}\n\0",
+                                               num1, num2, num3, num4, num5, num6,
+                                               num7, num8);
+            c::printk_deferred(write_str.as_ptr() as *const i8);
+            c::file_write_deferred(self.policy, write_str.as_mut_ptr() as *mut i8);
+            ret
         }
     }
 
-    pub unsafe fn from_raw(ptr: *mut raw::c_void) -> Self {
+    pub unsafe fn from_raw(ptr: *mut raw::c_void, policy: i32) -> Self {
         Self {
-            inner: ptr as *mut BufferInner<T>
+            inner: ptr as *mut BufferInner<T>,
+            policy: policy
         }
     }
 }
