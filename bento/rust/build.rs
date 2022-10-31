@@ -110,6 +110,7 @@ const INCLUDED_TYPES: &[&str] = &[
     "ghost_msg_payload_create_queue",
     "ghost_msg_payload_enter_queue",
     "ghost_msg_payload_unreg_queue",
+    "ghost_msg_payload_send_hint",
 ];
 const INCLUDED_FUNCTIONS: &[&str] = &[
     "cdev_add",

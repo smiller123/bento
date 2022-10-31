@@ -8,6 +8,7 @@ authors = ["Danyang Zhuo <danyangz@cs.washington.edu>",
 [features]
 default = []
 capnproto = [ "capnp" ]
+record = []
 
 [build-dependencies]
 bindgen = "*"

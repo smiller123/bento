@@ -14,6 +14,7 @@ use kernel::raw;
 use self::ringbuffer::RingBuffer;
 
 use core::fmt::Debug;
+use core::convert::TryInto;
 
 use serde::{Serialize, Deserialize};
 
@@ -41,145 +42,184 @@ pub fn parse_message<'a, TransferIn: Send, TransferOut: Send,
         match type_ as u32 {
             c::MSG_PNT => {
                 let payload_data = payload as *mut c::ghost_msg_payload_pnt;
-                let mut write_str = alloc::format!("pnt: {:?}\n\0", *payload_data);
-                c::printk_deferred(write_str.as_ptr() as *const i8);
-                c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                #[cfg(feature = "record")]
+                {
+                    let mut write_str = alloc::format!("pnt: {:?}\n\0", *payload_data);
+                    //c::printk_deferred(write_str.as_ptr() as *const i8);
+                    c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                }
                 let next_task = agent.pick_next_task((*payload_data).cpu);
                 (*payload_data).pick_task = next_task.is_some();
                 (*payload_data).ret_pid = next_task.unwrap_or_default();
-                let mut write_str = alloc::format!("pnt_ret: {} {:?}\n\0",
-                                                   (*payload_data).cpu, next_task);
-                c::printk_deferred(write_str.as_ptr() as *const i8);
-                c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                #[cfg(feature = "record")]
+                {
+                    let mut write_str = alloc::format!("pnt_ret: {} {:?}\n\0",
+                                                       (*payload_data).cpu, next_task);
+                    c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                }
             }
             c::MSG_TASK_DEAD => {
                 let payload_data = payload as *const c::ghost_msg_payload_task_dead;
-                let mut write_str = alloc::format!("dead: {:?}\n\0", *payload_data);
-                c::printk_deferred(write_str.as_ptr() as *const i8);
-                c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                #[cfg(feature = "record")]
+                {
+                    let mut write_str = alloc::format!("dead: {:?}\n\0", *payload_data);
+                    c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                }
                 agent.task_dead((*payload_data).pid);
             }
             c::MSG_TASK_BLOCKED => {
                 let payload_data = payload as *const c::ghost_msg_payload_task_blocked;
-                let mut write_str = alloc::format!("blocked: {:?}\n\0", *payload_data);
-                c::printk_deferred(write_str.as_ptr() as *const i8);
-                c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                #[cfg(feature = "record")]
+                {
+                    let mut write_str = alloc::format!("blocked: {:?}\n\0", *payload_data);
+                    c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                }
                 agent.task_blocked((*payload_data).pid, (*payload_data).runtime,
                     (*payload_data).cpu_seqnum,
                     (*payload_data).cpu, (*payload_data).from_switchto);
             }
             c::MSG_TASK_WAKEUP => {
                 let payload_data = payload as *const c::ghost_msg_payload_task_wakeup;
-                let mut write_str = alloc::format!("wakeup: {:?}\n\0", *payload_data);
-                c::printk_deferred(write_str.as_ptr() as *const i8);
-                c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                #[cfg(feature = "record")]
+                {
+                    let mut write_str = alloc::format!("wakeup: {:?}\n\0", *payload_data);
+                    c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                }
                 agent.task_wakeup((*payload_data).pid, (*payload_data).agent_data,
                     (*payload_data).deferrable > 0, (*payload_data).last_ran_cpu,
                     (*payload_data).wake_up_cpu, (*payload_data).waker_cpu);
             }
             c::MSG_TASK_NEW => {
                 let payload_data = payload as *const c::ghost_msg_payload_task_new;
-                let mut write_str = alloc::format!("new: {:?}\n\0", *payload_data);
-                c::printk_deferred(write_str.as_ptr() as *const i8);
-                c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                #[cfg(feature = "record")]
+                {
+                    let mut write_str = alloc::format!("new: {:?}\n\0", *payload_data);
+                    c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                }
                 agent.task_new((*payload_data).pid, (*payload_data).runtime, (*payload_data).runnable);
             }
             c::MSG_TASK_PREEMPT => {
                 let payload_data = payload as *const c::ghost_msg_payload_task_preempt;
-                let mut write_str = alloc::format!("preempt: {:?}\n\0", *payload_data);
-                c::printk_deferred(write_str.as_ptr() as *const i8);
-                c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                #[cfg(feature = "record")]
+                {
+                    let mut write_str = alloc::format!("preempt: {:?}\n\0", *payload_data);
+                    c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                }
                 agent.task_preempt((*payload_data).pid, (*payload_data).runtime,
                     (*payload_data).cpu_seqnum, (*payload_data).cpu,
                     (*payload_data).from_switchto, (*payload_data).was_latched);
             }
             c::MSG_TASK_YIELD => {
                 let payload_data = payload as *const c::ghost_msg_payload_task_yield;
-                let mut write_str = alloc::format!("yield: {:?}\n\0", *payload_data);
-                c::printk_deferred(write_str.as_ptr() as *const i8);
-                c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                #[cfg(feature = "record")]
+                {
+                    let mut write_str = alloc::format!("yield: {:?}\n\0", *payload_data);
+                    c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                }
                 agent.task_yield((*payload_data).pid, (*payload_data).runtime,
                     (*payload_data).cpu_seqnum, (*payload_data).cpu,
                     (*payload_data).from_switchto);
             }
             c::MSG_TASK_DEPARTED => {
                 let payload_data = payload as *const c::ghost_msg_payload_task_departed;
-                let mut write_str = alloc::format!("departed: {:?}\n\0", *payload_data);
-                c::printk_deferred(write_str.as_ptr() as *const i8);
-                c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                #[cfg(feature = "record")]
+                {
+                    let mut write_str = alloc::format!("departed: {:?}\n\0", *payload_data);
+                    c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                }
                 agent.task_departed((*payload_data).pid, (*payload_data).cpu_seqnum,
                     (*payload_data).cpu, (*payload_data).from_switchto,
                     (*payload_data).was_current);
             }
             c::MSG_TASK_SWITCHTO => {
                 let payload_data = payload as *const c::ghost_msg_payload_task_switchto;
-                let mut write_str = alloc::format!("switchto: {:?}\n\0", *payload_data);
-                c::printk_deferred(write_str.as_ptr() as *const i8);
-                c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                #[cfg(feature = "record")]
+                {
+                    let mut write_str = alloc::format!("switchto: {:?}\n\0", *payload_data);
+                    c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                }
                 agent.task_switchto((*payload_data).pid, (*payload_data).runtime,
                     (*payload_data).cpu_seqnum, (*payload_data).cpu);
             }
             c::MSG_TASK_AFFINITY_CHANGED => {
                 let payload_data = payload as *const c::ghost_msg_payload_task_affinity_changed;
-                let mut write_str = alloc::format!("affinity: {:?}\n\0", *payload_data);
-                c::printk_deferred(write_str.as_ptr() as *const i8);
-                c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                #[cfg(feature = "record")]
+                {
+                    let mut write_str = alloc::format!("affinity: {:?}\n\0", *payload_data);
+                    c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                }
                 agent.task_affinity_changed((*payload_data).pid);
             }
             c::MSG_TASK_LATCHED => {
                 let payload_data = payload as *const c::ghost_msg_payload_task_latched;
-                let mut write_str = alloc::format!("latched: {:?}\n\0", *payload_data);
-                c::printk_deferred(write_str.as_ptr() as *const i8);
-                c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                #[cfg(feature = "record")]
+                {
+                    let mut write_str = alloc::format!("latched: {:?}\n\0", *payload_data);
+                    c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                }
                 agent.task_latched((*payload_data).pid, (*payload_data).commit_time,
                     (*payload_data).cpu_seqnum, (*payload_data).cpu,
                     (*payload_data).latched_preempt);
             }
             c::MSG_CPU_TICK => {
                 let payload_data = payload as *const c::ghost_msg_payload_cpu_tick;
-                let mut write_str = alloc::format!("tick: {:?}\n\0", *payload_data);
-                c::printk_deferred(write_str.as_ptr() as *const i8);
-                c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
-                agent.cpu_tick((*payload_data).cpu);
+                #[cfg(feature = "record")]
+                {
+                    let mut write_str = alloc::format!("tick: {:?}\n\0", *payload_data);
+                    c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                }
+                agent.task_tick((*payload_data).cpu);
             }
             c::MSG_CPU_NOT_IDLE => {
                 let payload_data = payload as *const c::ghost_msg_payload_cpu_not_idle;
-                let mut write_str = alloc::format!("not_idle: {:?}\n\0", *payload_data);
-                c::printk_deferred(write_str.as_ptr() as *const i8);
-                c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                #[cfg(feature = "record")]
+                {
+                    let mut write_str = alloc::format!("not_idle: {:?}\n\0", *payload_data);
+                    c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                }
                 agent.cpu_not_idle((*payload_data).cpu, (*payload_data).next_pid);
             }
             c::MSG_TASK_SELECT_RQ => {
                 let payload_data = payload as *mut c::ghost_msg_payload_select_task_rq;
-                let mut write_str = alloc::format!("select_rq: {:?}\n\0", *payload_data);
-                c::printk_deferred(write_str.as_ptr() as *const i8);
-                c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                #[cfg(feature = "record")]
+                {
+                    let mut write_str = alloc::format!("select_rq: {:?}\n\0", *payload_data);
+                    c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                }
                 let cpu = agent.select_task_rq((*payload_data).pid);
                 (*payload_data).ret_cpu = cpu;
-                let mut write_str = alloc::format!("select_rq_ret: {} {}\n\0",
-                                                   (*payload_data).pid, cpu);
-                c::printk_deferred(write_str.as_ptr() as *const i8);
-                c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                #[cfg(feature = "record")]
+                {
+                    let mut write_str = alloc::format!("select_rq_ret: {} {}\n\0",
+                                                       (*payload_data).pid, cpu);
+                    c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                }
             }
             c::MSG_TASK_MIGRATE_RQ => {
                 let payload_data = payload as *const c::ghost_msg_payload_migrate_task_rq;
-                let mut write_str = alloc::format!("migrate_rq: {:?}\n\0", *payload_data);
-                c::printk_deferred(write_str.as_ptr() as *const i8);
-                c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                #[cfg(feature = "record")]
+                {
+                    let mut write_str = alloc::format!("migrate_rq: {:?}\n\0", *payload_data);
+                    c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                }
                 agent.migrate_task_rq((*payload_data).pid, (*payload_data).new_cpu);
             }
             c::MSG_BALANCE => {
                 let payload_data = payload as *mut c::ghost_msg_payload_balance;
-                let mut write_str = alloc::format!("balance: {:?}\n\0", *payload_data);
-                c::printk_deferred(write_str.as_ptr() as *const i8);
-                c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                #[cfg(feature = "record")]
+                {
+                    let mut write_str = alloc::format!("balance: {:?}\n\0", *payload_data);
+                    c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                }
                 let next_pid = agent.balance((*payload_data).cpu);
                 (*payload_data).do_move = next_pid.is_some();
                 (*payload_data).move_pid = next_pid.unwrap_or_default();
-                let mut write_str = alloc::format!("balance_ret: {} {:?}\n\0",
-                                                   (*payload_data).cpu, next_pid);
-                c::printk_deferred(write_str.as_ptr() as *const i8);
-                c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                #[cfg(feature = "record")]
+                {
+                    let mut write_str = alloc::format!("balance_ret: {} {:?}\n\0",
+                                                       (*payload_data).cpu, next_pid);
+                    c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                }
             }
             c::MSG_REREGISTER_PREPARE => {
                 let payload_data = payload as *mut c::ghost_msg_payload_rereg_prep;
@@ -205,34 +245,70 @@ pub fn parse_message<'a, TransferIn: Send, TransferOut: Send,
             }
             c::MSG_CREATE_QUEUE => {
                 let payload_data = payload as *const c::ghost_msg_payload_create_queue;
-                println!("q ptr {:?}", (*payload_data).q);
+                //println!("q ptr {:?}", (*payload_data).q);
                 let q = unsafe { RingBuffer::from_raw((*payload_data).q, agent.get_policy()) };
                 //let q = unsafe { &mut*((*payload_data).q as *mut RingBuffer<UserMessage>) };
-                let mut write_str = alloc::format!("create_queue\n\0");
-                c::printk_deferred(write_str.as_ptr() as *const i8);
-                c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                #[cfg(feature = "record")]
+                {
+                    let mut write_str = alloc::format!("create_queue\n\0");
+                    c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                }
                 agent.register_queue(q);
             }
             c::MSG_ENTER_QUEUE => {
                 let payload_data = payload as *const c::ghost_msg_payload_enter_queue;
-                let mut write_str = alloc::format!("enter_queue: {:?}\n\0", *payload_data);
-                c::printk_deferred(write_str.as_ptr() as *const i8);
-                c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                #[cfg(feature = "record")]
+                {
+                    let mut write_str = alloc::format!("enter_queue: {:?}\n\0", *payload_data);
+                    c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                }
                 agent.enter_queue((*payload_data).entries);
             }
             c::MSG_UNREGISTER_QUEUE => {
                 //let payload_data = payload as *const c::ghost_msg_payload_enter_queue;
                 // I'm like 60% sure this won't try to free the queue and will let linux do it.
-                let mut write_str = alloc::format!("unregister_queue\n\0");
-                c::printk_deferred(write_str.as_ptr() as *const i8);
-                c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                #[cfg(feature = "record")]
+                {
+                    let mut write_str = alloc::format!("unregister_queue\n\0");
+                    c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                }
                 agent.unregister_queue();
+            }
+            c::MSG_SEND_HINT => {
+                let payload_data = payload as *const c::ghost_msg_payload_send_hint;
+                let arg = (*payload_data).arg as *const UserMessage;
+                #[cfg(feature = "record")]
+                {
+                    print_hint(*arg, agent.get_policy());
+                }
+                //let mut write_str = alloc::format!("send_hint: {:?}\n\0", *arg);
+                //c::printk_deferred(write_str.as_ptr() as *const i8);
+                //c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                agent.parse_hint(*arg);
             }
             _ => {
                 println!("Unsupported message type");
             }
         }
     }
+}
+
+unsafe fn print_hint<T: Serialize>(arg: T, policy: i32) {
+            let mut buf = [0u8; 128];
+            postcard::to_slice(&arg, &mut buf);
+            let num1 = u128::from_be_bytes(buf[0..16].try_into().unwrap());
+            let num2 = u128::from_be_bytes(buf[16..32].try_into().unwrap());
+            let num3 = u128::from_be_bytes(buf[32..48].try_into().unwrap());
+            let num4 = u128::from_be_bytes(buf[48..64].try_into().unwrap());
+            let num5 = u128::from_be_bytes(buf[64..80].try_into().unwrap());
+            let num6 = u128::from_be_bytes(buf[80..96].try_into().unwrap());
+            let num7 = u128::from_be_bytes(buf[96..112].try_into().unwrap());
+            let num8 = u128::from_be_bytes(buf[112..128].try_into().unwrap());
+            let mut write_str = alloc::format!("dequeue2: {} {} {} {} {} {} {} {}\n\0",
+                                               num1, num2, num3, num4, num5, num6,
+                                               num7, num8);
+            c::printk_deferred(write_str.as_ptr() as *const i8);
+            c::file_write_deferred(policy, write_str.as_mut_ptr() as *mut i8);
 }
 
 /// BentoScheduler trait
@@ -411,7 +487,7 @@ pub trait BentoScheduler<'a, TransferIn: Send, TransferOut: Send, UserMessage: C
         _latched_preempt: i8
     ) {}
 
-    fn cpu_tick(&self, _cpu: i32) {}
+    fn task_tick(&self, _cpu: i32) {}
 
     fn cpu_not_idle(&self, _cpu: i32, _next_pid: u64) {}
 
@@ -433,4 +509,6 @@ pub trait BentoScheduler<'a, TransferIn: Send, TransferOut: Send, UserMessage: C
     fn enter_queue(&self, _entries: u32) {}
 
     fn unregister_queue(&self) -> RingBuffer<UserMessage>;
+
+    fn parse_hint(&self, hint: UserMessage) {}
 }
