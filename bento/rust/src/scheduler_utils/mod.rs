@@ -21,6 +21,22 @@ use serde::{Serialize, Deserialize};
 pub const BENTO_KERNEL_VERSION: u32 = 1;
 pub const BENTO_KERNEL_MINOR_VERSION: u32 = 0;
 
+#[derive(Clone, Copy, Default)]
+pub struct Schedulable {
+    pid: u64,
+    cpu: u32
+}
+
+impl Schedulable {
+    pub fn get_cpu(&self) -> u32 {
+        self.cpu
+    }
+
+    pub fn get_pid(&self) -> u64 {
+        self.pid
+    }
+}
+
 pub fn parse_message<'a, TransferIn: Send, TransferOut: Send,
     UserMessage: Copy + Serialize + Deserialize<'a>,
     T: BentoScheduler<'a, TransferIn, TransferOut, UserMessage>>(
@@ -49,13 +65,28 @@ pub fn parse_message<'a, TransferIn: Send, TransferOut: Send,
                     c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
                 }
                 let next_task = agent.pick_next_task((*payload_data).cpu);
-                (*payload_data).pick_task = next_task.is_some();
-                (*payload_data).ret_pid = next_task.unwrap_or_default();
-                #[cfg(feature = "record")]
-                {
+                if (next_task.is_none() ||
+                    next_task.unwrap().cpu == (*payload_data).cpu as u32 ||
+                    next_task.unwrap().cpu == u32::MAX) {
+                    (*payload_data).pick_task = next_task.is_some();
+                    (*payload_data).ret_pid = next_task.unwrap_or_default().get_pid();
+                    #[cfg(feature = "record")]
+                    {
                     let mut write_str = alloc::format!("pnt_ret: {} {:?}\n\0",
-                                                       (*payload_data).cpu, next_task);
-                    c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                                                           (*payload_data).cpu, next_task);
+                        c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                    }
+                } else {
+                    // The process can't be scheduled on this cpu
+
+                    let sched = next_task.unwrap();
+                    (*payload_data).pick_task = false;
+                    agent.pnt_err(sched);
+                    #[cfg(feature = "record")]
+                    {
+                        let mut write_str = alloc::format!("pnt_ret: Error\n\0");
+                        c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                    }
                 }
             }
             c::MSG_TASK_DEAD => {
@@ -74,9 +105,13 @@ pub fn parse_message<'a, TransferIn: Send, TransferOut: Send,
                     let mut write_str = alloc::format!("blocked: {:?}\n\0", *payload_data);
                     c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
                 }
+                let sched = Schedulable {
+                    cpu: (*payload_data).cpu as u32,
+                    pid: (*payload_data).pid,
+                };
                 agent.task_blocked((*payload_data).pid, (*payload_data).runtime,
                     (*payload_data).cpu_seqnum,
-                    (*payload_data).cpu, (*payload_data).from_switchto);
+                    (*payload_data).cpu, (*payload_data).from_switchto, sched);
             }
             c::MSG_TASK_WAKEUP => {
                 let payload_data = payload as *const c::ghost_msg_payload_task_wakeup;
@@ -85,9 +120,15 @@ pub fn parse_message<'a, TransferIn: Send, TransferOut: Send,
                     let mut write_str = alloc::format!("wakeup: {:?}\n\0", *payload_data);
                     c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
                 }
+                // Maybe it's ok to have this for other cpus?
+                let sched = Schedulable {
+                    cpu: (*payload_data).wake_up_cpu as u32,
+                    pid: (*payload_data).pid,
+                };
                 agent.task_wakeup((*payload_data).pid, (*payload_data).agent_data,
                     (*payload_data).deferrable > 0, (*payload_data).last_ran_cpu,
-                    (*payload_data).wake_up_cpu, (*payload_data).waker_cpu);
+                    (*payload_data).wake_up_cpu, (*payload_data).waker_cpu,
+                    sched);
             }
             c::MSG_TASK_NEW => {
                 let payload_data = payload as *const c::ghost_msg_payload_task_new;
@@ -96,7 +137,12 @@ pub fn parse_message<'a, TransferIn: Send, TransferOut: Send,
                     let mut write_str = alloc::format!("new: {:?}\n\0", *payload_data);
                     c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
                 }
-                agent.task_new((*payload_data).pid, (*payload_data).runtime, (*payload_data).runnable);
+                // Tasks moved onto the scheduler can be scheduled anywhere
+                let sched = Schedulable {
+                    pid: (*payload_data).pid,
+                    cpu: u32::MAX,
+                };
+                agent.task_new((*payload_data).pid, (*payload_data).runtime, (*payload_data).runnable, sched);
             }
             c::MSG_TASK_PREEMPT => {
                 let payload_data = payload as *const c::ghost_msg_payload_task_preempt;
@@ -105,9 +151,13 @@ pub fn parse_message<'a, TransferIn: Send, TransferOut: Send,
                     let mut write_str = alloc::format!("preempt: {:?}\n\0", *payload_data);
                     c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
                 }
+                let sched = Schedulable {
+                    cpu: (*payload_data).cpu as u32,
+                    pid: (*payload_data).pid,
+                };
                 agent.task_preempt((*payload_data).pid, (*payload_data).runtime,
                     (*payload_data).cpu_seqnum, (*payload_data).cpu,
-                    (*payload_data).from_switchto, (*payload_data).was_latched);
+                    (*payload_data).from_switchto, (*payload_data).was_latched, sched);
             }
             c::MSG_TASK_YIELD => {
                 let payload_data = payload as *const c::ghost_msg_payload_task_yield;
@@ -187,6 +237,11 @@ pub fn parse_message<'a, TransferIn: Send, TransferOut: Send,
                     c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
                 }
                 let cpu = agent.select_task_rq((*payload_data).pid);
+                let sched = Schedulable {
+                    cpu: cpu as u32,
+                    pid: (*payload_data).pid,
+                };
+                agent.selected_task_rq(sched);
                 (*payload_data).ret_cpu = cpu;
                 #[cfg(feature = "record")]
                 {
@@ -202,7 +257,12 @@ pub fn parse_message<'a, TransferIn: Send, TransferOut: Send,
                     let mut write_str = alloc::format!("migrate_rq: {:?}\n\0", *payload_data);
                     c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
                 }
-                agent.migrate_task_rq((*payload_data).pid, (*payload_data).new_cpu);
+                let sched = Schedulable {
+                    pid: (*payload_data).pid,
+                    cpu: (*payload_data).new_cpu as u32,
+                };
+                //agent.migrate_task_rq((*payload_data).pid, (*payload_data).new_cpu);
+                agent.migrate_task_rq((*payload_data).pid, sched);
             }
             c::MSG_BALANCE => {
                 let payload_data = payload as *mut c::ghost_msg_payload_balance;
@@ -408,9 +468,11 @@ pub trait BentoScheduler<'a, TransferIn: Send, TransferOut: Send, UserMessage: C
     fn pick_next_task(
         &self,
         _cpu: i32,
-    ) -> Option<u64> {
+    ) -> Option<Schedulable> {
         None
     }
+
+    fn pnt_err(&self, _sched: Schedulable) {}
 
     fn task_dead(&self, _pid: u64) {}
 
@@ -420,7 +482,8 @@ pub trait BentoScheduler<'a, TransferIn: Send, TransferOut: Send, UserMessage: C
         _runtime: u64,
         _cpu_seqnum: u64,
         _cpu: i32,
-        _from_switchto: i8
+        _from_switchto: i8,
+        _sched: Schedulable,
     ) {}
 
     fn task_wakeup(
@@ -430,7 +493,8 @@ pub trait BentoScheduler<'a, TransferIn: Send, TransferOut: Send, UserMessage: C
         _deferrable: bool,
         _last_run_cpu: i32,
         _wake_up_cpu: i32,
-        _waker_cpu: i32
+        _waker_cpu: i32,
+        _sched: Schedulable,
     ) {}
 
     fn task_new(
@@ -438,6 +502,7 @@ pub trait BentoScheduler<'a, TransferIn: Send, TransferOut: Send, UserMessage: C
         _pid: u64,
         _runtime: u64,
         _runnable: u16,
+        _sched: Schedulable,
     ) {}
 
     fn task_preempt(
@@ -447,7 +512,8 @@ pub trait BentoScheduler<'a, TransferIn: Send, TransferOut: Send, UserMessage: C
         _cpu_seqnum: u64,
         _cpu: i32,
         _from_switchto: i8,
-        _was_latched: i8
+        _was_latched: i8,
+        _sched: Schedulable,
     ) {}
 
     fn task_yield(
@@ -492,8 +558,11 @@ pub trait BentoScheduler<'a, TransferIn: Send, TransferOut: Send, UserMessage: C
     fn cpu_not_idle(&self, _cpu: i32, _next_pid: u64) {}
 
     fn select_task_rq(&self, _pid: u64) -> i32 { 0 }
+
+    fn selected_task_rq(&self, _sched: Schedulable) {}
     
-    fn migrate_task_rq(&self, _pid: u64, _new_cpu: i32) {}
+    //fn migrate_task_rq(&self, _pid: u64, _new_cpu: i32) {}
+    fn migrate_task_rq(&self, _pid: u64, _sched: Schedulable) {}
 
     fn balance(&self, _cpu: i32) -> Option<u64> { None }
 
