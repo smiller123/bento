@@ -143,6 +143,8 @@ impl<T: Copy + Serialize + DeserializeOwned> RingBuffer<T> {
         }
     }
 
+    pub fn enqueue(&mut self, val: T) {}
+
     pub fn from_file<P>(filename: P) -> Self where P: AsRef<Path> {
         let lines = read_lines(filename).unwrap();
         Self {

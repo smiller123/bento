@@ -19,6 +19,7 @@ shlex = "0.1"
 datablock = { path = "../../datablock-rs/datablock" }
 hash32 = "0.1.1"
 postcard = "1.0.0"
+spin = { version = "0.9.4", features = ["rwlock"] }
 
 [dependencies.capnp]
 version = "0.13.3"

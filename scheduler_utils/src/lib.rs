@@ -3,6 +3,7 @@ extern crate alloc;
 extern crate serde;
 
 pub mod ringbuffer;
+pub mod spin_rs;
 
 use serde::{Serialize, Deserialize};
 
@@ -20,6 +21,23 @@ use serde::{Serialize, Deserialize};
 use self::ringbuffer::RingBuffer;
 
 use core::fmt::Debug;
+
+#[derive(Clone, Copy, Default, Debug)]
+pub struct Schedulable {
+    pub pid: u64,
+    pub cpu: u32
+}
+
+impl Schedulable {
+    pub fn get_cpu(&self) -> u32 {
+        self.cpu
+    }
+
+    pub fn get_pid(&self) -> u64 {
+        self.pid
+    }
+}
+
 
 //pub const BENTO_KERNEL_VERSION: u32 = 1;
 //pub const BENTO_KERNEL_MINOR_VERSION: u32 = 0;
@@ -232,7 +250,8 @@ use core::fmt::Debug;
 /// This trait is derived from the Filesystem trait from the fuse Rust crate.
 ///
 /// This trait must be implemented to provide a Bento scheduler.
-pub trait BentoScheduler<'a, TransferIn: Send, TransferOut: Send, UserMessage: Copy + Serialize + Deserialize<'a>> {
+pub trait BentoScheduler<'a,  'b, TransferIn: Send, TransferOut: Send, UserMessage: Copy + Serialize + Deserialize<'a>,
+    RevMessage: Copy + Serialize + Deserialize<'a>> {
     fn get_policy(&self) -> i32;
     /// Register the filesystem with Bento.
     ///
@@ -280,9 +299,11 @@ pub trait BentoScheduler<'a, TransferIn: Send, TransferOut: Send, UserMessage: C
     fn pick_next_task(
         &self,
         _cpu: i32,
-    ) -> Option<u64> {
+    ) -> Option<Schedulable> {
         None
     }
+
+    fn pnt_err(&self, _sched: Schedulable) {}
 
     fn task_dead(&self, _pid: u64) {}
 
@@ -292,7 +313,8 @@ pub trait BentoScheduler<'a, TransferIn: Send, TransferOut: Send, UserMessage: C
         _runtime: u64,
         _cpu_seqnum: u64,
         _cpu: i32,
-        _from_switchto: i8
+        _from_switchto: i8,
+        _sched: Schedulable,
     ) {}
 
     fn task_wakeup(
@@ -302,7 +324,8 @@ pub trait BentoScheduler<'a, TransferIn: Send, TransferOut: Send, UserMessage: C
         _deferrable: bool,
         _last_run_cpu: i32,
         _wake_up_cpu: i32,
-        _waker_cpu: i32
+        _waker_cpu: i32,
+        _sched: Schedulable,
     ) {}
 
     fn task_new(
@@ -310,6 +333,7 @@ pub trait BentoScheduler<'a, TransferIn: Send, TransferOut: Send, UserMessage: C
         _pid: u64,
         _runtime: u64,
         _runnable: u16,
+        _sched: Schedulable,
     ) {}
 
     fn task_preempt(
@@ -319,7 +343,8 @@ pub trait BentoScheduler<'a, TransferIn: Send, TransferOut: Send, UserMessage: C
         _cpu_seqnum: u64,
         _cpu: i32,
         _from_switchto: i8,
-        _was_latched: i8
+        _was_latched: i8,
+        _sched: Schedulable,
     ) {}
 
     fn task_yield(
@@ -364,8 +389,10 @@ pub trait BentoScheduler<'a, TransferIn: Send, TransferOut: Send, UserMessage: C
     fn cpu_not_idle(&self, _cpu: i32, _next_pid: u64) {}
 
     fn select_task_rq(&self, _pid: u64) -> i32 { 0 }
+
+    fn selected_task_rq(&self, _sched: Schedulable) {}
     
-    fn migrate_task_rq(&self, _pid: u64, _new_cpu: i32) {}
+    fn migrate_task_rq(&self, _pid: u64, _new_cpu: Schedulable) {}
 
     fn balance(&self, _cpu: i32) -> Option<u64> { None }
 
@@ -377,7 +404,13 @@ pub trait BentoScheduler<'a, TransferIn: Send, TransferOut: Send, UserMessage: C
 
     fn register_queue(&self, RingBuffer<UserMessage>) {}
 
+    fn register_reverse_queue(&self, RingBuffer<RevMessage>) {}
+
     fn enter_queue(&self, _entries: u32) {}
 
     fn unregister_queue(&self) -> RingBuffer<UserMessage>;
+
+    fn unregister_rev_queue(&self) -> RingBuffer<RevMessage>;
+
+    fn parse_hint(&self, hint: UserMessage) {}
 }

@@ -388,6 +388,7 @@ extern "C" {
     pub fn rs_sock_orphan(sk: *mut bindings::sock);
     pub fn rs_sock_put(sk: *mut bindings::sock);
     pub fn current_flags() -> u32;
+    pub fn current_pid() -> u32;
     pub fn rs_local_bh_enable();
     pub fn rs_local_bh_disable();
     pub fn rs_bh_lock_sock(sk: *mut bindings::sock);

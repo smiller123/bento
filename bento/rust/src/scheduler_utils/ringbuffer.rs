@@ -63,6 +63,24 @@ impl<'a, T: Copy + Serialize + Deserialize<'a>> BufferInner<T> {
             unsafe { Some(res) }
         }
     }
+
+    fn enqueue(&mut self, ptr: *mut Self, val: T) {
+        //if self.is_empty() {
+        //    None
+        //} else {
+        let index = self.writeptr & (self.capacity - 1);
+        let start = (ptr as u64 + self.offset as u64) as *mut T;
+        println!("start {:?}", start);
+        let slice_buf = unsafe {
+            slice::from_raw_parts_mut(start, self.capacity as usize)
+        };
+        println!("index {}", index);
+        //let res = slice_buf[index as usize];
+        slice_buf[index as usize] = val;
+        self.writeptr += 1;
+        //unsafe { Some(res) }
+        //}
+    }
 }
 
 impl<'a, T: Copy + Serialize + Deserialize<'a>> RingBuffer<T> {
@@ -92,21 +110,51 @@ impl<'a, T: Copy + Serialize + Deserialize<'a>> RingBuffer<T> {
             let ret = (*self.inner).dequeue(self.inner);
 
             // make this size more correct.
-            let mut buf = [0u8; 128];
-            postcard::to_slice(&ret, &mut buf);
-            let num1 = u128::from_be_bytes(buf[0..16].try_into().unwrap());
-            let num2 = u128::from_be_bytes(buf[16..32].try_into().unwrap());
-            let num3 = u128::from_be_bytes(buf[32..48].try_into().unwrap());
-            let num4 = u128::from_be_bytes(buf[48..64].try_into().unwrap());
-            let num5 = u128::from_be_bytes(buf[64..80].try_into().unwrap());
-            let num6 = u128::from_be_bytes(buf[80..96].try_into().unwrap());
-            let num7 = u128::from_be_bytes(buf[96..112].try_into().unwrap());
-            let num8 = u128::from_be_bytes(buf[112..128].try_into().unwrap());
-            let mut write_str = alloc::format!("dequeue: {} {} {} {} {} {} {} {}\n\0",
-                                               num1, num2, num3, num4, num5, num6,
-                                               num7, num8);
-            c::printk_deferred(write_str.as_ptr() as *const i8);
-            c::file_write_deferred(self.policy, write_str.as_mut_ptr() as *mut i8);
+            #[cfg(feature = "record")]
+            {
+                let mut buf = [0u8; 128];
+                postcard::to_slice(&ret, &mut buf);
+                let num1 = u128::from_be_bytes(buf[0..16].try_into().unwrap());
+                let num2 = u128::from_be_bytes(buf[16..32].try_into().unwrap());
+                let num3 = u128::from_be_bytes(buf[32..48].try_into().unwrap());
+                let num4 = u128::from_be_bytes(buf[48..64].try_into().unwrap());
+                let num5 = u128::from_be_bytes(buf[64..80].try_into().unwrap());
+                let num6 = u128::from_be_bytes(buf[80..96].try_into().unwrap());
+                let num7 = u128::from_be_bytes(buf[96..112].try_into().unwrap());
+                let num8 = u128::from_be_bytes(buf[112..128].try_into().unwrap());
+                let mut write_str = alloc::format!("dequeue: {} {} {} {} {} {} {} {}\n\0",
+                                                   num1, num2, num3, num4, num5, num6,
+                                                   num7, num8);
+                //c::printk_deferred(write_str.as_ptr() as *const i8);
+                c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
+            }
+            ret
+        }
+    }
+
+    pub fn enqueue(&mut self, val: T) {
+        unsafe {
+            let ret = (*self.inner).enqueue(self.inner, val);
+
+            // make this size more correct.
+            #[cfg(feature = "record")]
+            {
+                let mut buf = [0u8; 128];
+                postcard::to_slice(&val, &mut buf);
+                let num1 = u128::from_be_bytes(buf[0..16].try_into().unwrap());
+                let num2 = u128::from_be_bytes(buf[16..32].try_into().unwrap());
+                let num3 = u128::from_be_bytes(buf[32..48].try_into().unwrap());
+                let num4 = u128::from_be_bytes(buf[48..64].try_into().unwrap());
+                let num5 = u128::from_be_bytes(buf[64..80].try_into().unwrap());
+                let num6 = u128::from_be_bytes(buf[80..96].try_into().unwrap());
+                let num7 = u128::from_be_bytes(buf[96..112].try_into().unwrap());
+                let num8 = u128::from_be_bytes(buf[112..128].try_into().unwrap());
+                let mut write_str = alloc::format!("enqueue: {} {} {} {} {} {} {} {}\n\0",
+                                                   num1, num2, num3, num4, num5, num6,
+                                                   num7, num8);
+                //c::printk_deferred(write_str.as_ptr() as *const i8);
+                c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
+            }
             ret
         }
     }

@@ -21,7 +21,7 @@ use serde::{Serialize, Deserialize};
 pub const BENTO_KERNEL_VERSION: u32 = 1;
 pub const BENTO_KERNEL_MINOR_VERSION: u32 = 0;
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Default, Debug)]
 pub struct Schedulable {
     pid: u64,
     cpu: u32
@@ -37,9 +37,10 @@ impl Schedulable {
     }
 }
 
-pub fn parse_message<'a, TransferIn: Send, TransferOut: Send,
+pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
     UserMessage: Copy + Serialize + Deserialize<'a>,
-    T: BentoScheduler<'a, TransferIn, TransferOut, UserMessage>>(
+    RevMessage: Copy + Serialize + Deserialize<'b>,
+    T: BentoScheduler<'a, 'b, TransferIn, TransferOut, UserMessage, RevMessage>>(
 //pub extern "C" fn parse_message<T: BentoScheduler> (
     agent: &mut T,
     type_: i32,
@@ -60,9 +61,12 @@ pub fn parse_message<'a, TransferIn: Send, TransferOut: Send,
                 let payload_data = payload as *mut c::ghost_msg_payload_pnt;
                 #[cfg(feature = "record")]
                 {
-                    let mut write_str = alloc::format!("pnt: {:?}\n\0", *payload_data);
+                    let pid = unsafe {
+                        ffi::current_pid()
+                    };
+                    let mut write_str = alloc::format!("pnt: {} {:?}\n\0", pid, *payload_data);
                     //c::printk_deferred(write_str.as_ptr() as *const i8);
-                    c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                    c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 let next_task = agent.pick_next_task((*payload_data).cpu);
                 if (next_task.is_none() ||
@@ -72,9 +76,12 @@ pub fn parse_message<'a, TransferIn: Send, TransferOut: Send,
                     (*payload_data).ret_pid = next_task.unwrap_or_default().get_pid();
                     #[cfg(feature = "record")]
                     {
-                    let mut write_str = alloc::format!("pnt_ret: {} {:?}\n\0",
-                                                           (*payload_data).cpu, next_task);
-                        c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                        let pid = unsafe {
+                            ffi::current_pid()
+                        };
+                        let mut write_str = alloc::format!("pnt_ret: {} {} {:?}\n\0",
+                                                           pid, (*payload_data).cpu, next_task);
+                        c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                     }
                 } else {
                     // The process can't be scheduled on this cpu
@@ -84,8 +91,12 @@ pub fn parse_message<'a, TransferIn: Send, TransferOut: Send,
                     agent.pnt_err(sched);
                     #[cfg(feature = "record")]
                     {
-                        let mut write_str = alloc::format!("pnt_ret: Error\n\0");
-                        c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                        let pid = unsafe {
+                            ffi::current_pid()
+                        };
+                        let mut write_str = alloc::format!("pnt_ret: {} {} {:?} Error\n\0",
+                                                           pid, (*payload_data).cpu, next_task);
+                        c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                     }
                 }
             }
@@ -93,8 +104,11 @@ pub fn parse_message<'a, TransferIn: Send, TransferOut: Send,
                 let payload_data = payload as *const c::ghost_msg_payload_task_dead;
                 #[cfg(feature = "record")]
                 {
-                    let mut write_str = alloc::format!("dead: {:?}\n\0", *payload_data);
-                    c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                    let pid = unsafe {
+                        ffi::current_pid()
+                    };
+                    let mut write_str = alloc::format!("dead: {} {:?}\n\0", pid, *payload_data);
+                    c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 agent.task_dead((*payload_data).pid);
             }
@@ -102,8 +116,11 @@ pub fn parse_message<'a, TransferIn: Send, TransferOut: Send,
                 let payload_data = payload as *const c::ghost_msg_payload_task_blocked;
                 #[cfg(feature = "record")]
                 {
-                    let mut write_str = alloc::format!("blocked: {:?}\n\0", *payload_data);
-                    c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                    let pid = unsafe {
+                        ffi::current_pid()
+                    };
+                    let mut write_str = alloc::format!("blocked: {} {:?}\n\0", pid, *payload_data);
+                    c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 let sched = Schedulable {
                     cpu: (*payload_data).cpu as u32,
@@ -117,8 +134,11 @@ pub fn parse_message<'a, TransferIn: Send, TransferOut: Send,
                 let payload_data = payload as *const c::ghost_msg_payload_task_wakeup;
                 #[cfg(feature = "record")]
                 {
-                    let mut write_str = alloc::format!("wakeup: {:?}\n\0", *payload_data);
-                    c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                    let pid = unsafe {
+                        ffi::current_pid()
+                    };
+                    let mut write_str = alloc::format!("wakeup: {} {:?}\n\0", pid, *payload_data);
+                    c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 // Maybe it's ok to have this for other cpus?
                 let sched = Schedulable {
@@ -134,8 +154,11 @@ pub fn parse_message<'a, TransferIn: Send, TransferOut: Send,
                 let payload_data = payload as *const c::ghost_msg_payload_task_new;
                 #[cfg(feature = "record")]
                 {
-                    let mut write_str = alloc::format!("new: {:?}\n\0", *payload_data);
-                    c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                    let pid = unsafe {
+                        ffi::current_pid()
+                    };
+                    let mut write_str = alloc::format!("new: {} {:?}\n\0", pid, *payload_data);
+                    c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 // Tasks moved onto the scheduler can be scheduled anywhere
                 let sched = Schedulable {
@@ -148,8 +171,11 @@ pub fn parse_message<'a, TransferIn: Send, TransferOut: Send,
                 let payload_data = payload as *const c::ghost_msg_payload_task_preempt;
                 #[cfg(feature = "record")]
                 {
-                    let mut write_str = alloc::format!("preempt: {:?}\n\0", *payload_data);
-                    c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                    let pid = unsafe {
+                        ffi::current_pid()
+                    };
+                    let mut write_str = alloc::format!("preempt: {} {:?}\n\0", pid, *payload_data);
+                    c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 let sched = Schedulable {
                     cpu: (*payload_data).cpu as u32,
@@ -163,8 +189,11 @@ pub fn parse_message<'a, TransferIn: Send, TransferOut: Send,
                 let payload_data = payload as *const c::ghost_msg_payload_task_yield;
                 #[cfg(feature = "record")]
                 {
-                    let mut write_str = alloc::format!("yield: {:?}\n\0", *payload_data);
-                    c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                    let pid = unsafe {
+                        ffi::current_pid()
+                    };
+                    let mut write_str = alloc::format!("yield: {} {:?}\n\0", pid, *payload_data);
+                    c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 agent.task_yield((*payload_data).pid, (*payload_data).runtime,
                     (*payload_data).cpu_seqnum, (*payload_data).cpu,
@@ -174,8 +203,11 @@ pub fn parse_message<'a, TransferIn: Send, TransferOut: Send,
                 let payload_data = payload as *const c::ghost_msg_payload_task_departed;
                 #[cfg(feature = "record")]
                 {
-                    let mut write_str = alloc::format!("departed: {:?}\n\0", *payload_data);
-                    c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                    let pid = unsafe {
+                        ffi::current_pid()
+                    };
+                    let mut write_str = alloc::format!("departed: {} {:?}\n\0", pid, *payload_data);
+                    c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 agent.task_departed((*payload_data).pid, (*payload_data).cpu_seqnum,
                     (*payload_data).cpu, (*payload_data).from_switchto,
@@ -185,8 +217,11 @@ pub fn parse_message<'a, TransferIn: Send, TransferOut: Send,
                 let payload_data = payload as *const c::ghost_msg_payload_task_switchto;
                 #[cfg(feature = "record")]
                 {
-                    let mut write_str = alloc::format!("switchto: {:?}\n\0", *payload_data);
-                    c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                    let pid = unsafe {
+                        ffi::current_pid()
+                    };
+                    let mut write_str = alloc::format!("switchto: {} {:?}\n\0", pid, *payload_data);
+                    c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 agent.task_switchto((*payload_data).pid, (*payload_data).runtime,
                     (*payload_data).cpu_seqnum, (*payload_data).cpu);
@@ -195,8 +230,11 @@ pub fn parse_message<'a, TransferIn: Send, TransferOut: Send,
                 let payload_data = payload as *const c::ghost_msg_payload_task_affinity_changed;
                 #[cfg(feature = "record")]
                 {
-                    let mut write_str = alloc::format!("affinity: {:?}\n\0", *payload_data);
-                    c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                    let pid = unsafe {
+                        ffi::current_pid()
+                    };
+                    let mut write_str = alloc::format!("affinity: {} {:?}\n\0", pid, *payload_data);
+                    c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 agent.task_affinity_changed((*payload_data).pid);
             }
@@ -204,8 +242,11 @@ pub fn parse_message<'a, TransferIn: Send, TransferOut: Send,
                 let payload_data = payload as *const c::ghost_msg_payload_task_latched;
                 #[cfg(feature = "record")]
                 {
-                    let mut write_str = alloc::format!("latched: {:?}\n\0", *payload_data);
-                    c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                    let pid = unsafe {
+                        ffi::current_pid()
+                    };
+                    let mut write_str = alloc::format!("latched: {} {:?}\n\0", pid, *payload_data);
+                    c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 agent.task_latched((*payload_data).pid, (*payload_data).commit_time,
                     (*payload_data).cpu_seqnum, (*payload_data).cpu,
@@ -215,8 +256,11 @@ pub fn parse_message<'a, TransferIn: Send, TransferOut: Send,
                 let payload_data = payload as *const c::ghost_msg_payload_cpu_tick;
                 #[cfg(feature = "record")]
                 {
-                    let mut write_str = alloc::format!("tick: {:?}\n\0", *payload_data);
-                    c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                    let pid = unsafe {
+                        ffi::current_pid()
+                    };
+                    let mut write_str = alloc::format!("tick: {} {:?}\n\0", pid, *payload_data);
+                    c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 agent.task_tick((*payload_data).cpu);
             }
@@ -224,8 +268,11 @@ pub fn parse_message<'a, TransferIn: Send, TransferOut: Send,
                 let payload_data = payload as *const c::ghost_msg_payload_cpu_not_idle;
                 #[cfg(feature = "record")]
                 {
-                    let mut write_str = alloc::format!("not_idle: {:?}\n\0", *payload_data);
-                    c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                    let pid = unsafe {
+                        ffi::current_pid()
+                    };
+                    let mut write_str = alloc::format!("not_idle: {} {:?}\n\0", pid, *payload_data);
+                    c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 agent.cpu_not_idle((*payload_data).cpu, (*payload_data).next_pid);
             }
@@ -233,29 +280,38 @@ pub fn parse_message<'a, TransferIn: Send, TransferOut: Send,
                 let payload_data = payload as *mut c::ghost_msg_payload_select_task_rq;
                 #[cfg(feature = "record")]
                 {
-                    let mut write_str = alloc::format!("select_rq: {:?}\n\0", *payload_data);
-                    c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                    let pid = unsafe {
+                        ffi::current_pid()
+                    };
+                    let mut write_str = alloc::format!("select_rq: {} {:?}\n\0", pid, *payload_data);
+                    c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 let cpu = agent.select_task_rq((*payload_data).pid);
                 let sched = Schedulable {
                     cpu: cpu as u32,
                     pid: (*payload_data).pid,
                 };
-                agent.selected_task_rq(sched);
-                (*payload_data).ret_cpu = cpu;
                 #[cfg(feature = "record")]
                 {
-                    let mut write_str = alloc::format!("select_rq_ret: {} {}\n\0",
-                                                       (*payload_data).pid, cpu);
-                    c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                    let pid = unsafe {
+                        ffi::current_pid()
+                    };
+                    let mut write_str = alloc::format!("select_rq_ret: {} {} {}\n\0",
+                                                       pid, (*payload_data).pid, cpu);
+                    c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
+                agent.selected_task_rq(sched);
+                (*payload_data).ret_cpu = cpu;
             }
             c::MSG_TASK_MIGRATE_RQ => {
                 let payload_data = payload as *const c::ghost_msg_payload_migrate_task_rq;
                 #[cfg(feature = "record")]
                 {
-                    let mut write_str = alloc::format!("migrate_rq: {:?}\n\0", *payload_data);
-                    c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                    let pid = unsafe {
+                        ffi::current_pid()
+                    };
+                    let mut write_str = alloc::format!("migrate_rq: {} {:?}\n\0", pid, *payload_data);
+                    c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 let sched = Schedulable {
                     pid: (*payload_data).pid,
@@ -268,17 +324,23 @@ pub fn parse_message<'a, TransferIn: Send, TransferOut: Send,
                 let payload_data = payload as *mut c::ghost_msg_payload_balance;
                 #[cfg(feature = "record")]
                 {
-                    let mut write_str = alloc::format!("balance: {:?}\n\0", *payload_data);
-                    c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                    let pid = unsafe {
+                        ffi::current_pid()
+                    };
+                    let mut write_str = alloc::format!("balance: {} {:?}\n\0", pid, *payload_data);
+                    c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 let next_pid = agent.balance((*payload_data).cpu);
                 (*payload_data).do_move = next_pid.is_some();
                 (*payload_data).move_pid = next_pid.unwrap_or_default();
                 #[cfg(feature = "record")]
                 {
-                    let mut write_str = alloc::format!("balance_ret: {} {:?}\n\0",
-                                                       (*payload_data).cpu, next_pid);
-                    c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                    let pid = unsafe {
+                        ffi::current_pid()
+                    };
+                    let mut write_str = alloc::format!("balance_ret: {} {} {:?}\n\0",
+                                                       pid, (*payload_data).cpu, next_pid);
+                    c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
             }
             c::MSG_REREGISTER_PREPARE => {
@@ -303,6 +365,12 @@ pub fn parse_message<'a, TransferIn: Send, TransferOut: Send,
                 (*payload_data).msg_size = core::mem::size_of::<UserMessage>() as u32;
                 //(*payload_data).move_pid = next_pid.unwrap_or_default();
             }
+            c::MSG_REV_MSG_SIZE => {
+                let payload_data = payload as *mut c::ghost_msg_payload_msg_size;
+                //let next_pid = agent.balance((*payload_data).cpu);
+                (*payload_data).msg_size = core::mem::size_of::<RevMessage>() as u32;
+                //(*payload_data).move_pid = next_pid.unwrap_or_default();
+            }
             c::MSG_CREATE_QUEUE => {
                 let payload_data = payload as *const c::ghost_msg_payload_create_queue;
                 //println!("q ptr {:?}", (*payload_data).q);
@@ -310,17 +378,38 @@ pub fn parse_message<'a, TransferIn: Send, TransferOut: Send,
                 //let q = unsafe { &mut*((*payload_data).q as *mut RingBuffer<UserMessage>) };
                 #[cfg(feature = "record")]
                 {
-                    let mut write_str = alloc::format!("create_queue\n\0");
-                    c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                    let pid = unsafe {
+                        ffi::current_pid()
+                    };
+                    let mut write_str = alloc::format!("create_queue {}\n\0", pid);
+                    c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 agent.register_queue(q);
+            }
+            c::MSG_CREATE_REV_QUEUE => {
+                let payload_data = payload as *const c::ghost_msg_payload_create_queue;
+                //println!("q ptr {:?}", (*payload_data).q);
+                let q = unsafe { RingBuffer::from_raw((*payload_data).q, agent.get_policy()) };
+                //let q = unsafe { &mut*((*payload_data).q as *mut RingBuffer<UserMessage>) };
+                #[cfg(feature = "record")]
+                {
+                    let pid = unsafe {
+                        ffi::current_pid()
+                    };
+                    let mut write_str = alloc::format!("create_reverse_queue {}\n\0", pid);
+                    c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
+                }
+                agent.register_reverse_queue(q);
             }
             c::MSG_ENTER_QUEUE => {
                 let payload_data = payload as *const c::ghost_msg_payload_enter_queue;
                 #[cfg(feature = "record")]
                 {
-                    let mut write_str = alloc::format!("enter_queue: {:?}\n\0", *payload_data);
-                    c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                    let pid = unsafe {
+                        ffi::current_pid()
+                    };
+                    let mut write_str = alloc::format!("enter_queue: {} {:?}\n\0", pid, *payload_data);
+                    c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 agent.enter_queue((*payload_data).entries);
             }
@@ -329,10 +418,26 @@ pub fn parse_message<'a, TransferIn: Send, TransferOut: Send,
                 // I'm like 60% sure this won't try to free the queue and will let linux do it.
                 #[cfg(feature = "record")]
                 {
-                    let mut write_str = alloc::format!("unregister_queue\n\0");
-                    c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                    let pid = unsafe {
+                        ffi::current_pid()
+                    };
+                    let mut write_str = alloc::format!("unregister_queue {}\n\0", pid);
+                    c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 agent.unregister_queue();
+            }
+            c::MSG_UNREGISTER_REV_QUEUE => {
+                //let payload_data = payload as *const c::ghost_msg_payload_enter_queue;
+                // I'm like 60% sure this won't try to free the queue and will let linux do it.
+                #[cfg(feature = "record")]
+                {
+                    let pid = unsafe {
+                        ffi::current_pid()
+                    };
+                    let mut write_str = alloc::format!("unregister_reverse_queue {}\n\0", pid);
+                    c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
+                }
+                agent.unregister_rev_queue();
             }
             c::MSG_SEND_HINT => {
                 let payload_data = payload as *const c::ghost_msg_payload_send_hint;
@@ -343,7 +448,7 @@ pub fn parse_message<'a, TransferIn: Send, TransferOut: Send,
                 }
                 //let mut write_str = alloc::format!("send_hint: {:?}\n\0", *arg);
                 //c::printk_deferred(write_str.as_ptr() as *const i8);
-                //c::file_write_deferred(agent.get_policy(), write_str.as_mut_ptr() as *mut i8);
+                //c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 agent.parse_hint(*arg);
             }
             _ => {
@@ -354,6 +459,9 @@ pub fn parse_message<'a, TransferIn: Send, TransferOut: Send,
 }
 
 unsafe fn print_hint<T: Serialize>(arg: T, policy: i32) {
+            let pid = unsafe {
+                ffi::current_pid()
+            };
             let mut buf = [0u8; 128];
             postcard::to_slice(&arg, &mut buf);
             let num1 = u128::from_be_bytes(buf[0..16].try_into().unwrap());
@@ -364,11 +472,11 @@ unsafe fn print_hint<T: Serialize>(arg: T, policy: i32) {
             let num6 = u128::from_be_bytes(buf[80..96].try_into().unwrap());
             let num7 = u128::from_be_bytes(buf[96..112].try_into().unwrap());
             let num8 = u128::from_be_bytes(buf[112..128].try_into().unwrap());
-            let mut write_str = alloc::format!("dequeue2: {} {} {} {} {} {} {} {}\n\0",
-                                               num1, num2, num3, num4, num5, num6,
+            let mut write_str = alloc::format!("dequeue2: {} {} {} {} {} {} {} {} {}\n\0",
+                                               pid, num1, num2, num3, num4, num5, num6,
                                                num7, num8);
             c::printk_deferred(write_str.as_ptr() as *const i8);
-            c::file_write_deferred(policy, write_str.as_mut_ptr() as *mut i8);
+            c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
 }
 
 /// BentoScheduler trait
@@ -376,7 +484,8 @@ unsafe fn print_hint<T: Serialize>(arg: T, policy: i32) {
 /// This trait is derived from the Filesystem trait from the fuse Rust crate.
 ///
 /// This trait must be implemented to provide a Bento scheduler.
-pub trait BentoScheduler<'a, TransferIn: Send, TransferOut: Send, UserMessage: Copy + Serialize + Deserialize<'a>> {
+pub trait BentoScheduler<'a, 'b, TransferIn: Send, TransferOut: Send, UserMessage: Copy + Serialize + Deserialize<'a>,
+    RevMessage: Copy + Serialize + Deserialize<'b>> {
     fn get_policy(&self) -> i32;
     /// Register the filesystem with Bento.
     ///
@@ -405,10 +514,10 @@ pub trait BentoScheduler<'a, TransferIn: Send, TransferOut: Send, UserMessage: C
             let ret = register_ghost_agent(
                 self as *const Self as *const raw::c_void,
                 self.get_policy(),
-                parse_message::<TransferIn, TransferOut, UserMessage, Self> as *const raw::c_void
+                parse_message::<TransferIn, TransferOut, UserMessage, RevMessage, Self> as *const raw::c_void
             );
             let mut write_str = alloc::format!("loading\n\0");
-            c::file_write_deferred(self.get_policy(), write_str.as_mut_ptr() as *mut i8);
+            c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
             return ret;
         }
     }
@@ -421,7 +530,7 @@ pub trait BentoScheduler<'a, TransferIn: Send, TransferOut: Send, UserMessage: C
             reregister_ghost_agent(
                 self as *const Self as *const raw::c_void,
                 self.get_policy(),
-                parse_message::<TransferIn, TransferOut, UserMessage, Self> as *const raw::c_void
+                parse_message::<TransferIn, TransferOut, UserMessage, RevMessage, Self> as *const raw::c_void
             )
         };
     }
@@ -575,9 +684,13 @@ pub trait BentoScheduler<'a, TransferIn: Send, TransferOut: Send, UserMessage: C
 
     fn register_queue(&self, RingBuffer<UserMessage>) {}
 
+    fn register_reverse_queue(&self, RingBuffer<RevMessage>) {}
+
     fn enter_queue(&self, _entries: u32) {}
 
     fn unregister_queue(&self) -> RingBuffer<UserMessage>;
+
+    fn unregister_rev_queue(&self) -> RingBuffer<RevMessage>;
 
     fn parse_hint(&self, hint: UserMessage) {}
 }

@@ -85,6 +85,11 @@ current_flags(void) {
 	return current->flags;
 }
 
+unsigned int
+current_pid(void) {
+	return pid_nr(get_task_pid(current, PIDTYPE_PID));
+}
+
 void
 rs_dump_super_block(struct super_block* sb) {
     printk(KERN_INFO "s_blocksize = %lx\n", sb->s_blocksize);

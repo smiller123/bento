@@ -7,3 +7,4 @@ authors = ["Samantha Miller <sm237@cs.washington.edu>"]
 libc = "0.2.76"
 postcard = "1.0.0"
 serde = { version = "1.0.*", default-features = false }
+spin = { version = "0.9.4", features = ["rwlock"] }

@@ -20,6 +20,7 @@
 
 extern crate alloc;
 extern crate serde;
+extern crate spin;
 
 #[cfg(feature = "capnproto")]
 extern crate capnp;
@@ -36,6 +37,7 @@ pub mod libc;
 pub mod scheduler_utils;
 pub mod std;
 pub mod time;
+pub mod spin_rs;
 
 extern crate datablock;
 extern crate hash32;
