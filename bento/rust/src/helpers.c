@@ -796,3 +796,8 @@ struct fd rs_fdget(unsigned int fd) {
 //int rs_register_ghost_agent(struct ghost_agent_type * agent) {
 //	return register_ghost_agent(agent);
 //}
+
+void rs_hrtick_start(int cpu, u64 delay) {
+	hrtick_start_cpu(cpu, delay);
+	return;
+}

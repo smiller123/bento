@@ -189,6 +189,8 @@ const INCLUDED_FUNCTIONS: &[&str] = &[
     "ghost_run_pid_on",
     "printk_deferred",
     "file_write_deferred",
+    "hrtick_start_cpu",
+    "resched_cpu_no_lock",
 ];
 const INCLUDED_VARS: &[&str] = &[
     "FMODE_READ",

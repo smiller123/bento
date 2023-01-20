@@ -1,4 +1,5 @@
 pub mod ringbuffer;
+pub mod hrtick;
 
 use alloc::boxed::Box;
 use libc::ENOSYS;
@@ -262,7 +263,7 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                     let mut write_str = alloc::format!("tick: {} {:?}\n\0", pid, *payload_data);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
-                agent.task_tick((*payload_data).cpu);
+                agent.task_tick((*payload_data).cpu, (*payload_data).queued != 0);
             }
             c::MSG_CPU_NOT_IDLE => {
                 let payload_data = payload as *const c::ghost_msg_payload_cpu_not_idle;
@@ -662,7 +663,7 @@ pub trait BentoScheduler<'a, 'b, TransferIn: Send, TransferOut: Send, UserMessag
         _latched_preempt: i8
     ) {}
 
-    fn task_tick(&self, _cpu: i32) {}
+    fn task_tick(&self, _cpu: i32, _queued: bool) {}
 
     fn cpu_not_idle(&self, _cpu: i32, _next_pid: u64) {}
 
