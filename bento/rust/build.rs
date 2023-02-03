@@ -97,6 +97,7 @@ const INCLUDED_TYPES: &[&str] = &[
     "ghost_msg_payload_task_departed",
     "ghost_msg_payload_task_switchto",
     "ghost_msg_payload_task_affinity_changed",
+    "ghost_msg_payload_task_prio_changed",
     "ghost_msg_payload_task_latched",
     "ghost_msg_payload_cpu_tick",
     "ghost_msg_payload_timer",

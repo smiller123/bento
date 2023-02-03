@@ -1,5 +1,6 @@
 pub mod ringbuffer;
 pub mod hrtick;
+pub mod sched_core;
 
 use alloc::boxed::Box;
 use libc::ENOSYS;
@@ -19,6 +20,10 @@ use core::convert::TryInto;
 
 use serde::{Serialize, Deserialize};
 
+use kernel::time::Timespec64;
+use kernel::time::getnstimeofday64_rs;
+use kernel::time::diff_ns;
+
 pub const BENTO_KERNEL_VERSION: u32 = 1;
 pub const BENTO_KERNEL_MINOR_VERSION: u32 = 0;
 
@@ -36,6 +41,43 @@ impl Schedulable {
     pub fn get_pid(&self) -> u64 {
         self.pid
     }
+}
+
+static REPORT: core::sync::atomic::AtomicI64 = core::sync::atomic::AtomicI64::new(0);
+
+pub fn outer_pnt<'a, 'b, TransferIn: Send, TransferOut: Send,
+    UserMessage: Copy + Serialize + Deserialize<'a>,
+    RevMessage: Copy + Serialize + Deserialize<'b>,
+    T: BentoScheduler<'a, 'b, TransferIn, TransferOut, UserMessage, RevMessage>>(
+//pub extern "C" fn parse_message<T: BentoScheduler> (
+    agent: &mut T,
+    cpu: i32,
+    retval: *mut i32)
+{
+    //let mut start = Timespec64::new();
+    //let mut end = Timespec64::new();
+    //let mut step1 = Timespec64::new();
+    //getnstimeofday64_rs(&mut start);
+    let next_task = agent.pick_next_task(cpu);
+    //getnstimeofday64_rs(&mut step1);
+    if let Some(sched) = next_task {
+        unsafe {
+        *retval = sched.get_pid() as i32;
+        }
+    } else {
+        unsafe {
+        *retval = -1;
+        }
+    }
+    //getnstimeofday64_rs(&mut end);
+    //let should_report = REPORT.load(core::sync::atomic::Ordering::Relaxed);
+    //if (should_report % 10000 == 0) {
+    //    let diff1 = diff_ns(&step1, &start);
+    //    let diff2 = diff_ns(&end, &step1);
+    //    println!("pnt took {}, {}", diff1, diff2);
+    //}
+    //REPORT.store(should_report + 1, core::sync::atomic::Ordering::SeqCst);
+    return;
 }
 
 pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
@@ -59,6 +101,11 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
         //};
         match type_ as u32 {
             c::MSG_PNT => {
+                //let mut start = Timespec64::new();
+                //let mut end = Timespec64::new();
+                //let mut step1 = Timespec64::new();
+                //let mut step2 = Timespec64::new();
+                //getnstimeofday64_rs(&mut start);
                 let payload_data = payload as *mut c::ghost_msg_payload_pnt;
                 #[cfg(feature = "record")]
                 {
@@ -69,7 +116,9 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                     //c::printk_deferred(write_str.as_ptr() as *const i8);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
+                //getnstimeofday64_rs(&mut step1);
                 let next_task = agent.pick_next_task((*payload_data).cpu);
+                //getnstimeofday64_rs(&mut step2);
                 if (next_task.is_none() ||
                     next_task.unwrap().cpu == (*payload_data).cpu as u32 ||
                     next_task.unwrap().cpu == u32::MAX) {
@@ -100,6 +149,15 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                         c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                     }
                 }
+                //getnstimeofday64_rs(&mut end);
+                //let should_report = REPORT.load(core::sync::atomic::Ordering::Relaxed);
+                //if (should_report % 10000 == 0) {
+                //    let diff1 = diff_ns(&step1, &start);
+                //    let diff2 = diff_ns(&step2, &step1);
+                //    let diff3 = diff_ns(&end, &step2);
+                //    println!("pnt took {}, {}, {}, {}", diff1, diff2, diff3, should_report);
+                //}
+                //REPORT.store(should_report + 1, core::sync::atomic::Ordering::SeqCst);
             }
             c::MSG_TASK_DEAD => {
                 let payload_data = payload as *const c::ghost_msg_payload_task_dead;
@@ -166,7 +224,8 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                     pid: (*payload_data).pid,
                     cpu: u32::MAX,
                 };
-                agent.task_new((*payload_data).pid, (*payload_data).runtime, (*payload_data).runnable, sched);
+                agent.task_new((*payload_data).pid, (*payload_data).runtime,
+                    (*payload_data).runnable, (*payload_data).prio, sched);
             }
             c::MSG_TASK_PREEMPT => {
                 let payload_data = payload as *const c::ghost_msg_payload_task_preempt;
@@ -252,6 +311,19 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                 agent.task_latched((*payload_data).pid, (*payload_data).commit_time,
                     (*payload_data).cpu_seqnum, (*payload_data).cpu,
                     (*payload_data).latched_preempt);
+            }
+            c::MSG_TASK_PRIO_CHANGED => {
+                let payload_data = payload as *const c::ghost_msg_payload_task_prio_changed;
+                #[cfg(feature = "record")]
+                {
+                    let pid = unsafe {
+                        ffi::current_pid()
+                    };
+                    let mut write_str = alloc::format!("prio_changed: {} {:?}\n\0", pid, *payload_data);
+                    c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
+                }
+                // Tasks moved onto the scheduler can be scheduled anywhere
+                agent.task_prio_changed((*payload_data).pid, (*payload_data).prio);
             }
             c::MSG_CPU_TICK => {
                 let payload_data = payload as *const c::ghost_msg_payload_cpu_tick;
@@ -515,10 +587,11 @@ pub trait BentoScheduler<'a, 'b, TransferIn: Send, TransferOut: Send, UserMessag
             let ret = register_ghost_agent(
                 self as *const Self as *const raw::c_void,
                 self.get_policy(),
-                parse_message::<TransferIn, TransferOut, UserMessage, RevMessage, Self> as *const raw::c_void
+                parse_message::<TransferIn, TransferOut, UserMessage, RevMessage, Self> as *const raw::c_void,
+                outer_pnt::<TransferIn, TransferOut, UserMessage, RevMessage, Self> as *const raw::c_void
             );
-            let mut write_str = alloc::format!("loading\n\0");
-            c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
+            //let mut write_str = alloc::format!("loading\n\0");
+            //c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
             return ret;
         }
     }
@@ -612,6 +685,7 @@ pub trait BentoScheduler<'a, 'b, TransferIn: Send, TransferOut: Send, UserMessag
         _pid: u64,
         _runtime: u64,
         _runnable: u16,
+        _prio: i32,
         _sched: Schedulable,
     ) {}
 
@@ -661,6 +735,12 @@ pub trait BentoScheduler<'a, 'b, TransferIn: Send, TransferOut: Send, UserMessag
         _cpu_seqnum: u64,
         _cpu: i32,
         _latched_preempt: i8
+    ) {}
+
+    fn task_prio_changed(
+        &self,
+        _pid: u64,
+        _prio: i32,
     ) {}
 
     fn task_tick(&self, _cpu: i32, _queued: bool) {}
