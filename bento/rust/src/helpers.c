@@ -339,17 +339,17 @@ void rs_local_bh_disable(void) {
 	local_bh_disable();
 }
 
-void rs_bh_lock_sock(struct sock *sk) {
-	bh_lock_sock(sk);
-}
-
-void rs_bh_lock_sock_nested(struct sock *sk) {
-	bh_lock_sock_nested(sk);
-}
-
-void rs_bh_unlock_sock(struct sock *sk) {
-	bh_unlock_sock(sk);
-}
+//void rs_bh_lock_sock(struct sock *sk) {
+//	bh_lock_sock(sk);
+//}
+//
+//void rs_bh_lock_sock_nested(struct sock *sk) {
+//	bh_lock_sock_nested(sk);
+//}
+//
+//void rs_bh_unlock_sock(struct sock *sk) {
+//	bh_unlock_sock(sk);
+//}
 
 void rs_inc_orphan(struct sock *sk) {
 	percpu_counter_inc(sk->sk_prot->orphan_count);
@@ -538,13 +538,13 @@ __sum16 rs_csum_tcpudp_magic(__be32 saddr, __be32 daddr,
 	return csum_tcpudp_magic(saddr, daddr, len, proto, sum);
 }
 
-void rs_rcu_read_lock_bh(void) {
-	rcu_read_lock_bh();
-}
-
-void rs_rcu_read_unlock_bh(void) {
-	rcu_read_unlock_bh();
-}
+//void rs_rcu_read_lock_bh(void) {
+//	rcu_read_lock_bh();
+//}
+//
+//void rs_rcu_read_unlock_bh(void) {
+//	rcu_read_unlock_bh();
+//}
 
 __be16 rs_cpu_to_be16(short i) {
 	return cpu_to_be16(i);
@@ -631,13 +631,13 @@ void *rs___skb_pull(struct sk_buff *skb, unsigned int len) {
 	return __skb_pull(skb, len);
 }
 
-void rs_rcu_read_lock(void) {
-	rcu_read_lock();
-}
-
-void rs_rcu_read_unlock(void) {
-	rcu_read_unlock();
-}
+//void rs_rcu_read_lock(void) {
+//	rcu_read_lock();
+//}
+//
+//void rs_rcu_read_unlock(void) {
+//	rcu_read_unlock();
+//}
 
 __wsum rs_inet_compute_pseudo(struct sk_buff *skb, int proto)
 {

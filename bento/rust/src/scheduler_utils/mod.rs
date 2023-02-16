@@ -99,6 +99,17 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
         //let ret = unsafe {
         //    c::kernel_write(file, write_str.as_ptr() as *const raw::c_void, write_str.as_bytes().len(), &mut write_ptr as *mut i64)
         //};
+    //let should_report = REPORT.load(core::sync::atomic::Ordering::Relaxed);
+    //if (should_report % 10000 == 0) {
+    ////    let diff1 = diff_ns(&step1, &start);
+    ////    let diff2 = diff_ns(&end, &step1);
+    ////    println!("pnt took {}, {}", diff1, diff2);
+    //    println!("got call {}", type_);
+    //}
+    //REPORT.store(should_report + 1, core::sync::atomic::Ordering::SeqCst);
+        if type_ != 131 && type_ != 65 && type_ != 66 && type_ != 74 && type_ != 132 && type_ != 128 && type_ != 67 && type_ != 68 && type_ != 76 && type_ != 72 && type_ != 75 {
+        println!("got msg {}", type_);
+        }
         match type_ as u32 {
             c::MSG_PNT => {
                 //let mut start = Timespec64::new();
@@ -255,9 +266,13 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                     let mut write_str = alloc::format!("yield: {} {:?}\n\0", pid, *payload_data);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
+                let sched = Schedulable {
+                    cpu: (*payload_data).cpu as u32,
+                    pid: (*payload_data).pid,
+                };
                 agent.task_yield((*payload_data).pid, (*payload_data).runtime,
                     (*payload_data).cpu_seqnum, (*payload_data).cpu,
-                    (*payload_data).from_switchto);
+                    (*payload_data).from_switchto, sched);
             }
             c::MSG_TASK_DEPARTED => {
                 let payload_data = payload as *const c::ghost_msg_payload_task_departed;
@@ -296,7 +311,7 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                     let mut write_str = alloc::format!("affinity: {} {:?}\n\0", pid, *payload_data);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
-                agent.task_affinity_changed((*payload_data).pid);
+                agent.task_affinity_changed((*payload_data).pid, (*payload_data).cpumask);
             }
             c::MSG_TASK_LATCHED => {
                 let payload_data = payload as *const c::ghost_msg_payload_task_latched;
@@ -587,8 +602,7 @@ pub trait BentoScheduler<'a, 'b, TransferIn: Send, TransferOut: Send, UserMessag
             let ret = register_ghost_agent(
                 self as *const Self as *const raw::c_void,
                 self.get_policy(),
-                parse_message::<TransferIn, TransferOut, UserMessage, RevMessage, Self> as *const raw::c_void,
-                outer_pnt::<TransferIn, TransferOut, UserMessage, RevMessage, Self> as *const raw::c_void
+                parse_message::<TransferIn, TransferOut, UserMessage, RevMessage, Self> as *const raw::c_void
             );
             //let mut write_str = alloc::format!("loading\n\0");
             //c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
@@ -706,7 +720,8 @@ pub trait BentoScheduler<'a, 'b, TransferIn: Send, TransferOut: Send, UserMessag
         _runtime: u64,
         _cpu_seqnum: u64,
         _cpu: i32,
-        _from_switchto: i8
+        _from_switchto: i8,
+        _sched: Schedulable,
     ) {}
 
     fn task_departed(
@@ -726,7 +741,7 @@ pub trait BentoScheduler<'a, 'b, TransferIn: Send, TransferOut: Send, UserMessag
         _cpu: i32,
     ) {}
 
-    fn task_affinity_changed(&self, _pid: u64) {}
+    fn task_affinity_changed(&self, _pid: u64, _cpumask: u64) {}
 
     fn task_latched(
         &self,
