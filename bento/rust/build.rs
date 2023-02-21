@@ -192,6 +192,7 @@ const INCLUDED_FUNCTIONS: &[&str] = &[
     "file_write_deferred",
     "hrtick_start_cpu",
     "resched_cpu_no_lock",
+    "cpu_clock_task",
 ];
 const INCLUDED_VARS: &[&str] = &[
     "FMODE_READ",
