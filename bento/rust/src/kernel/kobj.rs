@@ -24,6 +24,8 @@ def_kernel_obj_type!(RsSuperBlock);
 def_kernel_obj_type!(BufferHead);
 // /// A wrapper around the kernel `semaphore` type.
 def_kernel_obj_type!(RsRwSemaphore);
+// /// A wrapper around the kernel `rwlock_t` type.
+def_kernel_obj_type!(RsRwLock);
 // /// A wrapper around the kernel `wait_queue_head` type.
 def_kernel_obj_type!(RsWaitQueueHead);
 // /// A wrapper around the kernel `block_device` type.
@@ -58,6 +60,12 @@ def_kobj_immut_op!(RsRwSemaphore, down_write_trylock, down_write_trylock, i32);
 def_kobj_immut_op!(RsRwSemaphore, down_read_trylock, down_read_trylock, i32);
 def_kobj_immut_op!(RsRwSemaphore, up_write, up_write, ());
 def_kobj_op!(RsRwSemaphore, put, rs_put_semaphore, ());
+
+def_kobj_immut_op!(RsRwLock, read_lock, rs_read_lock, ());
+def_kobj_immut_op!(RsRwLock, read_unlock, rs_read_unlock, ());
+def_kobj_immut_op!(RsRwLock, write_lock, rs_write_lock, ());
+def_kobj_immut_op!(RsRwLock, write_unlock, rs_write_unlock, ());
+def_kobj_op!(RsRwLock, put, rs_put_rwlock, ());
 
 def_kobj_immut_op!(RsWaitQueueHead, wake_up, rs_wake_up, ());
 def_kobj_immut_op!(RsWaitQueueHead, wake_up_all, rs_wake_up_all, ());

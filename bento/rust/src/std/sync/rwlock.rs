@@ -49,7 +49,8 @@ use crate::std::sys_common::poison::{LockResult, TryLockError, TryLockResult};
 /// } // write lock is dropped here
 /// ```
 pub struct RwLock<T: ?Sized> {
-    lock: UnsafeCell<Option<RsRwSemaphore>>,
+    //lock: UnsafeCell<Option<RsRwSemaphore>>,
+    lock: UnsafeCell<Option<RsRwLock>>,
     data: UnsafeCell<T>,
 }
 
@@ -91,7 +92,7 @@ impl<T> RwLock<T> {
     /// ```
     pub fn new(user_data: T) -> RwLock<T> {
         RwLock {
-            lock: UnsafeCell::new(get_semaphore()),
+            lock: UnsafeCell::new(get_rwlock()),
             data: UnsafeCell::new(user_data),
         }
     }
@@ -125,7 +126,8 @@ impl<T: ?Sized> RwLock<T> {
     #[inline]
     pub fn read(&self) -> LockResult<RwLockReadGuard<'_, T>> {
         unsafe {
-            let _ = down_read(&*self.lock.get());
+            //let _ = down_read(&*self.lock.get());
+            let _ = read_lock(&*self.lock.get());
         }
         Ok(RwLockReadGuard {
             lock: self,
@@ -151,17 +153,17 @@ impl<T: ?Sized> RwLock<T> {
     ///     // The lock is dropped
     /// }
     /// ```
-    #[inline]
-    pub fn try_read(&self) -> TryLockResult<RwLockReadGuard<'_, T>> {
-        let write_ret = unsafe { down_read_trylock(&*self.lock.get()) };
-        if write_ret == Ok(1) {
-            return Ok(RwLockReadGuard {
-                lock: self,
-            });
-        } else {
-            return Err(TryLockError::WouldBlock);
-        }
-    }
+    //#[inline]
+    //pub fn try_read(&self) -> TryLockResult<RwLockReadGuard<'_, T>> {
+    //    let write_ret = unsafe { down_read_trylock(&*self.lock.get()) };
+    //    if write_ret == Ok(1) {
+    //        return Ok(RwLockReadGuard {
+    //            lock: self,
+    //        });
+    //    } else {
+    //        return Err(TryLockError::WouldBlock);
+    //    }
+    //}
 
     /// Lock this semaphore with exclusive write access, blocking the current
     /// thread until it can be acquired.
@@ -187,7 +189,8 @@ impl<T: ?Sized> RwLock<T> {
     #[inline]
     pub fn write(&self) -> LockResult<RwLockWriteGuard<'_, T>> {
         unsafe {
-            let _ = down_write(&*self.lock.get());
+            //let _ = down_write(&*self.lock.get());
+            let _ = write_lock(&*self.lock.get());
         }
         Ok(RwLockWriteGuard {
             lock: self,
@@ -213,17 +216,17 @@ impl<T: ?Sized> RwLock<T> {
     ///     // The lock is dropped
     /// }
     /// ```
-    #[inline]
-    pub fn try_write(&self) -> TryLockResult<RwLockWriteGuard<'_, T>> {
-        let write_ret = unsafe { down_write_trylock(&*self.lock.get()) };
-        if write_ret == Ok(1) {
-            return Ok(RwLockWriteGuard {
-                lock: self,
-            });
-        } else {
-            return Err(TryLockError::WouldBlock);
-        }
-    }
+    //#[inline]
+    //pub fn try_write(&self) -> TryLockResult<RwLockWriteGuard<'_, T>> {
+    //    let write_ret = unsafe { down_write_trylock(&*self.lock.get()) };
+    //    if write_ret == Ok(1) {
+    //        return Ok(RwLockWriteGuard {
+    //            lock: self,
+    //        });
+    //    } else {
+    //        return Err(TryLockError::WouldBlock);
+    //    }
+    //}
 
     /// Returns a mutable reference to the underlying data.
     ///
@@ -271,7 +274,8 @@ impl<T: ?Sized> DerefMut for RwLockWriteGuard<'_, T> {
 impl<T: ?Sized> Drop for RwLockReadGuard<'_,T> {
     fn drop(&mut self) {
         unsafe {
-            let _ = up_read(&*self.lock.lock.get());
+            //let _ = up_read(&*self.lock.lock.get());
+            let _ = read_unlock(&*self.lock.lock.get());
         }
     }
 }
@@ -279,7 +283,8 @@ impl<T: ?Sized> Drop for RwLockReadGuard<'_,T> {
 impl<T: ?Sized> Drop for RwLockWriteGuard<'_, T> {
     fn drop(&mut self) {
         unsafe {
-            let _ = up_write(&*self.lock.lock.get());
+            //let _ = up_write(&*self.lock.lock.get());
+            let _ = write_unlock(&*self.lock.lock.get());
         }
     }
 }

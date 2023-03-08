@@ -75,3 +75,54 @@ pub fn up_write(semaphore: &Option<RsRwSemaphore>) -> Result<(), i32> {
     }
     Ok(())
 }
+
+pub fn get_rwlock() -> Option<RsRwLock> {
+    let lock;
+    unsafe {
+        lock = rs_get_rwlock();
+    }
+    if lock.is_null() {
+        return None;
+    } else {
+        unsafe {
+            return Some(RsRwLock::from_raw(lock as *const c_void));
+        }
+    }
+}
+
+pub fn put_rwlock(rwlock: Option<RsRwLock>) -> Result<(), i32> {
+    if let Some(lock) = rwlock {
+        unsafe {
+            rs_put_rwlock(lock.get_raw());
+        }
+    }
+    Ok(())
+}
+
+pub fn read_lock(rwlock: &Option<RsRwLock>) -> Result<(), i32> {
+    if let Some(lock) = rwlock {
+        lock.read_lock();
+    }
+    Ok(())
+}
+
+pub fn read_unlock(rwlock: &Option<RsRwLock>) -> Result<(), i32> {
+    if let Some(lock) = rwlock {
+        lock.read_unlock();
+    }
+    Ok(())
+}
+
+pub fn write_lock(rwlock: &Option<RsRwLock>) -> Result<(), i32> {
+    if let Some(lock) = rwlock {
+        lock.write_lock();
+    }
+    Ok(())
+}
+
+pub fn write_unlock(rwlock: &Option<RsRwLock>) -> Result<(), i32> {
+    if let Some(lock) = rwlock {
+        lock.write_unlock();
+    }
+    Ok(())
+}

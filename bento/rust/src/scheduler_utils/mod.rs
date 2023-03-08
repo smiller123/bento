@@ -1,6 +1,7 @@
 pub mod ringbuffer;
 pub mod hrtick;
 pub mod sched_core;
+pub mod rbtree;
 
 use alloc::boxed::Box;
 use libc::ENOSYS;
@@ -107,9 +108,9 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
     //    println!("got call {}", type_);
     //}
     //REPORT.store(should_report + 1, core::sync::atomic::Ordering::SeqCst);
-        if type_ != 131 && type_ != 65 && type_ != 66 && type_ != 74 && type_ != 132 && type_ != 128 && type_ != 67 && type_ != 68 && type_ != 76 && type_ != 72 && type_ != 75 {
-        println!("got msg {}", type_);
-        }
+        //if type_ != 131 && type_ != 65 && type_ != 66 && type_ != 74 && type_ != 132 && type_ != 128 && type_ != 67 && type_ != 68 && type_ != 76 && type_ != 72 && type_ != 75 {
+        //println!("got msg {}", type_);
+        //}
         match type_ as u32 {
             c::MSG_PNT => {
                 //let mut start = Timespec64::new();
@@ -149,7 +150,7 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
 
                     let sched = next_task.unwrap();
                     (*payload_data).pick_task = false;
-                    agent.pnt_err(sched);
+                    agent.pnt_err(sched.get_cpu() as i32, sched.get_pid(), 2, Some(sched));
                     #[cfg(feature = "record")]
                     {
                         let pid = unsafe {
@@ -170,6 +171,32 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                 //}
                 //REPORT.store(should_report + 1, core::sync::atomic::Ordering::SeqCst);
             }
+            c::MSG_PNT_ERR => {
+                let payload_data = payload as *mut c::ghost_msg_payload_pnt_err;
+                #[cfg(feature = "record")]
+                {
+                    let pid = unsafe {
+                        ffi::current_pid()
+                    };
+                    let mut write_str = alloc::format!("pnt_err: {} {:?}\n\0", pid, *payload_data);
+                    //c::printk_deferred(write_str.as_ptr() as *const i8);
+                    c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
+                }
+                agent.pnt_err((*payload_data).cpu, (*payload_data).pid, (*payload_data).err, None);
+            }
+            c::MSG_BALANCE_ERR => {
+                let payload_data = payload as *mut c::ghost_msg_payload_balance_err;
+                #[cfg(feature = "record")]
+                {
+                    let pid = unsafe {
+                        ffi::current_pid()
+                    };
+                    let mut write_str = alloc::format!("balance_err: {} {:?}\n\0", pid, *payload_data);
+                    //c::printk_deferred(write_str.as_ptr() as *const i8);
+                    c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
+                }
+                agent.balance_err((*payload_data).cpu, (*payload_data).pid, (*payload_data).err, None);
+            }
             c::MSG_TASK_DEAD => {
                 let payload_data = payload as *const c::ghost_msg_payload_task_dead;
                 #[cfg(feature = "record")]
@@ -178,6 +205,18 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                         ffi::current_pid()
                     };
                     let mut write_str = alloc::format!("dead: {} {:?}\n\0", pid, *payload_data);
+                    c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
+                }
+                agent.task_dead((*payload_data).pid);
+            }
+            c::MSG_TASK_DEPARTED => {
+                let payload_data = payload as *const c::ghost_msg_payload_task_departed;
+                #[cfg(feature = "record")]
+                {
+                    let pid = unsafe {
+                        ffi::current_pid()
+                    };
+                    let mut write_str = alloc::format!("departed: {} {:?}\n\0", pid, *payload_data);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 agent.task_dead((*payload_data).pid);
@@ -231,9 +270,14 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 // Tasks moved onto the scheduler can be scheduled anywhere
+                let cpu = if (*payload_data).wake_up_cpu == -1 {
+                    u32::MAX
+                } else {
+                    (*payload_data).wake_up_cpu as u32
+                };
                 let sched = Schedulable {
                     pid: (*payload_data).pid,
-                    cpu: u32::MAX,
+                    cpu: cpu,
                 };
                 agent.task_new((*payload_data).pid, (*payload_data).runtime,
                     (*payload_data).runnable, (*payload_data).prio, sched);
@@ -374,7 +418,7 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                     let mut write_str = alloc::format!("select_rq: {} {:?}\n\0", pid, *payload_data);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
-                let cpu = agent.select_task_rq((*payload_data).pid);
+                let cpu = agent.select_task_rq((*payload_data).pid, (*payload_data).waker_cpu, (*payload_data).prev_cpu);
                 let sched = Schedulable {
                     cpu: cpu as u32,
                     pid: (*payload_data).pid,
@@ -669,7 +713,21 @@ pub trait BentoScheduler<'a, 'b, TransferIn: Send, TransferOut: Send, UserMessag
         None
     }
 
-    fn pnt_err(&self, _sched: Schedulable) {}
+    fn pnt_err(
+        &self,
+        _cpu: i32,
+        _pid: u64,
+        _err: i32,
+        _sched: Option<Schedulable>
+    ) {}
+
+    fn balance_err(
+        &self,
+        _cpu: i32,
+        _pid: u64,
+        _err: i32,
+        _sched: Option<Schedulable>
+    ) {}
 
     fn task_dead(&self, _pid: u64) {}
 
@@ -762,7 +820,7 @@ pub trait BentoScheduler<'a, 'b, TransferIn: Send, TransferOut: Send, UserMessag
 
     fn cpu_not_idle(&self, _cpu: i32, _next_pid: u64) {}
 
-    fn select_task_rq(&self, _pid: u64) -> i32 { 0 }
+    fn select_task_rq(&self, _pid: u64, _waker_cpu: i32, _prev_cpu: i32) -> i32 { 0 }
 
     fn selected_task_rq(&self, _sched: Schedulable) {}
     

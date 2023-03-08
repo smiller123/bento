@@ -92,6 +92,8 @@ const INCLUDED_TYPES: &[&str] = &[
     "ghost_msg_payload_task_blocked",
     "ghost_msg_payload_task_preempt",
     "ghost_msg_payload_pnt",
+    "ghost_msg_payload_pnt_err",
+    "ghost_msg_payload_balance_err",
     "ghost_msg_payload_task_dead",
     "ghost_msg_payload_task_yield",
     "ghost_msg_payload_task_departed",

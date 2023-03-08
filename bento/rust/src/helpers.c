@@ -182,8 +182,34 @@ struct rw_semaphore* rs_get_semaphore(void) {
 	return sem;
 }
 
+rwlock_t* rs_get_rwlock(void) {
+	rwlock_t* lock = kmalloc(sizeof(rwlock_t), GFP_KERNEL);
+	rwlock_init(lock);
+	return lock;
+}
+
 void rs_put_semaphore(struct rw_semaphore *sem) {
 	kfree(sem);
+}
+
+void rs_put_rwlock(rwlock_t *lock) {
+	kfree(lock);
+}
+
+void rs_read_lock(rwlock_t *lock) {
+	read_lock(lock);
+}
+
+void rs_read_unlock(rwlock_t *lock) {
+	read_unlock(lock);
+}
+
+void rs_write_lock(rwlock_t *lock) {
+	write_lock(lock);
+}
+
+void rs_write_unlock(rwlock_t *lock) {
+	write_unlock(lock);
 }
 
 void rs_ndelay(unsigned long x) {

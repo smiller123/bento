@@ -266,6 +266,12 @@ extern "C" {
     pub fn down_write_trylock(sem: *const raw::c_void) -> i32;
     pub fn down_read_trylock(sem: *const raw::c_void) -> i32;
     pub fn up_write(sem: *const raw::c_void);
+    pub fn rs_get_rwlock() -> *mut raw::c_void;
+    pub fn rs_put_rwlock(sem: *const raw::c_void);
+    pub fn rs_read_lock(sem: *const raw::c_void);
+    pub fn rs_read_unlock(sem: *const raw::c_void);
+    pub fn rs_write_lock(sem: *const raw::c_void);
+    pub fn rs_write_unlock(sem: *const raw::c_void);
 
     // journal
     pub fn rs_jbd2_journal_init_dev(bdev: *const raw::c_void, fs_dev: *const raw::c_void, 
