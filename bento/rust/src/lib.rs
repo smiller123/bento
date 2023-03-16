@@ -16,6 +16,7 @@
 #![feature(alloc_layout_extra)]
 #![feature(panic_info_message)]
 #![feature(rustc_private)]
+#![feature(let_chains)]
 #![no_std]
 
 extern crate alloc;
