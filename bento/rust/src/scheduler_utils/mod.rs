@@ -536,7 +536,7 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                 //(*payload_data).move_pid = next_pid.unwrap_or_default();
             }
             c::MSG_CREATE_QUEUE => {
-                let payload_data = payload as *const c::ghost_msg_payload_create_queue;
+                let payload_data = payload as *mut c::ghost_msg_payload_create_queue;
                 //println!("q ptr {:?}", (*payload_data).q);
                 let q = unsafe { RingBuffer::from_raw((*payload_data).q, agent.get_policy()) };
                 //let q = unsafe { &mut*((*payload_data).q as *mut RingBuffer<UserMessage>) };
@@ -548,10 +548,11 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                     let mut write_str = alloc::format!("create_queue {}\n\0", pid);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
-                agent.register_queue(q);
+                let id = agent.register_queue(q);
+                (*payload_data).id = id;
             }
             c::MSG_CREATE_REV_QUEUE => {
-                let payload_data = payload as *const c::ghost_msg_payload_create_queue;
+                let payload_data = payload as *mut c::ghost_msg_payload_create_queue;
                 //println!("q ptr {:?}", (*payload_data).q);
                 let q = unsafe { RingBuffer::from_raw((*payload_data).q, agent.get_policy()) };
                 //let q = unsafe { &mut*((*payload_data).q as *mut RingBuffer<UserMessage>) };
@@ -563,7 +564,8 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                     let mut write_str = alloc::format!("create_reverse_queue {}\n\0", pid);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
-                agent.register_reverse_queue(q);
+                let id = agent.register_reverse_queue(q);
+                (*payload_data).id = id;
             }
             c::MSG_ENTER_QUEUE => {
                 let payload_data = payload as *const c::ghost_msg_payload_enter_queue;
@@ -575,11 +577,12 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                     let mut write_str = alloc::format!("enter_queue: {} {:?}\n\0", pid, *payload_data);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
-                agent.enter_queue((*payload_data).entries);
+                agent.enter_queue((*payload_data).id, (*payload_data).entries);
             }
             c::MSG_UNREGISTER_QUEUE => {
                 //let payload_data = payload as *const c::ghost_msg_payload_enter_queue;
                 // I'm like 60% sure this won't try to free the queue and will let linux do it.
+                let payload_data = payload as *const c::ghost_msg_payload_unreg_queue;
                 #[cfg(feature = "record")]
                 {
                     let pid = unsafe {
@@ -588,11 +591,12 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                     let mut write_str = alloc::format!("unregister_queue {}\n\0", pid);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
-                agent.unregister_queue();
+                agent.unregister_queue((*payload_data).id);
             }
             c::MSG_UNREGISTER_REV_QUEUE => {
                 //let payload_data = payload as *const c::ghost_msg_payload_enter_queue;
                 // I'm like 60% sure this won't try to free the queue and will let linux do it.
+                let payload_data = payload as *const c::ghost_msg_payload_unreg_queue;
                 #[cfg(feature = "record")]
                 {
                     let pid = unsafe {
@@ -601,7 +605,7 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                     let mut write_str = alloc::format!("unregister_reverse_queue {}\n\0", pid);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
-                agent.unregister_rev_queue();
+                agent.unregister_rev_queue((*payload_data).id);
             }
             c::MSG_SEND_HINT => {
                 let payload_data = payload as *const c::ghost_msg_payload_send_hint;
@@ -876,15 +880,15 @@ pub trait BentoScheduler<'a, 'b, TransferIn: Send, TransferOut: Send, UserMessag
 
     fn reregister_init(&mut self, Option<TransferIn>) {}
 
-    fn register_queue(&self, RingBuffer<UserMessage>) {}
+    fn register_queue(&self, RingBuffer<UserMessage>) -> i32;
 
-    fn register_reverse_queue(&self, RingBuffer<RevMessage>) {}
+    fn register_reverse_queue(&self, RingBuffer<RevMessage>) -> i32;
 
-    fn enter_queue(&self, _entries: u32) {}
+    fn enter_queue(&self, id: i32, _entries: u32) {}
 
-    fn unregister_queue(&self) -> RingBuffer<UserMessage>;
+    fn unregister_queue(&self, id: i32) -> RingBuffer<UserMessage>;
 
-    fn unregister_rev_queue(&self) -> RingBuffer<RevMessage>;
+    fn unregister_rev_queue(&self, id: i32) -> RingBuffer<RevMessage>;
 
     fn parse_hint(&self, hint: UserMessage) {}
 }
