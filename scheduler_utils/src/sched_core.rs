@@ -1,8 +1,4 @@
-use bindings;
-
-use core::marker::PhantomData;
-
-use scheduler_utils::RQLockGuard;
+use ::RQLockGuard;
 
 pub static SCHED_PRIO_TO_WEIGHT: [u32; 40] =
     [88761, 71755, 56483, 46273, 36291,
@@ -26,7 +22,4 @@ pub static SCHED_PRIO_TO_WMULT: [u32; 40] = [
 ];
 
 pub fn resched_cpu(cpu: i32, guard: &RQLockGuard) {
-    unsafe {
-        bindings::resched_cpu_no_lock(cpu);
-    }
 }

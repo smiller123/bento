@@ -17,7 +17,8 @@ use serde::{Serialize, Deserialize};
 use core::convert::TryInto;
 //use postcard;
 
-pub struct BufferInner<T> {
+
+pub struct BufferInner<T: Send> {
     pub offset: u32,
     pub capacity: u32,
     pub writeptr: u32,
@@ -25,13 +26,15 @@ pub struct BufferInner<T> {
     pub val: T,
 }
 
-pub struct RingBuffer<T> {
+pub struct RingBuffer<T: Send> {
 //    buf: Vec<MaybeUninit<T>>,
     pub inner: *mut BufferInner<T>,
     pub policy: i32
 }
 
-impl<'a, T: Copy + Serialize + Deserialize<'a>> BufferInner<T> {
+unsafe impl<T: Send> Send for RingBuffer<T> {}
+
+impl<'a, T: Send + Copy + Serialize + Deserialize<'a>> BufferInner<T> {
     fn len(&self) -> u32 {
         self.writeptr - self.readptr
     }
@@ -83,7 +86,7 @@ impl<'a, T: Copy + Serialize + Deserialize<'a>> BufferInner<T> {
     }
 }
 
-impl<'a, T: Copy + Serialize + Deserialize<'a>> RingBuffer<T> {
+impl<'a, T: Send + Copy + Serialize + Deserialize<'a>> RingBuffer<T> {
     fn len(&self) -> u32 {
         unsafe {
             (*self.inner).len()

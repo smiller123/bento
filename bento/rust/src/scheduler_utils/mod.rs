@@ -7,6 +7,7 @@ use alloc::boxed::Box;
 use libc::ENOSYS;
 use libc;
 use kernel::ffi;
+use core::marker::PhantomData;
 
 use time::Timespec;
 
@@ -28,6 +29,10 @@ use kernel::time::diff_ns;
 pub const BENTO_KERNEL_VERSION: u32 = 1;
 pub const BENTO_KERNEL_MINOR_VERSION: u32 = 0;
 
+pub struct RQLockGuard {
+    random_data: PhantomData<i32>,
+}
+
 //#[derive(Clone, Copy, Default, Debug)]
 #[derive(Default, Debug)]
 pub struct Schedulable {
@@ -48,8 +53,8 @@ impl Schedulable {
 static REPORT: core::sync::atomic::AtomicI64 = core::sync::atomic::AtomicI64::new(0);
 
 pub fn outer_pnt<'a, 'b, TransferIn: Send, TransferOut: Send,
-    UserMessage: Copy + Serialize + Deserialize<'a>,
-    RevMessage: Copy + Serialize + Deserialize<'b>,
+    UserMessage: Send+ Copy + Serialize + Deserialize<'a>,
+    RevMessage: Send + Copy + Serialize + Deserialize<'b>,
     T: BentoScheduler<'a, 'b, TransferIn, TransferOut, UserMessage, RevMessage>>(
 //pub extern "C" fn parse_message<T: BentoScheduler> (
     agent: &mut T,
@@ -83,8 +88,8 @@ pub fn outer_pnt<'a, 'b, TransferIn: Send, TransferOut: Send,
 }
 
 pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
-    UserMessage: Copy + Serialize + Deserialize<'a>,
-    RevMessage: Copy + Serialize + Deserialize<'b>,
+    UserMessage: Send+ Copy + Serialize + Deserialize<'a>,
+    RevMessage: Send + Copy + Serialize + Deserialize<'b>,
     T: BentoScheduler<'a, 'b, TransferIn, TransferOut, UserMessage, RevMessage>>(
 //pub extern "C" fn parse_message<T: BentoScheduler> (
     agent: &mut T,
@@ -147,7 +152,8 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                 } else {
                     None
                 };
-                let next_task = agent.pick_next_task((*payload_data).cpu, curr_sched, curr_runtime);
+                let guard = RQLockGuard{random_data: PhantomData};
+                let next_task = agent.pick_next_task((*payload_data).cpu, curr_sched, curr_runtime, guard);
                 //getnstimeofday64_rs(&mut step2);
                 if next_task.is_none() {
                     (*payload_data).pick_task = next_task.is_some();
@@ -182,7 +188,8 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
 
                     let sched = next_task.unwrap();
                     (*payload_data).pick_task = false;
-                    agent.pnt_err(sched.get_cpu() as i32, sched.get_pid(), 2, Some(sched));
+                    let guard = RQLockGuard{random_data: PhantomData};
+                    agent.pnt_err(sched.get_cpu() as i32, sched.get_pid(), 2, Some(sched), guard);
                     #[cfg(feature = "record")]
                     {
                         let pid = unsafe {
@@ -214,7 +221,8 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                     //c::printk_deferred(write_str.as_ptr() as *const i8);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
-                agent.pnt_err((*payload_data).cpu, (*payload_data).pid, (*payload_data).err, None);
+                let guard = RQLockGuard{random_data: PhantomData};
+                agent.pnt_err((*payload_data).cpu, (*payload_data).pid, (*payload_data).err, None, guard);
             }
             c::MSG_BALANCE_ERR => {
                 let payload_data = payload as *mut c::ghost_msg_payload_balance_err;
@@ -227,7 +235,8 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                     //c::printk_deferred(write_str.as_ptr() as *const i8);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
-                agent.balance_err((*payload_data).cpu, (*payload_data).pid, (*payload_data).err, None);
+                let guard = RQLockGuard{random_data: PhantomData};
+                agent.balance_err((*payload_data).cpu, (*payload_data).pid, (*payload_data).err, None, guard);
             }
             c::MSG_TASK_DEAD => {
                 let payload_data = payload as *const c::ghost_msg_payload_task_dead;
@@ -239,20 +248,21 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                     let mut write_str = alloc::format!("dead: {} {:?}\n\0", pid, *payload_data);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
-                agent.task_dead((*payload_data).pid);
+                let guard = RQLockGuard{random_data: PhantomData};
+                agent.task_dead((*payload_data).pid, guard);
             }
-            c::MSG_TASK_DEPARTED => {
-                let payload_data = payload as *const c::ghost_msg_payload_task_departed;
-                #[cfg(feature = "record")]
-                {
-                    let pid = unsafe {
-                        ffi::current_pid()
-                    };
-                    let mut write_str = alloc::format!("departed: {} {:?}\n\0", pid, *payload_data);
-                    c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
-                }
-                agent.task_dead((*payload_data).pid);
-            }
+            //c::MSG_TASK_DEPARTED => {
+            //    let payload_data = payload as *const c::ghost_msg_payload_task_departed;
+            //    #[cfg(feature = "record")]
+            //    {
+            //        let pid = unsafe {
+            //            ffi::current_pid()
+            //        };
+            //        let mut write_str = alloc::format!("departed: {} {:?}\n\0", pid, *payload_data);
+            //        c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
+            //    }
+            //    agent.task_dead((*payload_data).pid);
+            //}
             c::MSG_TASK_BLOCKED => {
                 let payload_data = payload as *const c::ghost_msg_payload_task_blocked;
                 #[cfg(feature = "record")]
@@ -267,9 +277,10 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                 //    cpu: (*payload_data).cpu as u32,
                 //    pid: (*payload_data).pid,
                 //};
+                let guard = RQLockGuard{random_data: PhantomData};
                 agent.task_blocked((*payload_data).pid, (*payload_data).runtime,
                     (*payload_data).cpu_seqnum,
-                    (*payload_data).cpu, (*payload_data).from_switchto);
+                    (*payload_data).cpu, (*payload_data).from_switchto, guard);
             }
             c::MSG_TASK_WAKEUP => {
                 let payload_data = payload as *const c::ghost_msg_payload_task_wakeup;
@@ -286,10 +297,11 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                     cpu: (*payload_data).wake_up_cpu as u32,
                     pid: (*payload_data).pid,
                 };
+                let guard = RQLockGuard{random_data: PhantomData};
                 agent.task_wakeup((*payload_data).pid, (*payload_data).agent_data,
                     (*payload_data).deferrable > 0, (*payload_data).last_ran_cpu,
                     (*payload_data).wake_up_cpu, (*payload_data).waker_cpu,
-                    sched);
+                    sched, guard);
             }
             c::MSG_TASK_NEW => {
                 let payload_data = payload as *const c::ghost_msg_payload_task_new;
@@ -311,8 +323,9 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                     pid: (*payload_data).pid,
                     cpu: cpu,
                 };
+                let guard = RQLockGuard{random_data: PhantomData};
                 agent.task_new((*payload_data).pid, (*payload_data).runtime,
-                    (*payload_data).runnable, (*payload_data).prio, sched);
+                    (*payload_data).runnable, (*payload_data).prio, sched, guard);
             }
             c::MSG_TASK_PREEMPT => {
                 let payload_data = payload as *const c::ghost_msg_payload_task_preempt;
@@ -328,9 +341,10 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                     cpu: (*payload_data).cpu as u32,
                     pid: (*payload_data).pid,
                 };
+                let guard = RQLockGuard{random_data: PhantomData};
                 agent.task_preempt((*payload_data).pid, (*payload_data).runtime,
                     (*payload_data).cpu_seqnum, (*payload_data).cpu,
-                    (*payload_data).from_switchto, (*payload_data).was_latched, sched);
+                    (*payload_data).from_switchto, (*payload_data).was_latched, sched, guard);
             }
             c::MSG_TASK_YIELD => {
                 let payload_data = payload as *const c::ghost_msg_payload_task_yield;
@@ -346,9 +360,10 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                     cpu: (*payload_data).cpu as u32,
                     pid: (*payload_data).pid,
                 };
+                let guard = RQLockGuard{random_data: PhantomData};
                 agent.task_yield((*payload_data).pid, (*payload_data).runtime,
                     (*payload_data).cpu_seqnum, (*payload_data).cpu,
-                    (*payload_data).from_switchto, sched);
+                    (*payload_data).from_switchto, sched, guard);
             }
             c::MSG_TASK_DEPARTED => {
                 let payload_data = payload as *const c::ghost_msg_payload_task_departed;
@@ -360,9 +375,10 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                     let mut write_str = alloc::format!("departed: {} {:?}\n\0", pid, *payload_data);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
+                let guard = RQLockGuard{random_data: PhantomData};
                 agent.task_departed((*payload_data).pid, (*payload_data).cpu_seqnum,
                     (*payload_data).cpu, (*payload_data).from_switchto,
-                    (*payload_data).was_current);
+                    (*payload_data).was_current, guard);
             }
             c::MSG_TASK_SWITCHTO => {
                 let payload_data = payload as *const c::ghost_msg_payload_task_switchto;
@@ -414,7 +430,8 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 // Tasks moved onto the scheduler can be scheduled anywhere
-                agent.task_prio_changed((*payload_data).pid, (*payload_data).prio);
+                let guard = RQLockGuard{random_data: PhantomData};
+                agent.task_prio_changed((*payload_data).pid, (*payload_data).prio, guard);
             }
             c::MSG_CPU_TICK => {
                 let payload_data = payload as *const c::ghost_msg_payload_cpu_tick;
@@ -426,7 +443,8 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                     let mut write_str = alloc::format!("tick: {} {:?}\n\0", pid, *payload_data);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
-                agent.task_tick((*payload_data).cpu, (*payload_data).queued != 0);
+                let guard = RQLockGuard{random_data: PhantomData};
+                agent.task_tick((*payload_data).cpu, (*payload_data).queued != 0, guard);
             }
             c::MSG_CPU_NOT_IDLE => {
                 let payload_data = payload as *const c::ghost_msg_payload_cpu_not_idle;
@@ -481,8 +499,9 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                     pid: (*payload_data).pid,
                     cpu: (*payload_data).new_cpu as u32,
                 };
+                let guard = RQLockGuard{random_data: PhantomData};
                 //agent.migrate_task_rq((*payload_data).pid, (*payload_data).new_cpu);
-                agent.migrate_task_rq((*payload_data).pid, sched);
+                agent.migrate_task_rq((*payload_data).pid, sched, guard);
             }
             c::MSG_BALANCE => {
                 let payload_data = payload as *mut c::ghost_msg_payload_balance;
@@ -494,7 +513,8 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                     let mut write_str = alloc::format!("balance: {} {:?}\n\0", pid, *payload_data);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
-                let next_pid = agent.balance((*payload_data).cpu);
+                let guard = RQLockGuard{random_data: PhantomData};
+                let next_pid = agent.balance((*payload_data).cpu, guard);
                 (*payload_data).do_move = next_pid.is_some();
                 (*payload_data).move_pid = next_pid.unwrap_or_default();
                 #[cfg(feature = "record")]
@@ -588,7 +608,7 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                     let pid = unsafe {
                         ffi::current_pid()
                     };
-                    let mut write_str = alloc::format!("unregister_queue {}\n\0", pid);
+                    let mut write_str = alloc::format!("unregister_queue {} {:?}\n\0", pid, *payload_data);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 agent.unregister_queue((*payload_data).id);
@@ -602,7 +622,7 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                     let pid = unsafe {
                         ffi::current_pid()
                     };
-                    let mut write_str = alloc::format!("unregister_reverse_queue {}\n\0", pid);
+                    let mut write_str = alloc::format!("unregister_reverse_queue {} {:?}\n\0", pid, *payload_data);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 agent.unregister_rev_queue((*payload_data).id);
@@ -659,8 +679,8 @@ unsafe fn print_hint<T: Serialize>(arg: T, policy: i32) {
 /// This trait is derived from the Filesystem trait from the fuse Rust crate.
 ///
 /// This trait must be implemented to provide a Bento scheduler.
-pub trait BentoScheduler<'a, 'b, TransferIn: Send, TransferOut: Send, UserMessage: Copy + Serialize + Deserialize<'a>,
-    RevMessage: Copy + Serialize + Deserialize<'b>> {
+pub trait BentoScheduler<'a, 'b, TransferIn: Send, TransferOut: Send, UserMessage: Send + Copy + Serialize + Deserialize<'a>,
+    RevMessage: Send + Copy + Serialize + Deserialize<'b>> {
     fn get_policy(&self) -> i32;
     /// Register the filesystem with Bento.
     ///
@@ -754,6 +774,7 @@ pub trait BentoScheduler<'a, 'b, TransferIn: Send, TransferOut: Send, UserMessag
         _cpu: i32,
         _curr_sched: Option<Schedulable>,
         _curr_runtime: Option<u64>,
+        _guard: RQLockGuard
     ) -> Option<Schedulable> {
         None
     }
@@ -763,7 +784,8 @@ pub trait BentoScheduler<'a, 'b, TransferIn: Send, TransferOut: Send, UserMessag
         _cpu: i32,
         _pid: u64,
         _err: i32,
-        _sched: Option<Schedulable>
+        _sched: Option<Schedulable>,
+        _guard: RQLockGuard
     ) {}
 
     fn balance_err(
@@ -771,10 +793,11 @@ pub trait BentoScheduler<'a, 'b, TransferIn: Send, TransferOut: Send, UserMessag
         _cpu: i32,
         _pid: u64,
         _err: i32,
-        _sched: Option<Schedulable>
+        _sched: Option<Schedulable>,
+        _guard: RQLockGuard
     ) {}
 
-    fn task_dead(&self, _pid: u64) {}
+    fn task_dead(&self, _pid: u64, _guard: RQLockGuard) {}
 
     fn task_blocked(
         &self,
@@ -783,6 +806,7 @@ pub trait BentoScheduler<'a, 'b, TransferIn: Send, TransferOut: Send, UserMessag
         _cpu_seqnum: u64,
         _cpu: i32,
         _from_switchto: i8,
+        _guard: RQLockGuard
     ) {}
 
     fn task_wakeup(
@@ -794,6 +818,7 @@ pub trait BentoScheduler<'a, 'b, TransferIn: Send, TransferOut: Send, UserMessag
         _wake_up_cpu: i32,
         _waker_cpu: i32,
         _sched: Schedulable,
+        _guard: RQLockGuard
     ) {}
 
     fn task_new(
@@ -803,6 +828,7 @@ pub trait BentoScheduler<'a, 'b, TransferIn: Send, TransferOut: Send, UserMessag
         _runnable: u16,
         _prio: i32,
         _sched: Schedulable,
+        _guard: RQLockGuard
     ) {}
 
     fn task_preempt(
@@ -814,6 +840,7 @@ pub trait BentoScheduler<'a, 'b, TransferIn: Send, TransferOut: Send, UserMessag
         _from_switchto: i8,
         _was_latched: i8,
         _sched: Schedulable,
+        _guard: RQLockGuard
     ) {}
 
     fn task_yield(
@@ -824,6 +851,7 @@ pub trait BentoScheduler<'a, 'b, TransferIn: Send, TransferOut: Send, UserMessag
         _cpu: i32,
         _from_switchto: i8,
         _sched: Schedulable,
+        _guard: RQLockGuard
     ) {}
 
     fn task_departed(
@@ -832,7 +860,8 @@ pub trait BentoScheduler<'a, 'b, TransferIn: Send, TransferOut: Send, UserMessag
         _cpu_seqnum: u64,
         _cpu: i32,
         _from_switchto: i8,
-        _was_current: i8
+        _was_current: i8,
+        _guard: RQLockGuard
     ) {}
 
     fn task_switchto(
@@ -858,9 +887,10 @@ pub trait BentoScheduler<'a, 'b, TransferIn: Send, TransferOut: Send, UserMessag
         &self,
         _pid: u64,
         _prio: i32,
+        _guard: RQLockGuard
     ) {}
 
-    fn task_tick(&self, _cpu: i32, _queued: bool) {}
+    fn task_tick(&self, _cpu: i32, _queued: bool, _guard: RQLockGuard) {}
 
     fn cpu_not_idle(&self, _cpu: i32, _next_pid: u64) {}
 
@@ -869,9 +899,9 @@ pub trait BentoScheduler<'a, 'b, TransferIn: Send, TransferOut: Send, UserMessag
     fn selected_task_rq(&self, _sched: Schedulable) {}
     
     //fn migrate_task_rq(&self, _pid: u64, _new_cpu: i32) {}
-    fn migrate_task_rq(&self, _pid: u64, _sched: Schedulable) -> Schedulable;
+    fn migrate_task_rq(&self, _pid: u64, _sched: Schedulable, _guard: RQLockGuard) -> Schedulable;
 
-    fn balance(&self, _cpu: i32) -> Option<u64> { None }
+    fn balance(&self, _cpu: i32, _guard: RQLockGuard) -> Option<u64> { None }
 
     //fn bento_update_prepare(&mut self) -> Option<TransferOut> {
     fn reregister_prepare(&mut self) -> Option<TransferOut> {

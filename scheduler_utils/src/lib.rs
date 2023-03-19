@@ -4,6 +4,8 @@ extern crate serde;
 
 pub mod ringbuffer;
 pub mod spin_rs;
+pub mod hrtick;
+pub mod sched_core;
 
 use serde::{Serialize, Deserialize};
 
@@ -21,6 +23,11 @@ use serde::{Serialize, Deserialize};
 use self::ringbuffer::RingBuffer;
 
 use core::fmt::Debug;
+use core::marker::PhantomData;
+
+pub struct RQLockGuard {
+    pub random_data: PhantomData<i32>,
+}
 
 #[derive(Clone, Copy, Default, Debug)]
 pub struct Schedulable {
@@ -244,14 +251,8 @@ impl Schedulable {
 //        }
 //    }
 //}
-
-/// BentoScheduler trait
-///
-/// This trait is derived from the Filesystem trait from the fuse Rust crate.
-///
-/// This trait must be implemented to provide a Bento scheduler.
-pub trait BentoScheduler<'a,  'b, TransferIn: Send, TransferOut: Send, UserMessage: Copy + Serialize + Deserialize<'a>,
-    RevMessage: Copy + Serialize + Deserialize<'a>> {
+pub trait BentoScheduler<'a, 'b, TransferIn: Send, TransferOut: Send, UserMessage: Send + Copy + Serialize + Deserialize<'a>,
+    RevMessage: Send + Copy + Serialize + Deserialize<'b>> {
     fn get_policy(&self) -> i32;
     /// Register the filesystem with Bento.
     ///
@@ -261,13 +262,29 @@ pub trait BentoScheduler<'a,  'b, TransferIn: Send, TransferOut: Send, UserMessa
     //where
     //    Self: core::marker::Sized,
     //{
+    //    //let name = "/sys/fs/ghost/ctl\0";
     //    let mut path = c::path::default();
     //    unsafe {
+    //        //ffi::rs_kern_path(record_file, libc::O_WRONLY as u32, &mut path as *mut c::path);
+    //        //let file = c::dentry_open(&path, libc::O_WRONLY | libc::O_APPEND | libc::O_NONBLOCK, ffi::rs_current_cred());
+    //        //        let write_str = "hi\n\0";
+    //        //        let mut write_ptr: i64 = (*file).f_pos;
+    //        //        println!("write ptr {:?}", write_ptr);
+    //        //        println!("inode {:?}", (*file).f_inode);
+    //        //        println!("path {:?}", (*file).f_path);
+    //        //        println!("write str {:?}", write_str);
+    //        //        println!("write str len {:?}", write_str.as_bytes().len());
+    //        //        let ret =
+    //        //            c::kernel_write(file, write_str.as_ptr() as *const raw::c_void,
+    //        //                write_str.as_bytes().len() - 1, &mut write_ptr as *mut i64);
+    //        //println!("record file ptr {:?}", file);
     //        let ret = register_ghost_agent(
     //            self as *const Self as *const raw::c_void,
     //            self.get_policy(),
-    //            parse_message::<TransferIn, TransferOut, UserMessage, Self> as *const raw::c_void
+    //            parse_message::<TransferIn, TransferOut, UserMessage, RevMessage, Self> as *const raw::c_void
     //        );
+    //        //let mut write_str = alloc::format!("loading\n\0");
+    //        //c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
     //        return ret;
     //    }
     //}
@@ -280,7 +297,7 @@ pub trait BentoScheduler<'a,  'b, TransferIn: Send, TransferOut: Send, UserMessa
     //        reregister_ghost_agent(
     //            self as *const Self as *const raw::c_void,
     //            self.get_policy(),
-    //            parse_message::<TransferIn, TransferOut, UserMessage, Self> as *const raw::c_void
+    //            parse_message::<TransferIn, TransferOut, UserMessage, RevMessage, Self> as *const raw::c_void
     //        )
     //    };
     //}
@@ -296,16 +313,63 @@ pub trait BentoScheduler<'a,  'b, TransferIn: Send, TransferOut: Send, UserMessa
     //    None
     //}
 
+    //fn bento_update_transfer(&mut self, Option<TransferIn>) { }
+    ////fn bento_update_transfer(&mut self, Option<*const raw::c_void>) { }
+
+    /// Initialize the file system and fill in initialization flags.
+    ///
+    /// Possible initialization flags are defined /include/uapi/linux/fuse.h.
+    /// No support is provided for readdirplus and async DIO.
+    ///
+    /// Arguments:
+    /// * `req: &Request` - Request data structure.
+    /// * `devname: &OsStr` - Name of the backing device file.
+    /// * `fc_info: &mut FuseConnInfo` - Connection information used to pass initialization
+    /// arguments to Bento.
+    //fn init(
+    //    &mut self,
+    //    _req: &Request,
+    //    _devname: &OsStr,
+    //    _fc_info: &mut FuseConnInfo,
+    //) -> Result<(), i32> {
+    //    return Err(ENOSYS);
+    //}
+
+    ///// Perform any necessary cleanup on the file system.
+    /////
+    ///// Arguments:
+    ///// * `req: &Request` - Request data structure.
+    //fn bento_destroy(&mut self, _req: &Request) {}
+    
     fn pick_next_task(
         &self,
         _cpu: i32,
+        _curr_sched: Option<Schedulable>,
+        _curr_runtime: Option<u64>,
+        _guard: RQLockGuard
     ) -> Option<Schedulable> {
         None
     }
 
-    fn pnt_err(&self, _sched: Schedulable) {}
+    fn pnt_err(
+        &self,
+        _cpu: i32,
+        _pid: u64,
+        _err: i32,
+        _sched: Option<Schedulable>,
+        _guard: RQLockGuard
+    ) {}
 
-    fn task_dead(&self, _pid: u64) {}
+    fn balance_err(
+        &self,
+        _cpu: i32,
+        _pid: u64,
+        _err: i32,
+        _sched: Option<Schedulable>,
+        _guard: RQLockGuard
+    ) {}
+
+    fn task_dead(&self, _pid: u64, _guard: RQLockGuard) {}
 
     fn task_blocked(
         &self,
@@ -314,7 +378,7 @@ pub trait BentoScheduler<'a,  'b, TransferIn: Send, TransferOut: Send, UserMessa
         _cpu_seqnum: u64,
         _cpu: i32,
         _from_switchto: i8,
-        _sched: Schedulable,
+        _guard: RQLockGuard
     ) {}
 
     fn task_wakeup(
@@ -326,6 +390,7 @@ pub trait BentoScheduler<'a,  'b, TransferIn: Send, TransferOut: Send, UserMessa
         _wake_up_cpu: i32,
         _waker_cpu: i32,
         _sched: Schedulable,
+        _guard: RQLockGuard
     ) {}
 
     fn task_new(
@@ -333,7 +398,9 @@ pub trait BentoScheduler<'a,  'b, TransferIn: Send, TransferOut: Send, UserMessa
         _pid: u64,
         _runtime: u64,
         _runnable: u16,
+        _prio: i32,
         _sched: Schedulable,
+        _guard: RQLockGuard
     ) {}
 
     fn task_preempt(
@@ -345,6 +412,7 @@ pub trait BentoScheduler<'a,  'b, TransferIn: Send, TransferOut: Send, UserMessa
         _from_switchto: i8,
         _was_latched: i8,
         _sched: Schedulable,
+        _guard: RQLockGuard
     ) {}
 
     fn task_yield(
@@ -353,7 +421,9 @@ pub trait BentoScheduler<'a,  'b, TransferIn: Send, TransferOut: Send, UserMessa
         _runtime: u64,
         _cpu_seqnum: u64,
         _cpu: i32,
-        _from_switchto: i8
+        _from_switchto: i8,
+        _sched: Schedulable,
+        _guard: RQLockGuard
     ) {}
 
     fn task_departed(
@@ -362,7 +432,8 @@ pub trait BentoScheduler<'a,  'b, TransferIn: Send, TransferOut: Send, UserMessa
         _cpu_seqnum: u64,
         _cpu: i32,
         _from_switchto: i8,
-        _was_current: i8
+        _was_current: i8,
+        _guard: RQLockGuard
     ) {}
 
     fn task_switchto(
@@ -373,7 +444,7 @@ pub trait BentoScheduler<'a,  'b, TransferIn: Send, TransferOut: Send, UserMessa
         _cpu: i32,
     ) {}
 
-    fn task_affinity_changed(&self, _pid: u64) {}
+    fn task_affinity_changed(&self, _pid: u64, _cpumask: u64) {}
 
     fn task_latched(
         &self,
@@ -384,33 +455,212 @@ pub trait BentoScheduler<'a,  'b, TransferIn: Send, TransferOut: Send, UserMessa
         _latched_preempt: i8
     ) {}
 
-    fn cpu_tick(&self, _cpu: i32) {}
+    fn task_prio_changed(
+        &self,
+        _pid: u64,
+        _prio: i32,
+        _guard: RQLockGuard
+    ) {}
+
+    fn task_tick(&self, _cpu: i32, _queued: bool, _guard: RQLockGuard) {}
 
     fn cpu_not_idle(&self, _cpu: i32, _next_pid: u64) {}
 
-    fn select_task_rq(&self, _pid: u64) -> i32 { 0 }
+    fn select_task_rq(&self, _pid: u64, _waker_cpu: i32, _prev_cpu: i32) -> i32 { 0 }
 
     fn selected_task_rq(&self, _sched: Schedulable) {}
     
-    fn migrate_task_rq(&self, _pid: u64, _new_cpu: Schedulable) {}
+    //fn migrate_task_rq(&self, _pid: u64, _new_cpu: i32) {}
+    fn migrate_task_rq(&self, _pid: u64, _sched: Schedulable, _guard: RQLockGuard) -> Schedulable;
 
-    fn balance(&self, _cpu: i32) -> Option<u64> { None }
+    fn balance(&self, _cpu: i32, _guard: RQLockGuard) -> Option<u64> { None }
 
+    //fn bento_update_prepare(&mut self) -> Option<TransferOut> {
     fn reregister_prepare(&mut self) -> Option<TransferOut> {
         None
     }
 
     fn reregister_init(&mut self, Option<TransferIn>) {}
 
-    fn register_queue(&self, RingBuffer<UserMessage>) {}
+    fn register_queue(&self, RingBuffer<UserMessage>) -> i32;
 
-    fn register_reverse_queue(&self, RingBuffer<RevMessage>) {}
+    fn register_reverse_queue(&self, RingBuffer<RevMessage>) -> i32;
 
-    fn enter_queue(&self, _entries: u32) {}
+    fn enter_queue(&self, id: i32, _entries: u32) {}
 
-    fn unregister_queue(&self) -> RingBuffer<UserMessage>;
+    fn unregister_queue(&self, id: i32) -> RingBuffer<UserMessage>;
 
-    fn unregister_rev_queue(&self) -> RingBuffer<RevMessage>;
+    fn unregister_rev_queue(&self, id: i32) -> RingBuffer<RevMessage>;
 
     fn parse_hint(&self, hint: UserMessage) {}
 }
+
+///// BentoScheduler trait
+/////
+///// This trait is derived from the Filesystem trait from the fuse Rust crate.
+/////
+///// This trait must be implemented to provide a Bento scheduler.
+//pub trait BentoScheduler<'a,  'b, TransferIn: Send, TransferOut: Send, UserMessage: Copy + Serialize + Deserialize<'a>,
+//    RevMessage: Copy + Serialize + Deserialize<'a>> {
+//    fn get_policy(&self) -> i32;
+//    /// Register the filesystem with Bento.
+//    ///
+//    /// This should be called when the filesystem module is inserted and before
+//    /// a filesystem is mounted.
+//    //fn register(&self) -> i32
+//    //where
+//    //    Self: core::marker::Sized,
+//    //{
+//    //    let mut path = c::path::default();
+//    //    unsafe {
+//    //        let ret = register_ghost_agent(
+//    //            self as *const Self as *const raw::c_void,
+//    //            self.get_policy(),
+//    //            parse_message::<TransferIn, TransferOut, UserMessage, Self> as *const raw::c_void
+//    //        );
+//    //        return ret;
+//    //    }
+//    //}
+//
+//    //fn reregister(&self) -> i32
+//    //where
+//    //    Self: core::marker::Sized,
+//    //{
+//    //    return unsafe {
+//    //        reregister_ghost_agent(
+//    //            self as *const Self as *const raw::c_void,
+//    //            self.get_policy(),
+//    //            parse_message::<TransferIn, TransferOut, UserMessage, Self> as *const raw::c_void
+//    //        )
+//    //    };
+//    //}
+//
+//    //fn unregister(&self) -> i32 {
+//    //    return unsafe {
+//    //        unregister_ghost_agent(self as *const Self as *const raw::c_void)
+//    //    };
+//    //}
+//
+//    //fn bento_update_prepare(&mut self) -> Option<TransferOut> {
+//    ////fn bento_update_prepare(&mut self) -> Option<*const raw::c_void> {
+//    //    None
+//    //}
+//
+//    fn pick_next_task(
+//        &self,
+//        _cpu: i32,
+//    ) -> Option<Schedulable> {
+//        None
+//    }
+//
+//    fn pnt_err(&self, _sched: Schedulable) {}
+//
+//    fn task_dead(&self, _pid: u64) {}
+//
+//    fn task_blocked(
+//        &self,
+//        _pid: u64,
+//        _runtime: u64,
+//        _cpu_seqnum: u64,
+//        _cpu: i32,
+//        _from_switchto: i8,
+//        _sched: Schedulable,
+//    ) {}
+//
+//    fn task_wakeup(
+//        &self,
+//        _pid: u64,
+//        _agent_data: u64,
+//        _deferrable: bool,
+//        _last_run_cpu: i32,
+//        _wake_up_cpu: i32,
+//        _waker_cpu: i32,
+//        _sched: Schedulable,
+//    ) {}
+//
+//    fn task_new(
+//        &self,
+//        _pid: u64,
+//        _runtime: u64,
+//        _runnable: u16,
+//        _sched: Schedulable,
+//    ) {}
+//
+//    fn task_preempt(
+//        &self,
+//        _pid: u64,
+//        _runtime: u64,
+//        _cpu_seqnum: u64,
+//        _cpu: i32,
+//        _from_switchto: i8,
+//        _was_latched: i8,
+//        _sched: Schedulable,
+//    ) {}
+//
+//    fn task_yield(
+//        &self,
+//        _pid: u64,
+//        _runtime: u64,
+//        _cpu_seqnum: u64,
+//        _cpu: i32,
+//        _from_switchto: i8
+//    ) {}
+//
+//    fn task_departed(
+//        &self,
+//        _pid: u64,
+//        _cpu_seqnum: u64,
+//        _cpu: i32,
+//        _from_switchto: i8,
+//        _was_current: i8
+//    ) {}
+//
+//    fn task_switchto(
+//        &self,
+//        _pid: u64,
+//        _runtime: u64,
+//        _cpu_seqnum: u64,
+//        _cpu: i32,
+//    ) {}
+//
+//    fn task_affinity_changed(&self, _pid: u64) {}
+//
+//    fn task_latched(
+//        &self,
+//        _pid: u64,
+//        _commit_time: u64,
+//        _cpu_seqnum: u64,
+//        _cpu: i32,
+//        _latched_preempt: i8
+//    ) {}
+//
+//    fn cpu_tick(&self, _cpu: i32) {}
+//
+//    fn cpu_not_idle(&self, _cpu: i32, _next_pid: u64) {}
+//
+//    fn select_task_rq(&self, _pid: u64) -> i32 { 0 }
+//
+//    fn selected_task_rq(&self, _sched: Schedulable) {}
+//    
+//    fn migrate_task_rq(&self, _pid: u64, _new_cpu: Schedulable) {}
+//
+//    fn balance(&self, _cpu: i32) -> Option<u64> { None }
+//
+//    fn reregister_prepare(&mut self) -> Option<TransferOut> {
+//        None
+//    }
+//
+//    fn reregister_init(&mut self, Option<TransferIn>) {}
+//
+//    fn register_queue(&self, RingBuffer<UserMessage>) {}
+//
+//    fn register_reverse_queue(&self, RingBuffer<RevMessage>) {}
+//
+//    fn enter_queue(&self, _entries: u32) {}
+//
+//    fn unregister_queue(&self) -> RingBuffer<UserMessage>;
+//
+//    fn unregister_rev_queue(&self) -> RingBuffer<RevMessage>;
+//
+//    fn parse_hint(&self, hint: UserMessage) {}
+//}
