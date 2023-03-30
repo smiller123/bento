@@ -434,7 +434,7 @@ pub trait BentoScheduler<'a, 'b, TransferIn: Send, TransferOut: Send, UserMessag
         _from_switchto: i8,
         _was_current: i8,
         _guard: RQLockGuard
-    ) {}
+    ) -> Schedulable;
 
     fn task_switchto(
         &self,

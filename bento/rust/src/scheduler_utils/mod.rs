@@ -130,10 +130,16 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                 let payload_data = payload as *mut c::ghost_msg_payload_pnt;
                 #[cfg(feature = "record")]
                 {
-                    let pid = unsafe {
-                        ffi::current_pid()
+                    //let pid = unsafe {
+                    //    ffi::current_pid()
+                    //};
+                    //let curr_cpu = unsafe {
+                    //    ffi::rs_smp_processor_id()
+                    //};
+                    let curr = unsafe {
+                        ffi::rs_current()
                     };
-                    let mut write_str = alloc::format!("pnt: {} {:?}\n\0", pid, *payload_data);
+                    let mut write_str = alloc::format!("pnt: {:?} {:?}\n\0", curr, *payload_data);
                     //c::printk_deferred(write_str.as_ptr() as *const i8);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
@@ -156,15 +162,21 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                 let next_task = agent.pick_next_task((*payload_data).cpu, curr_sched, curr_runtime, guard);
                 //getnstimeofday64_rs(&mut step2);
                 if next_task.is_none() {
-                    (*payload_data).pick_task = next_task.is_some();
-                    (*payload_data).ret_pid = next_task.unwrap_or_default().get_pid();
+                    (*payload_data).pick_task = false;
+                    (*payload_data).ret_pid = 0;
                     #[cfg(feature = "record")]
                     {
-                        let pid = unsafe {
-                            ffi::current_pid()
+                        //let pid = unsafe {
+                        //    ffi::current_pid()
+                        //};
+                        //let curr_cpu = unsafe {
+                        //    ffi::rs_smp_processor_id()
+                        //};
+                        let curr = unsafe {
+                            ffi::rs_current()
                         };
-                        let mut write_str = alloc::format!("pnt_ret: {} {} {:?}\n\0",
-                                                           pid, (*payload_data).cpu, next_task);
+                        let mut write_str = alloc::format!("pnt_ret: {:?} {} {:?}\n\0",
+                                                           curr, (*payload_data).cpu, next_task);
                         c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                     }
                 } else if let Some(ref ret_sched) = next_task &&
@@ -172,15 +184,24 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                     //next_task.is_some_and(|x| x.cpu == (*payload_data).cpu as u32 || x.cpu == u32::MAX)) {
                     //next_task.unwrap().cpu == (*payload_data).cpu as u32 ||
                     //next_task.unwrap().cpu == u32::MAX) {
+                    let ret_cpu = ret_sched.get_cpu();
+                    let ret_pid = ret_sched.get_pid();
                     (*payload_data).pick_task = next_task.is_some();
                     (*payload_data).ret_pid = next_task.unwrap_or_default().get_pid();
                     #[cfg(feature = "record")]
                     {
-                        let pid = unsafe {
-                            ffi::current_pid()
+                        //let pid = unsafe {
+                        //    ffi::current_pid()
+                        //};
+                        //let curr_cpu = unsafe {
+                        //    ffi::rs_smp_processor_id()
+                        //};
+                        let curr = unsafe {
+                            ffi::rs_current()
                         };
-                        let mut write_str = alloc::format!("pnt_ret: {} {} {:?}\n\0",
-                                                           pid, (*payload_data).cpu, next_task);
+                        let rec_sched = Some(Schedulable{cpu: ret_cpu, pid: ret_pid});
+                        let mut write_str = alloc::format!("pnt_ret: {:?} {} {:?}\n\0",
+                                                           curr, (*payload_data).cpu, rec_sched);
                         c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                     }
                 } else {
@@ -189,24 +210,33 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                     let sched = next_task.unwrap();
                     (*payload_data).pick_task = false;
                     let guard = RQLockGuard{random_data: PhantomData};
+                    let ret_cpu = sched.get_cpu();
+                    let ret_pid = sched.get_pid();
                     agent.pnt_err(sched.get_cpu() as i32, sched.get_pid(), 2, Some(sched), guard);
                     #[cfg(feature = "record")]
                     {
-                        let pid = unsafe {
-                            ffi::current_pid()
+                        //let pid = unsafe {
+                        //    ffi::current_pid()
+                        //};
+                        //let curr_cpu = unsafe {
+                        //    ffi::rs_smp_processor_id()
+                        //};
+                        let curr = unsafe {
+                            ffi::rs_current()
                         };
-                        let mut write_str = alloc::format!("pnt_ret: {} {} {:?} Error\n\0",
-                                                           pid, (*payload_data).cpu, next_task);
+                        let ret_sched = Some(Schedulable{cpu: ret_cpu, pid: ret_pid});
+                        let mut write_str = alloc::format!("pnt_ret: {:?} {} {:?} Error\n\0",
+                                                           curr, (*payload_data).cpu, ret_sched);
                         c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                     }
                 }
                 //getnstimeofday64_rs(&mut end);
                 //let should_report = REPORT.load(core::sync::atomic::Ordering::Relaxed);
                 //if (should_report % 10000 == 0) {
-                //    let diff1 = diff_ns(&step1, &start);
-                //    let diff2 = diff_ns(&step2, &step1);
-                //    let diff3 = diff_ns(&end, &step2);
-                //    println!("pnt took {}, {}, {}, {}", diff1, diff2, diff3, should_report);
+                    //let diff1 = diff_ns(&step1, &start);
+                    //let diff2 = diff_ns(&step2, &step1);
+                    //let diff3 = diff_ns(&end, &step2);
+                    //println!("pnt took {}, {}, {} {}", diff1, diff2, diff3, (*payload_data).pick_task);
                 //}
                 //REPORT.store(should_report + 1, core::sync::atomic::Ordering::SeqCst);
             }
@@ -214,10 +244,16 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                 let payload_data = payload as *mut c::ghost_msg_payload_pnt_err;
                 #[cfg(feature = "record")]
                 {
-                    let pid = unsafe {
-                        ffi::current_pid()
+                    //let pid = unsafe {
+                    //    ffi::current_pid()
+                    //};
+                    //let curr_cpu = unsafe {
+                    //    ffi::rs_smp_processor_id()
+                    //};
+                    let curr = unsafe {
+                        ffi::rs_current()
                     };
-                    let mut write_str = alloc::format!("pnt_err: {} {:?}\n\0", pid, *payload_data);
+                    let mut write_str = alloc::format!("pnt_err: {:?} {:?}\n\0", curr, *payload_data);
                     //c::printk_deferred(write_str.as_ptr() as *const i8);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
@@ -228,10 +264,16 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                 let payload_data = payload as *mut c::ghost_msg_payload_balance_err;
                 #[cfg(feature = "record")]
                 {
-                    let pid = unsafe {
-                        ffi::current_pid()
+                    //let pid = unsafe {
+                    //    ffi::current_pid()
+                    //};
+                    //let curr_cpu = unsafe {
+                    //    ffi::rs_smp_processor_id()
+                    //};
+                    let curr = unsafe {
+                        ffi::rs_current()
                     };
-                    let mut write_str = alloc::format!("balance_err: {} {:?}\n\0", pid, *payload_data);
+                    let mut write_str = alloc::format!("balance_err: {:?} {:?}\n\0", curr, *payload_data);
                     //c::printk_deferred(write_str.as_ptr() as *const i8);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
@@ -242,10 +284,16 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                 let payload_data = payload as *const c::ghost_msg_payload_task_dead;
                 #[cfg(feature = "record")]
                 {
-                    let pid = unsafe {
-                        ffi::current_pid()
+                    //let pid = unsafe {
+                    //    ffi::current_pid()
+                    //};
+                    //let curr_cpu = unsafe {
+                    //    ffi::rs_smp_processor_id()
+                    //};
+                    let curr = unsafe {
+                        ffi::rs_current()
                     };
-                    let mut write_str = alloc::format!("dead: {} {:?}\n\0", pid, *payload_data);
+                    let mut write_str = alloc::format!("dead: {:?} {:?}\n\0", curr, *payload_data);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 let guard = RQLockGuard{random_data: PhantomData};
@@ -267,10 +315,16 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                 let payload_data = payload as *const c::ghost_msg_payload_task_blocked;
                 #[cfg(feature = "record")]
                 {
-                    let pid = unsafe {
-                        ffi::current_pid()
+                    //let pid = unsafe {
+                    //    ffi::current_pid()
+                    //};
+                    //let curr_cpu = unsafe {
+                    //    ffi::rs_smp_processor_id()
+                    //};
+                    let curr = unsafe {
+                        ffi::rs_current()
                     };
-                    let mut write_str = alloc::format!("blocked: {} {:?}\n\0", pid, *payload_data);
+                    let mut write_str = alloc::format!("blocked: {:?} {:?}\n\0", curr, *payload_data);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 //let sched = Schedulable {
@@ -286,10 +340,16 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                 let payload_data = payload as *const c::ghost_msg_payload_task_wakeup;
                 #[cfg(feature = "record")]
                 {
-                    let pid = unsafe {
-                        ffi::current_pid()
+                    //let pid = unsafe {
+                    //    ffi::current_pid()
+                    //};
+                    //let curr_cpu = unsafe {
+                    //    ffi::rs_smp_processor_id()
+                    //};
+                    let curr = unsafe {
+                        ffi::rs_current()
                     };
-                    let mut write_str = alloc::format!("wakeup: {} {:?}\n\0", pid, *payload_data);
+                    let mut write_str = alloc::format!("wakeup: {:?} {:?}\n\0", curr, *payload_data);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 // Maybe it's ok to have this for other cpus?
@@ -307,10 +367,16 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                 let payload_data = payload as *const c::ghost_msg_payload_task_new;
                 #[cfg(feature = "record")]
                 {
-                    let pid = unsafe {
-                        ffi::current_pid()
+                    //let pid = unsafe {
+                    //    ffi::current_pid()
+                    //};
+                    //let curr_cpu = unsafe {
+                    //    ffi::rs_smp_processor_id()
+                    //};
+                    let curr = unsafe {
+                        ffi::rs_current()
                     };
-                    let mut write_str = alloc::format!("new: {} {:?}\n\0", pid, *payload_data);
+                    let mut write_str = alloc::format!("new: {:?} {:?}\n\0", curr, *payload_data);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 // Tasks moved onto the scheduler can be scheduled anywhere
@@ -331,10 +397,16 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                 let payload_data = payload as *const c::ghost_msg_payload_task_preempt;
                 #[cfg(feature = "record")]
                 {
-                    let pid = unsafe {
-                        ffi::current_pid()
+                    //let pid = unsafe {
+                    //    ffi::current_pid()
+                    //};
+                    //let curr_cpu = unsafe {
+                    //    ffi::rs_smp_processor_id()
+                    //};
+                    let curr = unsafe {
+                        ffi::rs_current()
                     };
-                    let mut write_str = alloc::format!("preempt: {} {:?}\n\0", pid, *payload_data);
+                    let mut write_str = alloc::format!("preempt: {:?} {:?}\n\0", curr, *payload_data);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 let sched = Schedulable {
@@ -350,10 +422,16 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                 let payload_data = payload as *const c::ghost_msg_payload_task_yield;
                 #[cfg(feature = "record")]
                 {
-                    let pid = unsafe {
-                        ffi::current_pid()
+                    //let pid = unsafe {
+                    //    ffi::current_pid()
+                    //};
+                    //let curr_cpu = unsafe {
+                    //    ffi::rs_smp_processor_id()
+                    //};
+                    let curr = unsafe {
+                        ffi::rs_current()
                     };
-                    let mut write_str = alloc::format!("yield: {} {:?}\n\0", pid, *payload_data);
+                    let mut write_str = alloc::format!("yield: {:?} {:?}\n\0", curr, *payload_data);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 let sched = Schedulable {
@@ -369,10 +447,16 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                 let payload_data = payload as *const c::ghost_msg_payload_task_departed;
                 #[cfg(feature = "record")]
                 {
-                    let pid = unsafe {
-                        ffi::current_pid()
+                    //let pid = unsafe {
+                    //    ffi::current_pid()
+                    //};
+                    //let curr_cpu = unsafe {
+                    //    ffi::rs_smp_processor_id()
+                    //};
+                    let curr = unsafe {
+                        ffi::rs_current()
                     };
-                    let mut write_str = alloc::format!("departed: {} {:?}\n\0", pid, *payload_data);
+                    let mut write_str = alloc::format!("departed: {:?} {:?}\n\0", curr, *payload_data);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 let guard = RQLockGuard{random_data: PhantomData};
@@ -384,10 +468,16 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                 let payload_data = payload as *const c::ghost_msg_payload_task_switchto;
                 #[cfg(feature = "record")]
                 {
-                    let pid = unsafe {
-                        ffi::current_pid()
+                    //let pid = unsafe {
+                    //    ffi::current_pid()
+                    //};
+                    //let curr_cpu = unsafe {
+                    //    ffi::rs_smp_processor_id()
+                    //};
+                    let curr = unsafe {
+                        ffi::rs_current()
                     };
-                    let mut write_str = alloc::format!("switchto: {} {:?}\n\0", pid, *payload_data);
+                    let mut write_str = alloc::format!("switchto: {:?} {:?}\n\0", curr, *payload_data);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 agent.task_switchto((*payload_data).pid, (*payload_data).runtime,
@@ -397,10 +487,16 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                 let payload_data = payload as *const c::ghost_msg_payload_task_affinity_changed;
                 #[cfg(feature = "record")]
                 {
-                    let pid = unsafe {
-                        ffi::current_pid()
+                    //let pid = unsafe {
+                    //    ffi::current_pid()
+                    //};
+                    //let curr_cpu = unsafe {
+                    //    ffi::rs_smp_processor_id()
+                    //};
+                    let curr = unsafe {
+                        ffi::rs_current()
                     };
-                    let mut write_str = alloc::format!("affinity: {} {:?}\n\0", pid, *payload_data);
+                    let mut write_str = alloc::format!("affinity: {:?} {:?}\n\0", curr, *payload_data);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 agent.task_affinity_changed((*payload_data).pid, (*payload_data).cpumask);
@@ -409,10 +505,16 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                 let payload_data = payload as *const c::ghost_msg_payload_task_latched;
                 #[cfg(feature = "record")]
                 {
-                    let pid = unsafe {
-                        ffi::current_pid()
+                    //let pid = unsafe {
+                    //    ffi::current_pid()
+                    //};
+                    //let curr_cpu = unsafe {
+                    //    ffi::rs_smp_processor_id()
+                    //};
+                    let curr = unsafe {
+                        ffi::rs_current()
                     };
-                    let mut write_str = alloc::format!("latched: {} {:?}\n\0", pid, *payload_data);
+                    let mut write_str = alloc::format!("latched: {:?} {:?}\n\0", curr, *payload_data);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 agent.task_latched((*payload_data).pid, (*payload_data).commit_time,
@@ -423,10 +525,16 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                 let payload_data = payload as *const c::ghost_msg_payload_task_prio_changed;
                 #[cfg(feature = "record")]
                 {
-                    let pid = unsafe {
-                        ffi::current_pid()
+                    //let pid = unsafe {
+                    //    ffi::current_pid()
+                    //};
+                    //let curr_cpu = unsafe {
+                    //    ffi::rs_smp_processor_id()
+                    //};
+                    let curr = unsafe {
+                        ffi::rs_current()
                     };
-                    let mut write_str = alloc::format!("prio_changed: {} {:?}\n\0", pid, *payload_data);
+                    let mut write_str = alloc::format!("prio_changed: {:?} {:?}\n\0", curr, *payload_data);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 // Tasks moved onto the scheduler can be scheduled anywhere
@@ -437,10 +545,16 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                 let payload_data = payload as *const c::ghost_msg_payload_cpu_tick;
                 #[cfg(feature = "record")]
                 {
-                    let pid = unsafe {
-                        ffi::current_pid()
+                    //let pid = unsafe {
+                    //    ffi::current_pid()
+                    //};
+                    //let curr_cpu = unsafe {
+                    //    ffi::rs_smp_processor_id()
+                    //};
+                    let curr = unsafe {
+                        ffi::rs_current()
                     };
-                    let mut write_str = alloc::format!("tick: {} {:?}\n\0", pid, *payload_data);
+                    let mut write_str = alloc::format!("tick: {:?} {:?}\n\0", curr, *payload_data);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 let guard = RQLockGuard{random_data: PhantomData};
@@ -450,10 +564,16 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                 let payload_data = payload as *const c::ghost_msg_payload_cpu_not_idle;
                 #[cfg(feature = "record")]
                 {
-                    let pid = unsafe {
-                        ffi::current_pid()
+                    //let pid = unsafe {
+                    //    ffi::current_pid()
+                    //};
+                    //let curr_cpu = unsafe {
+                    //    ffi::rs_smp_processor_id()
+                    //};
+                    let curr = unsafe {
+                        ffi::rs_current()
                     };
-                    let mut write_str = alloc::format!("not_idle: {} {:?}\n\0", pid, *payload_data);
+                    let mut write_str = alloc::format!("not_idle: {:?} {:?}\n\0", curr, *payload_data);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 agent.cpu_not_idle((*payload_data).cpu, (*payload_data).next_pid);
@@ -462,10 +582,16 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                 let payload_data = payload as *mut c::ghost_msg_payload_select_task_rq;
                 #[cfg(feature = "record")]
                 {
-                    let pid = unsafe {
-                        ffi::current_pid()
+                    //let pid = unsafe {
+                    //    ffi::current_pid()
+                    //};
+                    //let curr_cpu = unsafe {
+                    //    ffi::rs_smp_processor_id()
+                    //};
+                    let curr = unsafe {
+                        ffi::rs_current()
                     };
-                    let mut write_str = alloc::format!("select_rq: {} {:?}\n\0", pid, *payload_data);
+                    let mut write_str = alloc::format!("select_rq: {:?} {:?}\n\0", curr, *payload_data);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 let cpu = agent.select_task_rq((*payload_data).pid, (*payload_data).waker_cpu, (*payload_data).prev_cpu);
@@ -475,11 +601,17 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                 };
                 #[cfg(feature = "record")]
                 {
-                    let pid = unsafe {
-                        ffi::current_pid()
+                    //let pid = unsafe {
+                    //    ffi::current_pid()
+                    //};
+                    //let curr_cpu = unsafe {
+                    //    ffi::rs_smp_processor_id()
+                    //};
+                    let curr = unsafe {
+                        ffi::rs_current()
                     };
-                    let mut write_str = alloc::format!("select_rq_ret: {} {} {}\n\0",
-                                                       pid, (*payload_data).pid, cpu);
+                    let mut write_str = alloc::format!("select_rq_ret: {:?} {} {}\n\0",
+                                                       curr, (*payload_data).pid, cpu);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 agent.selected_task_rq(sched);
@@ -489,10 +621,16 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                 let payload_data = payload as *const c::ghost_msg_payload_migrate_task_rq;
                 #[cfg(feature = "record")]
                 {
-                    let pid = unsafe {
-                        ffi::current_pid()
+                    //let pid = unsafe {
+                    //    ffi::current_pid()
+                    //};
+                    //let curr_cpu = unsafe {
+                    //    ffi::rs_smp_processor_id()
+                    //};
+                    let curr = unsafe {
+                        ffi::rs_current()
                     };
-                    let mut write_str = alloc::format!("migrate_rq: {} {:?}\n\0", pid, *payload_data);
+                    let mut write_str = alloc::format!("migrate_rq: {:?} {:?}\n\0", curr, *payload_data);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 let sched = Schedulable {
@@ -507,10 +645,16 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                 let payload_data = payload as *mut c::ghost_msg_payload_balance;
                 #[cfg(feature = "record")]
                 {
-                    let pid = unsafe {
-                        ffi::current_pid()
+                    //let pid = unsafe {
+                    //    ffi::current_pid()
+                    //};
+                    //let curr_cpu = unsafe {
+                    //    ffi::rs_smp_processor_id()
+                    //};
+                    let curr = unsafe {
+                        ffi::rs_current()
                     };
-                    let mut write_str = alloc::format!("balance: {} {:?}\n\0", pid, *payload_data);
+                    let mut write_str = alloc::format!("balance: {:?} {:?}\n\0", curr, *payload_data);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 let guard = RQLockGuard{random_data: PhantomData};
@@ -519,11 +663,17 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                 (*payload_data).move_pid = next_pid.unwrap_or_default();
                 #[cfg(feature = "record")]
                 {
-                    let pid = unsafe {
-                        ffi::current_pid()
+                    //let pid = unsafe {
+                    //    ffi::current_pid()
+                    //};
+                    //let curr_cpu = unsafe {
+                    //    ffi::rs_smp_processor_id()
+                    //};
+                    let curr = unsafe {
+                        ffi::rs_current()
                     };
-                    let mut write_str = alloc::format!("balance_ret: {} {} {:?}\n\0",
-                                                       pid, (*payload_data).cpu, next_pid);
+                    let mut write_str = alloc::format!("balance_ret: {:?} {} {:?}\n\0",
+                                                       curr, (*payload_data).cpu, next_pid);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
             }
@@ -562,10 +712,16 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                 //let q = unsafe { &mut*((*payload_data).q as *mut RingBuffer<UserMessage>) };
                 #[cfg(feature = "record")]
                 {
-                    let pid = unsafe {
-                        ffi::current_pid()
+                    //let pid = unsafe {
+                    //    ffi::current_pid()
+                    //};
+                    //let curr_cpu = unsafe {
+                    //    ffi::rs_smp_processor_id()
+                    //};
+                    let curr = unsafe {
+                        ffi::rs_current()
                     };
-                    let mut write_str = alloc::format!("create_queue {}\n\0", pid);
+                    let mut write_str = alloc::format!("create_queue {:?}\n\0", curr);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 let id = agent.register_queue(q);
@@ -578,10 +734,16 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                 //let q = unsafe { &mut*((*payload_data).q as *mut RingBuffer<UserMessage>) };
                 #[cfg(feature = "record")]
                 {
-                    let pid = unsafe {
-                        ffi::current_pid()
+                    //let pid = unsafe {
+                    //    ffi::current_pid()
+                    //};
+                    //let curr_cpu = unsafe {
+                    //    ffi::rs_smp_processor_id()
+                    //};
+                    let curr = unsafe {
+                        ffi::rs_current()
                     };
-                    let mut write_str = alloc::format!("create_reverse_queue {}\n\0", pid);
+                    let mut write_str = alloc::format!("create_reverse_queue {:?}\n\0", curr);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 let id = agent.register_reverse_queue(q);
@@ -591,10 +753,16 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                 let payload_data = payload as *const c::ghost_msg_payload_enter_queue;
                 #[cfg(feature = "record")]
                 {
-                    let pid = unsafe {
-                        ffi::current_pid()
+                    //let pid = unsafe {
+                    //    ffi::current_pid()
+                    //};
+                    //let curr_cpu = unsafe {
+                    //    ffi::rs_smp_processor_id()
+                    //};
+                    let curr = unsafe {
+                        ffi::rs_current()
                     };
-                    let mut write_str = alloc::format!("enter_queue: {} {:?}\n\0", pid, *payload_data);
+                    let mut write_str = alloc::format!("enter_queue: {:?} {:?}\n\0", curr, *payload_data);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 agent.enter_queue((*payload_data).id, (*payload_data).entries);
@@ -605,10 +773,16 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                 let payload_data = payload as *const c::ghost_msg_payload_unreg_queue;
                 #[cfg(feature = "record")]
                 {
-                    let pid = unsafe {
-                        ffi::current_pid()
+                    //let pid = unsafe {
+                    //    ffi::current_pid()
+                    //};
+                    //let curr_cpu = unsafe {
+                    //    ffi::rs_smp_processor_id()
+                    //};
+                    let curr = unsafe {
+                        ffi::rs_current()
                     };
-                    let mut write_str = alloc::format!("unregister_queue {} {:?}\n\0", pid, *payload_data);
+                    let mut write_str = alloc::format!("unregister_queue {:?} {:?}\n\0", curr, *payload_data);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 agent.unregister_queue((*payload_data).id);
@@ -619,10 +793,16 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                 let payload_data = payload as *const c::ghost_msg_payload_unreg_queue;
                 #[cfg(feature = "record")]
                 {
-                    let pid = unsafe {
-                        ffi::current_pid()
+                    //let pid = unsafe {
+                    //    ffi::current_pid()
+                    //};
+                    //let curr_cpu = unsafe {
+                    //    ffi::rs_smp_processor_id()
+                    //};
+                    let curr = unsafe {
+                        ffi::rs_current()
                     };
-                    let mut write_str = alloc::format!("unregister_reverse_queue {} {:?}\n\0", pid, *payload_data);
+                    let mut write_str = alloc::format!("unregister_reverse_queue {:?} {:?}\n\0", curr, *payload_data);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 agent.unregister_rev_queue((*payload_data).id);
@@ -646,8 +826,8 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
         //getnstimeofday64_rs(&mut end);
         //let should_report = REPORT.load(core::sync::atomic::Ordering::Relaxed);
         //if (should_report % 10000 == 0) {
-        //    let diff = diff_ns(&end, &start);
-        //    println!("msg took {}", diff);
+            //let diff = diff_ns(&end, &start);
+            //println!("msg {} took {}", type_, diff);
         //}
         //REPORT.store(should_report + 1, core::sync::atomic::Ordering::SeqCst);
     }
@@ -862,7 +1042,7 @@ pub trait BentoScheduler<'a, 'b, TransferIn: Send, TransferOut: Send, UserMessag
         _from_switchto: i8,
         _was_current: i8,
         _guard: RQLockGuard
-    ) {}
+    ) -> Schedulable;
 
     fn task_switchto(
         &self,

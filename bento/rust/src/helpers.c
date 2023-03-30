@@ -25,6 +25,7 @@
 #include <linux/siphash.h>
 #include <linux/sockptr.h>
 #include <linux/ghost.h>
+#include <linux/smp.h>
 //#include <uapi/linux/ghost.h>
 
 static siphash_key_t rs_net_secret __read_mostly;
@@ -87,7 +88,12 @@ current_flags(void) {
 
 unsigned int
 current_pid(void) {
-	return pid_nr(get_task_pid(current, PIDTYPE_PID));
+	return current->pid;
+	//return pid_nr(get_task_pid(current, PIDTYPE_PID));
+}
+
+struct task_struct *rs_current(void) {
+	return current;
 }
 
 void
@@ -826,4 +832,8 @@ struct fd rs_fdget(unsigned int fd) {
 void rs_hrtick_start(int cpu, u64 delay) {
 	hrtick_start_cpu(cpu, delay);
 	return;
+}
+
+int rs_smp_processor_id(void) {
+	return smp_processor_id();
 }
