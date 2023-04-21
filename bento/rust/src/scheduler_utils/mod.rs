@@ -390,7 +390,7 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                     cpu: cpu,
                 };
                 let guard = RQLockGuard{random_data: PhantomData};
-                agent.task_new((*payload_data).pid, (*payload_data).runtime,
+                agent.task_new((*payload_data).pid, (*payload_data).tgid, (*payload_data).runtime,
                     (*payload_data).runnable, (*payload_data).prio, sched, guard);
             }
             c::MSG_TASK_PREEMPT => {
@@ -724,7 +724,7 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                     let mut write_str = alloc::format!("create_queue {:?}\n\0", curr);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
-                let id = agent.register_queue(q);
+                let id = agent.register_queue((*payload_data).pid, q);
                 (*payload_data).id = id;
             }
             c::MSG_CREATE_REV_QUEUE => {
@@ -746,7 +746,7 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                     let mut write_str = alloc::format!("create_reverse_queue {:?}\n\0", curr);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
-                let id = agent.register_reverse_queue(q);
+                let id = agent.register_reverse_queue((*payload_data).pid, q);
                 (*payload_data).id = id;
             }
             c::MSG_ENTER_QUEUE => {
@@ -1004,6 +1004,7 @@ pub trait BentoScheduler<'a, 'b, TransferIn: Send, TransferOut: Send, UserMessag
     fn task_new(
         &self,
         _pid: u64,
+        _tgid: u64,
         _runtime: u64,
         _runnable: u16,
         _prio: i32,
@@ -1090,9 +1091,9 @@ pub trait BentoScheduler<'a, 'b, TransferIn: Send, TransferOut: Send, UserMessag
 
     fn reregister_init(&mut self, Option<TransferIn>) {}
 
-    fn register_queue(&self, RingBuffer<UserMessage>) -> i32;
+    fn register_queue(&self, pid: u64, RingBuffer<UserMessage>) -> i32;
 
-    fn register_reverse_queue(&self, RingBuffer<RevMessage>) -> i32;
+    fn register_reverse_queue(&self, pid: u64, RingBuffer<RevMessage>) -> i32;
 
     fn enter_queue(&self, id: i32, _entries: u32) {}
 

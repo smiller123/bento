@@ -18,6 +18,7 @@ use core::convert::TryInto;
 //use postcard;
 
 
+#[repr(C)]
 pub struct BufferInner<T: Send> {
     pub offset: u32,
     pub capacity: u32,
@@ -52,8 +53,10 @@ impl<'a, T: Send + Copy + Serialize + Deserialize<'a>> BufferInner<T> {
 
     fn dequeue(&mut self, ptr: *mut Self) -> Option<T> {
         if self.is_empty() {
+            println!("empty q ptr {:?} off {} capacity {} write {} read {}", ptr, self.offset, self.capacity, self.writeptr, self.readptr);
             None
         } else {
+            println!("ptr {:?} off {} capacity {} write {} read {}", ptr, self.offset, self.capacity, self.writeptr, self.readptr);
             let index = self.readptr & (self.capacity - 1);
             let start = (ptr as u64 + self.offset as u64) as *mut T;
             println!("start {:?}", start);
@@ -110,6 +113,7 @@ impl<'a, T: Send + Copy + Serialize + Deserialize<'a>> RingBuffer<T> {
 
     pub fn dequeue(&mut self) -> Option<T> {
         unsafe {
+            println!("inner {:?}", self.inner);
             let ret = (*self.inner).dequeue(self.inner);
 
             // make this size more correct.
@@ -163,6 +167,7 @@ impl<'a, T: Send + Copy + Serialize + Deserialize<'a>> RingBuffer<T> {
     }
 
     pub unsafe fn from_raw(ptr: *mut raw::c_void, policy: i32) -> Self {
+        println!("ptr {:?}, policy {}", ptr, policy);
         Self {
             inner: ptr as *mut BufferInner<T>,
             policy: policy
