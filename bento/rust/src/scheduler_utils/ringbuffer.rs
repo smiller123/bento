@@ -53,17 +53,17 @@ impl<'a, T: Send + Copy + Serialize + Deserialize<'a>> BufferInner<T> {
 
     fn dequeue(&mut self, ptr: *mut Self) -> Option<T> {
         if self.is_empty() {
-            println!("empty q ptr {:?} off {} capacity {} write {} read {}", ptr, self.offset, self.capacity, self.writeptr, self.readptr);
+            //println!("empty q ptr {:?} off {} capacity {} write {} read {}", ptr, self.offset, self.capacity, self.writeptr, self.readptr);
             None
         } else {
-            println!("ptr {:?} off {} capacity {} write {} read {}", ptr, self.offset, self.capacity, self.writeptr, self.readptr);
+            //println!("ptr {:?} off {} capacity {} write {} read {}", ptr, self.offset, self.capacity, self.writeptr, self.readptr);
             let index = self.readptr & (self.capacity - 1);
             let start = (ptr as u64 + self.offset as u64) as *mut T;
-            println!("start {:?}", start);
+            //println!("start {:?}", start);
             let slice_buf = unsafe {
                 slice::from_raw_parts_mut(start, self.capacity as usize)
             };
-            println!("index {}", index);
+            //println!("index {}", index);
             let res = slice_buf[index as usize];
             self.readptr += 1;
             unsafe { Some(res) }
@@ -76,11 +76,11 @@ impl<'a, T: Send + Copy + Serialize + Deserialize<'a>> BufferInner<T> {
         //} else {
         let index = self.writeptr & (self.capacity - 1);
         let start = (ptr as u64 + self.offset as u64) as *mut T;
-        println!("start {:?}", start);
+        //println!("start {:?}", start);
         let slice_buf = unsafe {
             slice::from_raw_parts_mut(start, self.capacity as usize)
         };
-        println!("index {}", index);
+        //println!("index {}", index);
         //let res = slice_buf[index as usize];
         slice_buf[index as usize] = val;
         self.writeptr += 1;
@@ -113,7 +113,7 @@ impl<'a, T: Send + Copy + Serialize + Deserialize<'a>> RingBuffer<T> {
 
     pub fn dequeue(&mut self) -> Option<T> {
         unsafe {
-            println!("inner {:?}", self.inner);
+            //println!("inner {:?}", self.inner);
             let ret = (*self.inner).dequeue(self.inner);
 
             // make this size more correct.
@@ -167,7 +167,7 @@ impl<'a, T: Send + Copy + Serialize + Deserialize<'a>> RingBuffer<T> {
     }
 
     pub unsafe fn from_raw(ptr: *mut raw::c_void, policy: i32) -> Self {
-        println!("ptr {:?}, policy {}", ptr, policy);
+        //println!("ptr {:?}, policy {}", ptr, policy);
         Self {
             inner: ptr as *mut BufferInner<T>,
             policy: policy

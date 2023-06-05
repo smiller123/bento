@@ -1,6 +1,7 @@
 extern crate core;
 extern crate alloc;
 extern crate serde;
+extern crate once_cell;
 
 pub mod ringbuffer;
 pub mod spin_rs;
