@@ -9,3 +9,4 @@ postcard = "1.0.0"
 serde = { version = "1.0.*", default-features = false }
 spin = { version = "0.9.4", features = ["rwlock"] }
 once_cell = "1.17.1"
+num_cpus = "1.0"

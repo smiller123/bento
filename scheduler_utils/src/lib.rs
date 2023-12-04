@@ -2,11 +2,13 @@ extern crate core;
 extern crate alloc;
 extern crate serde;
 extern crate once_cell;
+extern crate num_cpus;
 
 pub mod ringbuffer;
 pub mod spin_rs;
 pub mod hrtick;
 pub mod sched_core;
+pub mod cpu;
 
 use serde::{Serialize, Deserialize};
 

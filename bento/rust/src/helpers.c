@@ -26,6 +26,7 @@
 #include <linux/sockptr.h>
 #include <linux/ghost.h>
 #include <linux/smp.h>
+#include <linux/cpumask.h>
 //#include <uapi/linux/ghost.h>
 
 static siphash_key_t rs_net_secret __read_mostly;
@@ -836,4 +837,8 @@ void rs_hrtick_start(int cpu, u64 delay) {
 
 int rs_smp_processor_id(void) {
 	return smp_processor_id();
+}
+
+int rs_num_online_cpus(void) {
+	return num_online_cpus();
 }

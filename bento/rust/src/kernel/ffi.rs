@@ -501,6 +501,7 @@ extern "C" {
     pub fn rs_fdget(fd: u32) -> bindings::fd;
     pub fn rs_hrtick_start(cpu: i32, delay: u64);
     pub fn rs_smp_processor_id() -> i32;
+    pub fn rs_num_online_cpus() -> i32;
 }
 
 pub unsafe fn sb_bread(sb: *const raw::c_void, blockno: u64) -> *const raw::c_void {
