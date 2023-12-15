@@ -508,5 +508,5 @@ pub unsafe fn sb_bread(sb: *const raw::c_void, blockno: u64) -> *const raw::c_vo
     rs_sb_bread(sb, blockno)
 }
 
-unsafe impl Send for bindings::ghost_agent_type {}
-unsafe impl Sync for bindings::ghost_agent_type {}
+unsafe impl Send for bindings::enoki_sched_type {}
+unsafe impl Sync for bindings::enoki_sched_type {}

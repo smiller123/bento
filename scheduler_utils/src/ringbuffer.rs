@@ -2,32 +2,15 @@
 
 extern crate serde;
 extern crate postcard;
-//extern crate alloc;
-// We need vecs so depend on alloc
-//use alloc::vec::Vec;
 use core::fmt::Debug;
 use std::io;
 use std::io::BufRead;
 use std::fs::File;
 use std::path::Path;
 use std::marker::PhantomData;
-//use core::iter::FromIterator;
-//use core::mem;
-//use core::mem::MaybeUninit;
-//use core::slice;
-//use kernel::raw;
-//use bindings as c; 
 
 use self::serde::{Serialize, Deserialize};
 use self::serde::de::DeserializeOwned;
-
-//pub struct BufferInner<T> {
-//    pub offset: u32,
-//    pub capacity: u32,
-//    pub writeptr: u32,
-//    pub readptr: u32,
-//    pub val: T,
-//}
 
 fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>
 where P: AsRef<Path>, {
@@ -40,67 +23,9 @@ pub struct RingBuffer<T> {
     lines: io::Lines<io::BufReader<File>>,
     phantom: PhantomData<T>,
     buf_vec: Vec<[u8; 128]>,
-//    ref_vec: Vec<&'a [u8; 128]>
-//    buf: Vec<MaybeUninit<T>>,
-    //pub inner: *mut BufferInner<T>
 }
 
-//impl<T: Copy + Debug> BufferInner<T> {
-//    fn len(&self) -> u32 {
-//        self.writeptr - self.readptr
-//    }
-//
-//    #[inline]
-//    fn is_empty(&self) -> bool {
-//        self.len() == 0
-//    }
-//
-//    #[inline]
-//    fn is_full(&self) -> bool {
-//        // Does this actually loop correctly?
-//        self.len() == self.capacity
-//    }
-//
-//    fn dequeue(&mut self, ptr: *mut Self) -> Option<T> {
-//        if self.is_empty() {
-//            None
-//        } else {
-//            let index = self.readptr & (self.capacity - 1);
-//            let start = (ptr as u64 + self.offset as u64) as *mut T;
-//            println!("start {:?}", start);
-//            let slice_buf = unsafe {
-//                slice::from_raw_parts_mut(start, self.capacity as usize)
-//            };
-//            println!("index {}", index);
-//            let res = slice_buf[index as usize];
-//            self.readptr += 1;
-//            unsafe { Some(res) }
-//        }
-//    }
-//}
-
 impl<T: Copy + Serialize + DeserializeOwned> RingBuffer<T> {
-    //fn len(&self) -> u32 {
-    //    unsafe {
-    //        (*self.inner).len()
-    //    }
-    //}
-
-    //#[inline]
-    //fn is_empty(&self) -> bool {
-    //    unsafe {
-    //        (*self.inner).is_empty()
-    //    }
-    //}
-
-    //#[inline]
-    //fn is_full(&self) -> bool {
-    //    unsafe {
-    //        (*self.inner).is_full()
-    //    }
-    //    // Does this actually loop correctly?
-    //}
-
     pub fn dequeue(&mut self) -> Option<T> {
         loop {
             let line_res = self.lines.next();
@@ -153,10 +78,4 @@ impl<T: Copy + Serialize + DeserializeOwned> RingBuffer<T> {
             buf_vec: Vec::new()
         }
     }
-
-    //pub unsafe fn from_raw(ptr: *mut raw::c_void) -> Self {
-    //    Self {
-    //        inner: ptr as *mut BufferInner<T>
-    //    }
-    //}
 }

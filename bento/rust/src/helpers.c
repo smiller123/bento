@@ -27,7 +27,6 @@
 #include <linux/ghost.h>
 #include <linux/smp.h>
 #include <linux/cpumask.h>
-//#include <uapi/linux/ghost.h>
 
 static siphash_key_t rs_net_secret __read_mostly;
 
@@ -825,10 +824,6 @@ unsigned int rs_GHOST_IOC_CREATE_QUEUE(void) {
 struct fd rs_fdget(unsigned int fd) {
 	return fdget(fd);
 }
-
-//int rs_register_ghost_agent(struct ghost_agent_type * agent) {
-//	return register_ghost_agent(agent);
-//}
 
 void rs_hrtick_start(int cpu, u64 delay) {
 	hrtick_start_cpu(cpu, delay);

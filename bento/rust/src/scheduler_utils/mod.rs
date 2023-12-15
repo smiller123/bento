@@ -12,7 +12,7 @@ use core::marker::PhantomData;
 use time::Timespec;
 
 use bindings as c;
-use bindings::{register_ghost_agent,unregister_ghost_agent,reregister_ghost_agent};
+use bindings::{register_enoki_sched,unregister_enoki_sched,reregister_enoki_sched};
 use kernel::raw;
 
 use self::ringbuffer::RingBuffer;
@@ -33,7 +33,6 @@ pub struct RQLockGuard {
     random_data: PhantomData<i32>,
 }
 
-//#[derive(Clone, Copy, Default, Debug)]
 #[derive(Default, Debug)]
 pub struct Schedulable {
     pid: u64,
@@ -50,49 +49,11 @@ impl Schedulable {
     }
 }
 
-static REPORT: core::sync::atomic::AtomicI64 = core::sync::atomic::AtomicI64::new(0);
-
-pub fn outer_pnt<'a, 'b, TransferIn: Send, TransferOut: Send,
-    UserMessage: Send+ Copy + Serialize + Deserialize<'a>,
-    RevMessage: Send + Copy + Serialize + Deserialize<'b>,
-    T: BentoScheduler<'a, 'b, TransferIn, TransferOut, UserMessage, RevMessage>>(
-//pub extern "C" fn parse_message<T: BentoScheduler> (
-    agent: &mut T,
-    cpu: i32,
-    retval: *mut i32)
-{
-    //let mut start = Timespec64::new();
-    //let mut end = Timespec64::new();
-    //let mut step1 = Timespec64::new();
-    //getnstimeofday64_rs(&mut start);
-    //let next_task = agent.pick_next_task(cpu);
-    ////getnstimeofday64_rs(&mut step1);
-    //if let Some(sched) = next_task {
-    //    unsafe {
-    //    *retval = sched.get_pid() as i32;
-    //    }
-    //} else {
-    //    unsafe {
-    //    *retval = -1;
-    //    }
-    //}
-    //getnstimeofday64_rs(&mut end);
-    //let should_report = REPORT.load(core::sync::atomic::Ordering::Relaxed);
-    //if (should_report % 10000 == 0) {
-    //    let diff1 = diff_ns(&step1, &start);
-    //    let diff2 = diff_ns(&end, &step1);
-    //    println!("pnt took {}, {}", diff1, diff2);
-    //}
-    //REPORT.store(should_report + 1, core::sync::atomic::Ordering::SeqCst);
-    return;
-}
-
 pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
     UserMessage: Send+ Copy + Serialize + Deserialize<'a>,
     RevMessage: Send + Copy + Serialize + Deserialize<'b>,
     T: BentoScheduler<'a, 'b, TransferIn, TransferOut, UserMessage, RevMessage>>(
-//pub extern "C" fn parse_message<T: BentoScheduler> (
-    agent: &mut T,
+    sched: &mut T,
     type_: i32,
     msglen: i32,
     barrier: u32,
@@ -101,49 +62,17 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
     retval: *mut i32)
 {
     unsafe {
-        //let mut start = Timespec64::new();
-        //let mut end = Timespec64::new();
-        //getnstimeofday64_rs(&mut start);
-        //let write_str = alloc::format!("create {}\0", id);
-        //let mut write_ptr: i64 = 0;
-        //let ret = unsafe {
-        //    c::kernel_write(file, write_str.as_ptr() as *const raw::c_void, write_str.as_bytes().len(), &mut write_ptr as *mut i64)
-        //};
-    //let should_report = REPORT.load(core::sync::atomic::Ordering::Relaxed);
-    //if (should_report % 10000 == 0) {
-    ////    let diff1 = diff_ns(&step1, &start);
-    ////    let diff2 = diff_ns(&end, &step1);
-    ////    println!("pnt took {}, {}", diff1, diff2);
-    //    println!("got call {}", type_);
-    //}
-    //REPORT.store(should_report + 1, core::sync::atomic::Ordering::SeqCst);
-        //if type_ != 131 && type_ != 65 && type_ != 66 && type_ != 74 && type_ != 132 && type_ != 128 && type_ != 67 && type_ != 68 && type_ != 76 && type_ != 72 && type_ != 75 {
-        //println!("got msg {}", type_);
-        //}
         match type_ as u32 {
             c::MSG_PNT => {
-                //let mut start = Timespec64::new();
-                //let mut end = Timespec64::new();
-                //let mut step1 = Timespec64::new();
-                //let mut step2 = Timespec64::new();
-                //getnstimeofday64_rs(&mut start);
-                let payload_data = payload as *mut c::ghost_msg_payload_pnt;
+                let payload_data = payload as *mut c::enoki_msg_payload_pnt;
                 #[cfg(feature = "record")]
                 {
-                    //let pid = unsafe {
-                    //    ffi::current_pid()
-                    //};
-                    //let curr_cpu = unsafe {
-                    //    ffi::rs_smp_processor_id()
-                    //};
                     let curr = unsafe {
                         ffi::rs_current()
                     };
                     let mut write_str = alloc::format!("pnt: {:?} {:?}\n\0", curr, *payload_data);
-                    //c::printk_deferred(write_str.as_ptr() as *const i8);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
-                //getnstimeofday64_rs(&mut step1);
                 let curr_sched = if (*payload_data).is_curr {
                     let sched = Schedulable {
                         cpu: (*payload_data).cpu as u32,
@@ -159,19 +88,12 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                     None
                 };
                 let guard = RQLockGuard{random_data: PhantomData};
-                let next_task = agent.pick_next_task((*payload_data).cpu, curr_sched, curr_runtime, guard);
-                //getnstimeofday64_rs(&mut step2);
+                let next_task = sched.pick_next_task((*payload_data).cpu, curr_sched, curr_runtime, guard);
                 if next_task.is_none() {
                     (*payload_data).pick_task = false;
                     (*payload_data).ret_pid = 0;
                     #[cfg(feature = "record")]
                     {
-                        //let pid = unsafe {
-                        //    ffi::current_pid()
-                        //};
-                        //let curr_cpu = unsafe {
-                        //    ffi::rs_smp_processor_id()
-                        //};
                         let curr = unsafe {
                             ffi::rs_current()
                         };
@@ -181,21 +103,12 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                     }
                 } else if let Some(ref ret_sched) = next_task &&
                     (ret_sched.cpu == (*payload_data).cpu as u32 || ret_sched.cpu == u32::MAX) {
-                    //next_task.is_some_and(|x| x.cpu == (*payload_data).cpu as u32 || x.cpu == u32::MAX)) {
-                    //next_task.unwrap().cpu == (*payload_data).cpu as u32 ||
-                    //next_task.unwrap().cpu == u32::MAX) {
                     let ret_cpu = ret_sched.get_cpu();
                     let ret_pid = ret_sched.get_pid();
                     (*payload_data).pick_task = next_task.is_some();
                     (*payload_data).ret_pid = next_task.unwrap_or_default().get_pid();
                     #[cfg(feature = "record")]
                     {
-                        //let pid = unsafe {
-                        //    ffi::current_pid()
-                        //};
-                        //let curr_cpu = unsafe {
-                        //    ffi::rs_smp_processor_id()
-                        //};
                         let curr = unsafe {
                             ffi::rs_current()
                         };
@@ -212,15 +125,9 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                     let guard = RQLockGuard{random_data: PhantomData};
                     let ret_cpu = sched.get_cpu();
                     let ret_pid = sched.get_pid();
-                    agent.pnt_err(sched.get_cpu() as i32, sched.get_pid(), 2, Some(sched), guard);
+                    sched.pnt_err(sched.get_cpu() as i32, sched.get_pid(), 2, Some(sched), guard);
                     #[cfg(feature = "record")]
                     {
-                        //let pid = unsafe {
-                        //    ffi::current_pid()
-                        //};
-                        //let curr_cpu = unsafe {
-                        //    ffi::rs_smp_processor_id()
-                        //};
                         let curr = unsafe {
                             ffi::rs_current()
                         };
@@ -230,66 +137,37 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                         c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                     }
                 }
-                //getnstimeofday64_rs(&mut end);
-                //let should_report = REPORT.load(core::sync::atomic::Ordering::Relaxed);
-                //if (should_report % 10000 == 0) {
-                    //let diff1 = diff_ns(&step1, &start);
-                    //let diff2 = diff_ns(&step2, &step1);
-                    //let diff3 = diff_ns(&end, &step2);
-                    //println!("pnt took {}, {}, {} {}", diff1, diff2, diff3, (*payload_data).pick_task);
-                //}
-                //REPORT.store(should_report + 1, core::sync::atomic::Ordering::SeqCst);
             }
             c::MSG_PNT_ERR => {
-                let payload_data = payload as *mut c::ghost_msg_payload_pnt_err;
+                let payload_data = payload as *mut c::enoki_msg_payload_pnt_err;
                 #[cfg(feature = "record")]
                 {
-                    //let pid = unsafe {
-                    //    ffi::current_pid()
-                    //};
-                    //let curr_cpu = unsafe {
-                    //    ffi::rs_smp_processor_id()
-                    //};
                     let curr = unsafe {
                         ffi::rs_current()
                     };
                     let mut write_str = alloc::format!("pnt_err: {:?} {:?}\n\0", curr, *payload_data);
-                    //c::printk_deferred(write_str.as_ptr() as *const i8);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 let guard = RQLockGuard{random_data: PhantomData};
-                agent.pnt_err((*payload_data).cpu, (*payload_data).pid, (*payload_data).err, None, guard);
+                sched.pnt_err((*payload_data).cpu, (*payload_data).pid, (*payload_data).err, None, guard);
             }
             c::MSG_BALANCE_ERR => {
-                let payload_data = payload as *mut c::ghost_msg_payload_balance_err;
+                let payload_data = payload as *mut c::enoki_msg_payload_balance_err;
                 #[cfg(feature = "record")]
                 {
-                    //let pid = unsafe {
-                    //    ffi::current_pid()
-                    //};
-                    //let curr_cpu = unsafe {
-                    //    ffi::rs_smp_processor_id()
-                    //};
                     let curr = unsafe {
                         ffi::rs_current()
                     };
                     let mut write_str = alloc::format!("balance_err: {:?} {:?}\n\0", curr, *payload_data);
-                    //c::printk_deferred(write_str.as_ptr() as *const i8);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 let guard = RQLockGuard{random_data: PhantomData};
-                agent.balance_err((*payload_data).cpu, (*payload_data).pid, (*payload_data).err, None, guard);
+                sched.balance_err((*payload_data).cpu, (*payload_data).pid, (*payload_data).err, None, guard);
             }
             c::MSG_TASK_DEAD => {
-                let payload_data = payload as *const c::ghost_msg_payload_task_dead;
+                let payload_data = payload as *const c::enoki_msg_payload_task_dead;
                 #[cfg(feature = "record")]
                 {
-                    //let pid = unsafe {
-                    //    ffi::current_pid()
-                    //};
-                    //let curr_cpu = unsafe {
-                    //    ffi::rs_smp_processor_id()
-                    //};
                     let curr = unsafe {
                         ffi::rs_current()
                     };
@@ -297,55 +175,27 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 let guard = RQLockGuard{random_data: PhantomData};
-                agent.task_dead((*payload_data).pid, guard);
+                sched.task_dead((*payload_data).pid, guard);
             }
-            //c::MSG_TASK_DEPARTED => {
-            //    let payload_data = payload as *const c::ghost_msg_payload_task_departed;
-            //    #[cfg(feature = "record")]
-            //    {
-            //        let pid = unsafe {
-            //            ffi::current_pid()
-            //        };
-            //        let mut write_str = alloc::format!("departed: {} {:?}\n\0", pid, *payload_data);
-            //        c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
-            //    }
-            //    agent.task_dead((*payload_data).pid);
-            //}
             c::MSG_TASK_BLOCKED => {
-                let payload_data = payload as *const c::ghost_msg_payload_task_blocked;
+                let payload_data = payload as *const c::enoki_msg_payload_task_blocked;
                 #[cfg(feature = "record")]
                 {
-                    //let pid = unsafe {
-                    //    ffi::current_pid()
-                    //};
-                    //let curr_cpu = unsafe {
-                    //    ffi::rs_smp_processor_id()
-                    //};
                     let curr = unsafe {
                         ffi::rs_current()
                     };
                     let mut write_str = alloc::format!("blocked: {:?} {:?}\n\0", curr, *payload_data);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
-                //let sched = Schedulable {
-                //    cpu: (*payload_data).cpu as u32,
-                //    pid: (*payload_data).pid,
-                //};
                 let guard = RQLockGuard{random_data: PhantomData};
-                agent.task_blocked((*payload_data).pid, (*payload_data).runtime,
+                sched.task_blocked((*payload_data).pid, (*payload_data).runtime,
                     (*payload_data).cpu_seqnum,
                     (*payload_data).cpu, (*payload_data).from_switchto, guard);
             }
             c::MSG_TASK_WAKEUP => {
-                let payload_data = payload as *const c::ghost_msg_payload_task_wakeup;
+                let payload_data = payload as *const c::enoki_msg_payload_task_wakeup;
                 #[cfg(feature = "record")]
                 {
-                    //let pid = unsafe {
-                    //    ffi::current_pid()
-                    //};
-                    //let curr_cpu = unsafe {
-                    //    ffi::rs_smp_processor_id()
-                    //};
                     let curr = unsafe {
                         ffi::rs_current()
                     };
@@ -358,21 +208,15 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                     pid: (*payload_data).pid,
                 };
                 let guard = RQLockGuard{random_data: PhantomData};
-                agent.task_wakeup((*payload_data).pid, (*payload_data).agent_data,
+                sched.task_wakeup((*payload_data).pid,
                     (*payload_data).deferrable > 0, (*payload_data).last_ran_cpu,
                     (*payload_data).wake_up_cpu, (*payload_data).waker_cpu,
                     sched, guard);
             }
             c::MSG_TASK_NEW => {
-                let payload_data = payload as *const c::ghost_msg_payload_task_new;
+                let payload_data = payload as *const c::enoki_msg_payload_task_new;
                 #[cfg(feature = "record")]
                 {
-                    //let pid = unsafe {
-                    //    ffi::current_pid()
-                    //};
-                    //let curr_cpu = unsafe {
-                    //    ffi::rs_smp_processor_id()
-                    //};
                     let curr = unsafe {
                         ffi::rs_current()
                     };
@@ -390,20 +234,13 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                     cpu: cpu,
                 };
                 let guard = RQLockGuard{random_data: PhantomData};
-                //agent.task_new((*payload_data).pid, (*payload_data).tgid, (*payload_data).runtime,
-                agent.task_new((*payload_data).pid, (*payload_data).runtime,
+                sched.task_new((*payload_data).pid, (*payload_data).tgid, (*payload_data).runtime,
                     (*payload_data).runnable, (*payload_data).prio, sched, guard);
             }
             c::MSG_TASK_PREEMPT => {
-                let payload_data = payload as *const c::ghost_msg_payload_task_preempt;
+                let payload_data = payload as *const c::enoki_msg_payload_task_preempt;
                 #[cfg(feature = "record")]
                 {
-                    //let pid = unsafe {
-                    //    ffi::current_pid()
-                    //};
-                    //let curr_cpu = unsafe {
-                    //    ffi::rs_smp_processor_id()
-                    //};
                     let curr = unsafe {
                         ffi::rs_current()
                     };
@@ -415,20 +252,14 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                     pid: (*payload_data).pid,
                 };
                 let guard = RQLockGuard{random_data: PhantomData};
-                agent.task_preempt((*payload_data).pid, (*payload_data).runtime,
+                sched.task_preempt((*payload_data).pid, (*payload_data).runtime,
                     (*payload_data).cpu_seqnum, (*payload_data).cpu,
                     (*payload_data).from_switchto, (*payload_data).was_latched, sched, guard);
             }
             c::MSG_TASK_YIELD => {
-                let payload_data = payload as *const c::ghost_msg_payload_task_yield;
+                let payload_data = payload as *const c::enoki_msg_payload_task_yield;
                 #[cfg(feature = "record")]
                 {
-                    //let pid = unsafe {
-                    //    ffi::current_pid()
-                    //};
-                    //let curr_cpu = unsafe {
-                    //    ffi::rs_smp_processor_id()
-                    //};
                     let curr = unsafe {
                         ffi::rs_current()
                     };
@@ -440,20 +271,14 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                     pid: (*payload_data).pid,
                 };
                 let guard = RQLockGuard{random_data: PhantomData};
-                agent.task_yield((*payload_data).pid, (*payload_data).runtime,
+                sched.task_yield((*payload_data).pid, (*payload_data).runtime,
                     (*payload_data).cpu_seqnum, (*payload_data).cpu,
                     (*payload_data).from_switchto, sched, guard);
             }
             c::MSG_TASK_DEPARTED => {
-                let payload_data = payload as *const c::ghost_msg_payload_task_departed;
+                let payload_data = payload as *const c::enoki_msg_payload_task_departed;
                 #[cfg(feature = "record")]
                 {
-                    //let pid = unsafe {
-                    //    ffi::current_pid()
-                    //};
-                    //let curr_cpu = unsafe {
-                    //    ffi::rs_smp_processor_id()
-                    //};
                     let curr = unsafe {
                         ffi::rs_current()
                     };
@@ -461,77 +286,53 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 let guard = RQLockGuard{random_data: PhantomData};
-                agent.task_departed((*payload_data).pid, (*payload_data).cpu_seqnum,
+                sched.task_departed((*payload_data).pid, (*payload_data).cpu_seqnum,
                     (*payload_data).cpu, (*payload_data).from_switchto,
                     (*payload_data).was_current, guard);
             }
             c::MSG_TASK_SWITCHTO => {
-                let payload_data = payload as *const c::ghost_msg_payload_task_switchto;
+                let payload_data = payload as *const c::enoki_msg_payload_task_switchto;
                 #[cfg(feature = "record")]
                 {
-                    //let pid = unsafe {
-                    //    ffi::current_pid()
-                    //};
-                    //let curr_cpu = unsafe {
-                    //    ffi::rs_smp_processor_id()
-                    //};
                     let curr = unsafe {
                         ffi::rs_current()
                     };
                     let mut write_str = alloc::format!("switchto: {:?} {:?}\n\0", curr, *payload_data);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
-                agent.task_switchto((*payload_data).pid, (*payload_data).runtime,
+                sched.task_switchto((*payload_data).pid, (*payload_data).runtime,
                     (*payload_data).cpu_seqnum, (*payload_data).cpu);
             }
             c::MSG_TASK_AFFINITY_CHANGED => {
-                let payload_data = payload as *const c::ghost_msg_payload_task_affinity_changed;
+                let payload_data = payload as *const c::enoki_msg_payload_task_affinity_changed;
                 #[cfg(feature = "record")]
                 {
-                    //let pid = unsafe {
-                    //    ffi::current_pid()
-                    //};
-                    //let curr_cpu = unsafe {
-                    //    ffi::rs_smp_processor_id()
-                    //};
                     let curr = unsafe {
                         ffi::rs_current()
                     };
                     let mut write_str = alloc::format!("affinity: {:?} {:?}\n\0", curr, *payload_data);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
-                agent.task_affinity_changed((*payload_data).pid, (*payload_data).cpumask);
+                sched.task_affinity_changed((*payload_data).pid, (*payload_data).cpumask);
             }
             c::MSG_TASK_LATCHED => {
-                let payload_data = payload as *const c::ghost_msg_payload_task_latched;
+                let payload_data = payload as *const c::enoki_msg_payload_task_latched;
                 #[cfg(feature = "record")]
                 {
-                    //let pid = unsafe {
-                    //    ffi::current_pid()
-                    //};
-                    //let curr_cpu = unsafe {
-                    //    ffi::rs_smp_processor_id()
-                    //};
                     let curr = unsafe {
                         ffi::rs_current()
                     };
                     let mut write_str = alloc::format!("latched: {:?} {:?}\n\0", curr, *payload_data);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
-                agent.task_latched((*payload_data).pid, (*payload_data).commit_time,
+                sched.task_latched((*payload_data).pid, (*payload_data).commit_time,
                     (*payload_data).cpu_seqnum, (*payload_data).cpu,
                     (*payload_data).latched_preempt);
             }
             c::MSG_TASK_PRIO_CHANGED => {
-                let payload_data = payload as *const c::ghost_msg_payload_task_prio_changed;
+                let payload_data = payload as *const c::enoki_msg_payload_task_prio_changed;
                 #[cfg(feature = "record")]
                 {
-                    //let pid = unsafe {
-                    //    ffi::current_pid()
-                    //};
-                    //let curr_cpu = unsafe {
-                    //    ffi::rs_smp_processor_id()
-                    //};
                     let curr = unsafe {
                         ffi::rs_current()
                     };
@@ -540,18 +341,12 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                 }
                 // Tasks moved onto the scheduler can be scheduled anywhere
                 let guard = RQLockGuard{random_data: PhantomData};
-                agent.task_prio_changed((*payload_data).pid, (*payload_data).prio, guard);
+                sched.task_prio_changed((*payload_data).pid, (*payload_data).prio, guard);
             }
             c::MSG_CPU_TICK => {
-                let payload_data = payload as *const c::ghost_msg_payload_cpu_tick;
+                let payload_data = payload as *const c::enoki_msg_payload_cpu_tick;
                 #[cfg(feature = "record")]
                 {
-                    //let pid = unsafe {
-                    //    ffi::current_pid()
-                    //};
-                    //let curr_cpu = unsafe {
-                    //    ffi::rs_smp_processor_id()
-                    //};
                     let curr = unsafe {
                         ffi::rs_current()
                     };
@@ -559,55 +354,37 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 let guard = RQLockGuard{random_data: PhantomData};
-                agent.task_tick((*payload_data).cpu, (*payload_data).queued != 0, guard);
+                sched.task_tick((*payload_data).cpu, (*payload_data).queued != 0, guard);
             }
             c::MSG_CPU_NOT_IDLE => {
-                let payload_data = payload as *const c::ghost_msg_payload_cpu_not_idle;
+                let payload_data = payload as *const c::enoki_msg_payload_cpu_not_idle;
                 #[cfg(feature = "record")]
                 {
-                    //let pid = unsafe {
-                    //    ffi::current_pid()
-                    //};
-                    //let curr_cpu = unsafe {
-                    //    ffi::rs_smp_processor_id()
-                    //};
                     let curr = unsafe {
                         ffi::rs_current()
                     };
                     let mut write_str = alloc::format!("not_idle: {:?} {:?}\n\0", curr, *payload_data);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
-                agent.cpu_not_idle((*payload_data).cpu, (*payload_data).next_pid);
+                sched.cpu_not_idle((*payload_data).cpu, (*payload_data).next_pid);
             }
             c::MSG_TASK_SELECT_RQ => {
-                let payload_data = payload as *mut c::ghost_msg_payload_select_task_rq;
+                let payload_data = payload as *mut c::enoki_msg_payload_select_task_rq;
                 #[cfg(feature = "record")]
                 {
-                    //let pid = unsafe {
-                    //    ffi::current_pid()
-                    //};
-                    //let curr_cpu = unsafe {
-                    //    ffi::rs_smp_processor_id()
-                    //};
                     let curr = unsafe {
                         ffi::rs_current()
                     };
                     let mut write_str = alloc::format!("select_rq: {:?} {:?}\n\0", curr, *payload_data);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
-                let cpu = agent.select_task_rq((*payload_data).pid, (*payload_data).waker_cpu, (*payload_data).prev_cpu);
+                let cpu = sched.select_task_rq((*payload_data).pid, (*payload_data).waker_cpu, (*payload_data).prev_cpu);
                 let sched = Schedulable {
                     cpu: cpu as u32,
                     pid: (*payload_data).pid,
                 };
                 #[cfg(feature = "record")]
                 {
-                    //let pid = unsafe {
-                    //    ffi::current_pid()
-                    //};
-                    //let curr_cpu = unsafe {
-                    //    ffi::rs_smp_processor_id()
-                    //};
                     let curr = unsafe {
                         ffi::rs_current()
                     };
@@ -615,19 +392,13 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                                                        curr, (*payload_data).pid, cpu);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
-                agent.selected_task_rq(sched);
+                sched.selected_task_rq(sched);
                 (*payload_data).ret_cpu = cpu;
             }
             c::MSG_TASK_MIGRATE_RQ => {
-                let payload_data = payload as *const c::ghost_msg_payload_migrate_task_rq;
+                let payload_data = payload as *const c::enoki_msg_payload_migrate_task_rq;
                 #[cfg(feature = "record")]
                 {
-                    //let pid = unsafe {
-                    //    ffi::current_pid()
-                    //};
-                    //let curr_cpu = unsafe {
-                    //    ffi::rs_smp_processor_id()
-                    //};
                     let curr = unsafe {
                         ffi::rs_current()
                     };
@@ -639,19 +410,12 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                     cpu: (*payload_data).new_cpu as u32,
                 };
                 let guard = RQLockGuard{random_data: PhantomData};
-                //agent.migrate_task_rq((*payload_data).pid, (*payload_data).new_cpu);
-                agent.migrate_task_rq((*payload_data).pid, sched, guard);
+                sched.migrate_task_rq((*payload_data).pid, sched, guard);
             }
             c::MSG_BALANCE => {
-                let payload_data = payload as *mut c::ghost_msg_payload_balance;
+                let payload_data = payload as *mut c::enoki_msg_payload_balance;
                 #[cfg(feature = "record")]
                 {
-                    //let pid = unsafe {
-                    //    ffi::current_pid()
-                    //};
-                    //let curr_cpu = unsafe {
-                    //    ffi::rs_smp_processor_id()
-                    //};
                     let curr = unsafe {
                         ffi::rs_current()
                     };
@@ -659,17 +423,11 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
                 let guard = RQLockGuard{random_data: PhantomData};
-                let next_pid = agent.balance((*payload_data).cpu, guard);
+                let next_pid = sched.balance((*payload_data).cpu, guard);
                 (*payload_data).do_move = next_pid.is_some();
                 (*payload_data).move_pid = next_pid.unwrap_or_default();
                 #[cfg(feature = "record")]
                 {
-                    //let pid = unsafe {
-                    //    ffi::current_pid()
-                    //};
-                    //let curr_cpu = unsafe {
-                    //    ffi::rs_smp_processor_id()
-                    //};
                     let curr = unsafe {
                         ffi::rs_current()
                     };
@@ -679,12 +437,12 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                 }
             }
             c::MSG_REREGISTER_PREPARE => {
-                let payload_data = payload as *mut c::ghost_msg_payload_rereg_prep;
-                let data = agent.reregister_prepare();
+                let payload_data = payload as *mut c::enoki_msg_payload_rereg_prep;
+                let data = sched.reregister_prepare();
                 (*payload_data).data = Box::into_raw(Box::new(data)) as *mut _ as *mut raw::c_void;
             }
             c::MSG_REREGISTER_INIT => {
-                let payload_data = payload as *const c::ghost_msg_payload_rereg_init;
+                let payload_data = payload as *const c::enoki_msg_payload_rereg_init;
                 let data = if (*payload_data).data.is_null() {
                     None
                 } else {
@@ -692,147 +450,95 @@ pub fn parse_message<'a, 'b, TransferIn: Send, TransferOut: Send,
                         Some(*Box::from_raw((*payload_data).data as *mut TransferIn))
                     }
                 };
-                agent.reregister_init(data);
+                sched.reregister_init(data);
             }
             c::MSG_MSG_SIZE => {
-                let payload_data = payload as *mut c::ghost_msg_payload_msg_size;
-                //let next_pid = agent.balance((*payload_data).cpu);
+                let payload_data = payload as *mut c::enoki_msg_payload_msg_size;
                 (*payload_data).msg_size = core::mem::size_of::<UserMessage>() as u32;
-                //(*payload_data).move_pid = next_pid.unwrap_or_default();
             }
             c::MSG_REV_MSG_SIZE => {
-                let payload_data = payload as *mut c::ghost_msg_payload_msg_size;
-                //let next_pid = agent.balance((*payload_data).cpu);
+                let payload_data = payload as *mut c::enoki_msg_payload_msg_size;
                 (*payload_data).msg_size = core::mem::size_of::<RevMessage>() as u32;
-                //(*payload_data).move_pid = next_pid.unwrap_or_default();
             }
             c::MSG_CREATE_QUEUE => {
-                let payload_data = payload as *mut c::ghost_msg_payload_create_queue;
-                //println!("q ptr {:?}", (*payload_data).q);
-                let q = unsafe { RingBuffer::from_raw((*payload_data).q, agent.get_policy()) };
-                //let q = unsafe { &mut*((*payload_data).q as *mut RingBuffer<UserMessage>) };
+                let payload_data = payload as *mut c::enoki_msg_payload_create_queue;
+                let q = unsafe { RingBuffer::from_raw((*payload_data).q, sched.get_policy()) };
                 #[cfg(feature = "record")]
                 {
-                    //let pid = unsafe {
-                    //    ffi::current_pid()
-                    //};
-                    //let curr_cpu = unsafe {
-                    //    ffi::rs_smp_processor_id()
-                    //};
                     let curr = unsafe {
                         ffi::rs_current()
                     };
                     let mut write_str = alloc::format!("create_queue {:?}\n\0", curr);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
-                //let id = agent.register_queue((*payload_data).pid, q);
-                let id = agent.register_queue(q);
+                let id = sched.register_queue((*payload_data).pid, q);
                 (*payload_data).id = id;
             }
             c::MSG_CREATE_REV_QUEUE => {
-                let payload_data = payload as *mut c::ghost_msg_payload_create_queue;
-                //println!("q ptr {:?}", (*payload_data).q);
-                let q = unsafe { RingBuffer::from_raw((*payload_data).q, agent.get_policy()) };
-                //let q = unsafe { &mut*((*payload_data).q as *mut RingBuffer<UserMessage>) };
+                let payload_data = payload as *mut c::enoki_msg_payload_create_queue;
+                let q = unsafe { RingBuffer::from_raw((*payload_data).q, sched.get_policy()) };
                 #[cfg(feature = "record")]
                 {
-                    //let pid = unsafe {
-                    //    ffi::current_pid()
-                    //};
-                    //let curr_cpu = unsafe {
-                    //    ffi::rs_smp_processor_id()
-                    //};
                     let curr = unsafe {
                         ffi::rs_current()
                     };
                     let mut write_str = alloc::format!("create_reverse_queue {:?}\n\0", curr);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
-                //let id = agent.register_reverse_queue((*payload_data).pid, q);
-                let id = agent.register_reverse_queue(q);
+                let id = sched.register_reverse_queue((*payload_data).pid, q);
                 (*payload_data).id = id;
             }
             c::MSG_ENTER_QUEUE => {
-                let payload_data = payload as *const c::ghost_msg_payload_enter_queue;
+                let payload_data = payload as *const c::enoki_msg_payload_enter_queue;
                 #[cfg(feature = "record")]
                 {
-                    //let pid = unsafe {
-                    //    ffi::current_pid()
-                    //};
-                    //let curr_cpu = unsafe {
-                    //    ffi::rs_smp_processor_id()
-                    //};
                     let curr = unsafe {
                         ffi::rs_current()
                     };
                     let mut write_str = alloc::format!("enter_queue: {:?} {:?}\n\0", curr, *payload_data);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
-                agent.enter_queue((*payload_data).id, (*payload_data).entries);
+                sched.enter_queue((*payload_data).id, (*payload_data).entries);
             }
             c::MSG_UNREGISTER_QUEUE => {
-                //let payload_data = payload as *const c::ghost_msg_payload_enter_queue;
                 // I'm like 60% sure this won't try to free the queue and will let linux do it.
-                let payload_data = payload as *const c::ghost_msg_payload_unreg_queue;
+                let payload_data = payload as *const c::enoki_msg_payload_unreg_queue;
                 #[cfg(feature = "record")]
                 {
-                    //let pid = unsafe {
-                    //    ffi::current_pid()
-                    //};
-                    //let curr_cpu = unsafe {
-                    //    ffi::rs_smp_processor_id()
-                    //};
                     let curr = unsafe {
                         ffi::rs_current()
                     };
                     let mut write_str = alloc::format!("unregister_queue {:?} {:?}\n\0", curr, *payload_data);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
-                agent.unregister_queue((*payload_data).id);
+                sched.unregister_queue((*payload_data).id);
             }
             c::MSG_UNREGISTER_REV_QUEUE => {
-                //let payload_data = payload as *const c::ghost_msg_payload_enter_queue;
                 // I'm like 60% sure this won't try to free the queue and will let linux do it.
-                let payload_data = payload as *const c::ghost_msg_payload_unreg_queue;
+                let payload_data = payload as *const c::enoki_msg_payload_unreg_queue;
                 #[cfg(feature = "record")]
                 {
-                    //let pid = unsafe {
-                    //    ffi::current_pid()
-                    //};
-                    //let curr_cpu = unsafe {
-                    //    ffi::rs_smp_processor_id()
-                    //};
                     let curr = unsafe {
                         ffi::rs_current()
                     };
                     let mut write_str = alloc::format!("unregister_reverse_queue {:?} {:?}\n\0", curr, *payload_data);
                     c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
                 }
-                agent.unregister_rev_queue((*payload_data).id);
+                sched.unregister_rev_queue((*payload_data).id);
             }
             c::MSG_SEND_HINT => {
-                let payload_data = payload as *const c::ghost_msg_payload_send_hint;
+                let payload_data = payload as *const c::enoki_msg_payload_send_hint;
                 let arg = (*payload_data).arg as *const UserMessage;
                 #[cfg(feature = "record")]
                 {
-                    print_hint(*arg, agent.get_policy());
+                    print_hint(*arg, sched.get_policy());
                 }
-                //let mut write_str = alloc::format!("send_hint: {:?}\n\0", *arg);
-                //c::printk_deferred(write_str.as_ptr() as *const i8);
-                //c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
-                agent.parse_hint(*arg);
+                sched.parse_hint(*arg);
             }
             _ => {
                 println!("Unsupported message type");
             }
         }
-        //getnstimeofday64_rs(&mut end);
-        //let should_report = REPORT.load(core::sync::atomic::Ordering::Relaxed);
-        //if (should_report % 10000 == 0) {
-            //let diff = diff_ns(&end, &start);
-            //println!("msg {} took {}", type_, diff);
-        //}
-        //REPORT.store(should_report + 1, core::sync::atomic::Ordering::SeqCst);
     }
 }
 
@@ -873,29 +579,13 @@ pub trait BentoScheduler<'a, 'b, TransferIn: Send, TransferOut: Send, UserMessag
     where
         Self: core::marker::Sized,
     {
-        //let name = "/sys/fs/ghost/ctl\0";
         let mut path = c::path::default();
         unsafe {
-            //ffi::rs_kern_path(record_file, libc::O_WRONLY as u32, &mut path as *mut c::path);
-            //let file = c::dentry_open(&path, libc::O_WRONLY | libc::O_APPEND | libc::O_NONBLOCK, ffi::rs_current_cred());
-            //        let write_str = "hi\n\0";
-            //        let mut write_ptr: i64 = (*file).f_pos;
-            //        println!("write ptr {:?}", write_ptr);
-            //        println!("inode {:?}", (*file).f_inode);
-            //        println!("path {:?}", (*file).f_path);
-            //        println!("write str {:?}", write_str);
-            //        println!("write str len {:?}", write_str.as_bytes().len());
-            //        let ret =
-            //            c::kernel_write(file, write_str.as_ptr() as *const raw::c_void,
-            //                write_str.as_bytes().len() - 1, &mut write_ptr as *mut i64);
-            //println!("record file ptr {:?}", file);
-            let ret = register_ghost_agent(
+            let ret = register_enoki_sched(
                 self as *const Self as *const raw::c_void,
                 self.get_policy(),
                 parse_message::<TransferIn, TransferOut, UserMessage, RevMessage, Self> as *const raw::c_void
             );
-            //let mut write_str = alloc::format!("loading\n\0");
-            //c::file_write_deferred(write_str.as_mut_ptr() as *mut i8);
             return ret;
         }
     }
@@ -905,7 +595,7 @@ pub trait BentoScheduler<'a, 'b, TransferIn: Send, TransferOut: Send, UserMessag
         Self: core::marker::Sized,
     {
         return unsafe {
-            reregister_ghost_agent(
+            reregister_enoki_sched(
                 self as *const Self as *const raw::c_void,
                 self.get_policy(),
                 parse_message::<TransferIn, TransferOut, UserMessage, RevMessage, Self> as *const raw::c_void
@@ -915,43 +605,10 @@ pub trait BentoScheduler<'a, 'b, TransferIn: Send, TransferOut: Send, UserMessag
 
     fn unregister(&self) -> i32 {
         return unsafe {
-            unregister_ghost_agent(self as *const Self as *const raw::c_void)
+            unregister_enoki_sched(self as *const Self as *const raw::c_void)
         };
     }
 
-    //fn bento_update_prepare(&mut self) -> Option<TransferOut> {
-    ////fn bento_update_prepare(&mut self) -> Option<*const raw::c_void> {
-    //    None
-    //}
-
-    //fn bento_update_transfer(&mut self, Option<TransferIn>) { }
-    ////fn bento_update_transfer(&mut self, Option<*const raw::c_void>) { }
-
-    /// Initialize the file system and fill in initialization flags.
-    ///
-    /// Possible initialization flags are defined /include/uapi/linux/fuse.h.
-    /// No support is provided for readdirplus and async DIO.
-    ///
-    /// Arguments:
-    /// * `req: &Request` - Request data structure.
-    /// * `devname: &OsStr` - Name of the backing device file.
-    /// * `fc_info: &mut FuseConnInfo` - Connection information used to pass initialization
-    /// arguments to Bento.
-    //fn init(
-    //    &mut self,
-    //    _req: &Request,
-    //    _devname: &OsStr,
-    //    _fc_info: &mut FuseConnInfo,
-    //) -> Result<(), i32> {
-    //    return Err(ENOSYS);
-    //}
-
-    ///// Perform any necessary cleanup on the file system.
-    /////
-    ///// Arguments:
-    ///// * `req: &Request` - Request data structure.
-    //fn bento_destroy(&mut self, _req: &Request) {}
-    
     fn pick_next_task(
         &self,
         _cpu: i32,
@@ -995,7 +652,6 @@ pub trait BentoScheduler<'a, 'b, TransferIn: Send, TransferOut: Send, UserMessag
     fn task_wakeup(
         &self,
         _pid: u64,
-        _agent_data: u64,
         _deferrable: bool,
         _last_run_cpu: i32,
         _wake_up_cpu: i32,
@@ -1004,19 +660,10 @@ pub trait BentoScheduler<'a, 'b, TransferIn: Send, TransferOut: Send, UserMessag
         _guard: RQLockGuard
     ) {}
 
-    //fn task_new(
-    //    &self,
-    //    _pid: u64,
-    //    _tgid: u64,
-    //    _runtime: u64,
-    //    _runnable: u16,
-    //    _prio: i32,
-    //    _sched: Schedulable,
-    //    _guard: RQLockGuard
-    //) {}
     fn task_new(
         &self,
         _pid: u64,
+        _tgid: u64,
         _runtime: u64,
         _runnable: u16,
         _prio: i32,
@@ -1091,23 +738,19 @@ pub trait BentoScheduler<'a, 'b, TransferIn: Send, TransferOut: Send, UserMessag
 
     fn selected_task_rq(&self, _sched: Schedulable) {}
     
-    //fn migrate_task_rq(&self, _pid: u64, _new_cpu: i32) {}
     fn migrate_task_rq(&self, _pid: u64, _sched: Schedulable, _guard: RQLockGuard) -> Schedulable;
 
     fn balance(&self, _cpu: i32, _guard: RQLockGuard) -> Option<u64> { None }
 
-    //fn bento_update_prepare(&mut self) -> Option<TransferOut> {
     fn reregister_prepare(&mut self) -> Option<TransferOut> {
         None
     }
 
     fn reregister_init(&mut self, Option<TransferIn>) {}
 
-    //fn register_queue(&self, pid: u64, RingBuffer<UserMessage>) -> i32;
-    fn register_queue(&self, RingBuffer<UserMessage>) -> i32;
+    fn register_queue(&self, pid: u64, RingBuffer<UserMessage>) -> i32;
 
-    //fn register_reverse_queue(&self, pid: u64, RingBuffer<RevMessage>) -> i32;
-    fn register_reverse_queue(&self, RingBuffer<RevMessage>) -> i32;
+    fn register_reverse_queue(&self, pid: u64, RingBuffer<RevMessage>) -> i32;
 
     fn enter_queue(&self, id: i32, _entries: u32) {}
 

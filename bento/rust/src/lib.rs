@@ -10,13 +10,11 @@
 
 #![feature(lang_items)]
 #![feature(concat_idents)]
-#![feature(const_fn_union)]
 #![feature(allocator_api)]
 #![feature(alloc_error_handler)]
 #![feature(alloc_layout_extra)]
 #![feature(panic_info_message)]
 #![feature(rustc_private)]
-#![feature(let_chains)]
 #![no_std]
 
 extern crate alloc;
